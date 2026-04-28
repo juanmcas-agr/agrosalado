@@ -1,0 +1,15 @@
+{
+  "name": "AGROSALADO",
+  "short_name": "AGROSALADO",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f2f2f2",
+  "theme_color": "#007bff",
+  "icons": [
+    {
+      "src": "icono.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

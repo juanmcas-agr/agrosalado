@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGROSALADO</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="AGROSALADO">
+  <link rel="apple-touch-icon" href="icono.png">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="tarifas.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0; padding: 12px;
+      font-family: Arial, sans-serif;
+      background-color: #f2f2f2;
+      overflow-x: hidden;
+    }
+
+    h2 {
+      text-align: center; font-size: 1.3em;
+      margin: 8px 0 16px;
+      color: #2c3e50;
+    }
+
+    /* ── FORMULARIO ── */
+    .formulario {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 8px;
+      margin-bottom: 14px;
+      background: white;
+      padding: 12px;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    .formulario input,
+    .formulario select {
+      font-size: 16px; /* evita zoom en iPhone */
+      height: 44px;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      width: 100%;
+      max-width: 100%;
+      background: white;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+
+    /* Restaurar flecha nativa solo en select */
+    .formulario select {
+      -webkit-appearance: auto;
+      appearance: auto;
+    }
+
+    /* Fix específico para input date en iOS */
+    .formulario input[type="date"] {
+      display: block;
+      width: 100%;
+      max-width: 100%;
+      box-sizing: border-box;
+    }
+
+    .formulario input:focus,
+    .formulario select:focus {
+      outline: none;
+      border-color: #007bff;
+      box-shadow: 0 0 0 2px rgba(0,123,255,0.15);
+    }
+
+    /* Campos que ocupan todo el ancho en mobile */
+    .formulario .full { grid-column: 1 / -1; }
+
+    /* ── BOTONES ── */
+    button {
+      background-color: #007bff; color: white;
+      border: none; cursor: pointer;
+      border-radius: 6px; padding: 12px;
+      font-size: 1em; width: 100%;
+      transition: background-color 0.15s;
+    }
+    button:active { filter: brightness(0.9); }
+
+    button.pendiente  { background-color: #ad1e19 !important; }
+    button.confirmado { background-color: #28a745 !important; }
+
+    .botones {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 10px;
+    }
+
+    .botonera-compartir {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px; margin-bottom: 14px;
+    }
+
+    /* ── TABLA ── */
+    .tabla-wrapper {
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      position: relative;
+    }
+
+    table {
+      border-collapse: collapse;
+      background-color: white;
+      /* No usar display:block — rompe el sticky de la primera columna */
+      min-width: 100%;
+      table-layout: auto;
+    }
+
+    th, td {
+      border: 1px solid #ddd;
+      padding: 9px 12px;
+      text-align: center;
+      font-size: 0.88em;
+      white-space: nowrap;
+    }
+
+    th {
+      background-color: #e9ecef;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    /* Primera columna fija al scroll horizontal */
+    tbody td:first-child,
+    thead th:first-child {
+      position: sticky;
+      left: 0;
+      background-color: #e9ecef;
+      font-weight: 600;
+      z-index: 3;
+      text-align: left;
+      min-width: 90px;
+      max-width: 110px;
+      font-size: 0.82em;
+      white-space: normal;
+      word-break: break-word;
+    }
+    thead th:first-child { z-index: 4; }
+
+    /* Fila de Precio a Productor destacada */
+    tr:nth-child(10) td {
+      background-color: #eaf4ea;
+    }
+    tr:nth-child(10) td:first-child {
+      background-color: #d4edda;
+    }
+
+    /* Celdas editables */
+    td.editable { cursor: pointer; }
+    td.editable:hover { background-color: #fffbcc !important; }
+
+    /* ── CERRAR NEGOCIO ── */
+    #cerrarNegocio {
+      margin-top: 16px;
+      max-width: 320px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      font-size: 1.05em;
+      padding: 14px;
+    }
+
+    /* ── DESKTOP (768px+) ── */
+    @media (min-width: 768px) {
+      body { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+
+      h2 { font-size: 1.6em; margin-bottom: 20px; }
+
+      .formulario {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        padding: 16px;
+      }
+
+      .formulario .full { grid-column: 1 / -1; }
+
+      .botones {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+        margin-bottom: 12px;
+      }
+
+      .botonera-compartir {
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+        margin-bottom: 18px;
+      }
+
+      th, td { font-size: 0.92em; padding: 10px 14px; }
+    }
+
+    /* ── PANEL TC ── */
+    .panel-tc {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 10px 14px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .panel-tc .tc-label {
+      font-size: 0.85em;
+      color: #555;
+      white-space: nowrap;
+    }
+    .panel-tc .tc-valor {
+      font-weight: bold;
+      font-size: 1em;
+      color: #2c3e50;
+    }
+    .panel-tc .tc-fecha {
+      font-size: 0.75em;
+      color: #888;
+    }
+    .panel-tc button {
+      width: auto;
+      padding: 6px 14px;
+      font-size: 0.85em;
+      margin-left: auto;
+    }
+    .panel-tc .tc-cargando {
+      font-size: 0.85em;
+      color: #888;
+      font-style: italic;
+    }
+
+    /* ── PRINT ── */
+    @media print {
+      body * { visibility: hidden; }
+      #tablaNegocios, #tablaNegocios * { visibility: visible; }
+      #tablaNegocios { position: absolute; top: 0; left: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+
+  <h2>Comparador de Alternativas Comerciales - AGROSALADO</h2>
+
+  <div class="panel-tc ocultar-al-exportar">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;">
+      <span class="tc-label">💵 TC Divisa BNA</span>
+      <span class="tc-fecha" id="tcFecha"></span>
+      <button onclick="cargarTC()" id="btnActualizarTC" style="margin-left:auto;">🔄</button>
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;width:100%;margin-top:4px;">
+      <div>
+        <div class="tc-label">Compra</div>
+        <div class="tc-valor" id="tcCompra"><span class="tc-cargando">...</span></div>
+      </div>
+      <div>
+        <div class="tc-label">Venta</div>
+        <div class="tc-valor" id="tcVenta"><span class="tc-cargando">...</span></div>
+      </div>
+      <button onclick="usarTcEnFormulario()" style="margin-left:auto;align-self:flex-end;">Usar compra</button>
+    </div>
+  </div>
+
+  <div class="formulario">
+    <input type="text" id="cliente" placeholder="Cliente">
+    <select id="producto">
+      <option value="SOJA">SOJA</option>
+      <option value="TRIGO">TRIGO</option>
+      <option value="MAIZ">MAÍZ</option>
+      <option value="GIRASOL AO">GIRASOL AO</option>
+      <option value="GIRASOL COMUN">GIRASOL COMÚN</option>
+      <option value="AVENA">AVENA</option>
+      <option value="CEBADA">CEBADA</option>
+      <option value="OTROS">OTROS</option>
+    </select>
+    <input type="text" id="destino" placeholder="Destino">
+    <input type="number" id="precioBruto" placeholder="Precio Bruto">
+    <select id="moneda" onchange="toggleTipoCambio()">
+      <option value="ARS">$</option>
+      <option value="USD">USD</option>
+    </select>
+    <input type="number" id="tipoCambio" placeholder="Tipo de Cambio" style="display:none;">
+    <select id="comision">
+      <option value="0">Comisión 0%</option>
+      <option value="1">Comisión 1%</option>
+      <option value="2">Comisión 2%</option>
+      <option value="3" selected>Comisión 3%</option>
+      <option value="4">Comisión 4%</option>
+      <option value="5">Comisión 5%</option>
+    </select>
+    <input type="number" id="kmCorto" placeholder="Flete Corto (KM)">
+    <input type="number" id="descCorto" placeholder="Descuento Flete Corto (%)">
+    <input type="number" id="kmLargo" placeholder="Flete Largo (KM)">
+    <input type="number" id="descLargo" placeholder="Descuento Flete Largo (%)">
+    <input type="date" id="fijacion" class="full">
+    <input type="number" id="toneladas" placeholder="Toneladas">
+    <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
+    <input type="text" id="observaciones" placeholder="Observaciones" class="full">
+  </div>
+
+  <div class="botones">
+    <button onclick="agregarAlternativa()">Agregar Alternativa ➕</button>
+    <button onclick="borrarTodo()">♻️ Borrar Todo</button>
+  </div>
+
+  <div class="botonera-compartir">
+    <button onclick="compartirImagen()">📤 Compartir</button>
+    <button onclick="copiarParaExcel()">📄 Copiar para Excel</button>
+    <button onclick="copiarImagen()">🖼️ Copiar Imagen</button>
+    <button onclick="capturarImagen()">📷 Capturar Imagen</button>
+  </div>
+
+  <div class="tabla-wrapper">
+  <table id="tablaNegocios">
+    <thead>
+      <tr id="borrarIndividual" class="ocultar-al-exportar"><th></th></tr>
+      <tr id="header"><th>Campo</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Cliente</td></tr>
+      <tr><td>Producto</td></tr>
+      <tr><td>Destino</td></tr>
+      <tr><td>Precio Bruto</td></tr>
+      <tr><td>Comisión (%)</td></tr>
+      <tr><td>KM Flete Corto</td></tr>
+      <tr><td>Flete Corto</td></tr>
+      <tr><td>KM Flete Largo</td></tr>
+      <tr><td>Flete Largo</td></tr>
+      <tr><td><strong>Precio a Productor</strong></td></tr>
+      <tr><td>Fijación</td></tr>
+      <tr><td>Toneladas</td></tr>
+      <tr><td>Plazo de Pago</td></tr>
+      <tr><td>Observaciones</td></tr>
+      <tr class="ocultar-al-exportar"><td><strong>Alt. Selec.</strong></td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <div style="margin-top: 0; text-align: center;">
+    <button id="cerrarNegocio" onclick="cerrarNegocio()" class="pendiente">
+      🔒 CERRAR NEGOCIO
+    </button>
+  </div>
+
+  <script>
+    // Índices de fila en tbody (0-based)
+    const FILA = {
+      cliente: 0, producto: 1, destino: 2,
+      precioBruto: 3, comision: 4,
+      kmCorto: 5, fleteCorto: 6,
+      kmLargo: 7, fleteLargo: 8,
+      productor: 9,
+      fijacion: 10, toneladas: 11, plazo: 12, observaciones: 13
+    };
+
+    let contador = 1;
+
+    // ── TC Divisa BNA automático ──
+    let tcBNA = null;
+
+    function formatearFechaTc(fecha) {
+      return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+           + ' ' + fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function mostrarTC(compra, venta, fechaStr, sinConexion = false) {
+      tcBNA = venta;
+      document.getElementById('tcCompra').textContent = '$ ' + compra.toLocaleString('es-AR', { minimumFractionDigits: 2 });
+      document.getElementById('tcVenta').textContent  = '$ ' + venta.toLocaleString('es-AR',  { minimumFractionDigits: 2 });
+      document.getElementById('tcFecha').textContent  = sinConexion
+        ? '⚠️ sin conexión · último: ' + fechaStr
+        : 'act. ' + fechaStr;
+      document.getElementById('tcFecha').style.color = sinConexion ? '#e67e22' : '#888';
+    }
+
+    async function cargarTC() {
+      const btn = document.getElementById('btnActualizarTC');
+      if (btn) btn.textContent = '⏳';
+      try {
+        const res = await fetch('https://dolarapi.com/v1/ar/dolares/oficial');
+        const data = await res.json();
+        const compra   = data.compra;
+        const venta    = data.venta;
+        const fechaStr = formatearFechaTc(new Date(data.fechaActualizacion));
+        localStorage.setItem('tcBNA', JSON.stringify({ compra, venta, fechaStr }));
+        tcCompraActual = compra;
+        mostrarTC(compra, venta, fechaStr, false);
+      } catch (e) {
+        const guardado = localStorage.getItem('tcBNA');
+        if (guardado) {
+          const { compra, venta, fechaStr } = JSON.parse(guardado);
+          tcCompraActual = compra;
+          mostrarTC(compra, venta, fechaStr, true);
+        } else {
+          document.getElementById('tcCompra').innerHTML = '<span style="color:#ad1e19">-</span>';
+          document.getElementById('tcVenta').innerHTML  = '<span style="color:#ad1e19">sin conexión</span>';
+          document.getElementById('tcFecha').textContent = '';
+        }
+      }
+      if (btn) btn.textContent = '🔄';
+    }
+
+    let tcCompraActual = null;
+
+    function usarTcEnFormulario() {
+      if (!tcCompraActual) return;
+      document.getElementById('moneda').value = 'USD';
+      toggleTipoCambio();
+      document.getElementById('tipoCambio').value = tcCompraActual;
+    }
+
+    function toggleTipoCambio() {
+      const moneda = document.getElementById("moneda").value;
+      const tcInput = document.getElementById("tipoCambio");
+      tcInput.style.display = moneda === "USD" ? "block" : "none";
+      if (moneda === "ARS") tcInput.value = "";
+    }
+
+    function obtenerTarifaPorKm(km) {
+      return tarifasPorKm[km] !== undefined ? tarifasPorKm[km] : 0;
+    }
+
+    function formatoNumero(n) {
+      return typeof n === "number"
+        ? "$ " + n.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+        : n;
+    }
+
+    function formatearFecha(inputDate) {
+      if (!inputDate) return "-";
+      const partes = inputDate.split("-");
+      return `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
+      cargarTC();
+
+      // Enter avanza al siguiente campo de texto/número del formulario
+      // Saltea desplegables (select) y date
+      const camposFormulario = [
+        'cliente', 'destino', 'precioBruto', 'tipoCambio',
+        'kmCorto', 'descCorto', 'kmLargo', 'descLargo',
+        'toneladas', 'plazoPago', 'observaciones'
+      ];
+
+      camposFormulario.forEach((id, idx) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            // Buscar el siguiente campo visible
+            for (let i = idx + 1; i < camposFormulario.length; i++) {
+              const siguiente = document.getElementById(camposFormulario[i]);
+              if (siguiente && siguiente.style.display !== 'none') {
+                siguiente.focus();
+                return;
+              }
+            }
+            // Si no hay siguiente, agregar y volver al primer campo
+            agregarAlternativa();
+            document.getElementById('cliente').focus();
+          }
+        });
+      });
+    });
+
+    // ── Recalcular toda la columna a partir de los datos raw en dataset ──
+    function recalcularColumna(ci) {
+      const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+
+      const tdPrecio   = filas[FILA.precioBruto].cells[ci];
+      const tdComision = filas[FILA.comision].cells[ci];
+      const tdKmCorto  = filas[FILA.kmCorto].cells[ci];
+      const tdKmLargo  = filas[FILA.kmLargo].cells[ci];
+      const tdFCorto   = filas[FILA.fleteCorto].cells[ci];
+      const tdFLargo   = filas[FILA.fleteLargo].cells[ci];
+      const tdProd     = filas[FILA.productor].cells[ci];
+
+      const precioArs   = parseFloat(tdPrecio.dataset.precioArs) || 0;
+      const precioInput = parseFloat(tdPrecio.dataset.precioInput) || 0;
+      const tc          = parseFloat(tdPrecio.dataset.tc) || 1;
+      const moneda      = tdPrecio.dataset.moneda || "ARS";
+      const comisionPct = parseFloat(tdComision.dataset.comisionPct) || 3;
+      const kmCorto     = parseInt(tdKmCorto.dataset.km) || 0;
+      const kmLargo     = parseInt(tdKmLargo.dataset.km) || 0;
+      const descCorto   = parseFloat(tdFCorto.dataset.desc) || 0;
+      const descLargo   = parseFloat(tdFLargo.dataset.desc) || 0;
+
+      const fleteCorto = obtenerTarifaPorKm(kmCorto) * (1 - descCorto / 100);
+      const fleteLargo = obtenerTarifaPorKm(kmLargo) * (1 - descLargo / 100);
+      const comision   = +(precioArs * (comisionPct / 100)).toFixed(2);
+      const productor  = +(precioArs - comision - fleteCorto - fleteLargo).toFixed(2);
+
+      // Precio bruto
+      let precioBrutoHTML = formatoNumero(precioArs);
+      if (moneda === "USD") precioBrutoHTML += `<br><small>USD ${precioInput} a TC $${tc}</small>`;
+      tdPrecio.innerHTML = precioBrutoHTML;
+      marcarEditable(tdPrecio, 'precioBruto', ci);
+
+      // Comisión
+      tdComision.innerHTML = `${formatoNumero(comision)}<br><small>(${comisionPct}%)</small>`;
+      marcarEditable(tdComision, 'comision', ci);
+
+      // KM corto (solo muestra el número)
+      tdKmCorto.textContent = kmCorto || "-";
+      marcarEditable(tdKmCorto, 'kmCorto', ci);
+
+      // Flete corto
+      tdFCorto.innerHTML = descCorto > 0
+        ? `${formatoNumero(fleteCorto)}<br><small>(-${descCorto}%)</small>`
+        : formatoNumero(fleteCorto);
+      marcarEditable(tdFCorto, 'fleteCorto', ci);
+
+      // KM largo
+      tdKmLargo.textContent = kmLargo || "-";
+      marcarEditable(tdKmLargo, 'kmLargo', ci);
+
+      // Flete largo
+      tdFLargo.innerHTML = descLargo > 0
+        ? `${formatoNumero(fleteLargo)}<br><small>(-${descLargo}%)</small>`
+        : formatoNumero(fleteLargo);
+      marcarEditable(tdFLargo, 'fleteLargo', ci);
+
+      // Precio a productor
+      tdProd.innerHTML = `<strong>${formatoNumero(productor)}</strong>`;
+    }
+
+    // ── Marcar celda como editable (hover amarillo + cursor) ──
+    function marcarEditable(td, tipo, ci) {
+      td.classList.add('editable');
+      td.onclick = () => abrirEditor(td, tipo, ci);
+    }
+
+    // ── Editor inline por tipo de celda ──
+    function abrirEditor(td, tipo, ci) {
+      if (td.querySelector('input, select')) return; // ya abierto
+
+      const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+
+      if (tipo === 'precioBruto') {
+        // Agregar botón ✅ para confirmar explícitamente — evita el problema
+        // de blur prematuro al moverse entre los 3 campos del editor
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;gap:4px;min-width:120px;';
+
+        const selMoneda = document.createElement('select');
+        selMoneda.innerHTML = '<option value="ARS">$ Pesos</option><option value="USD">USD</option>';
+        selMoneda.value = td.dataset.moneda || "ARS";
+        selMoneda.style.cssText = 'font-size:13px;padding:2px;';
+
+        const inpPrecio = document.createElement('input');
+        inpPrecio.type = 'number'; inpPrecio.value = td.dataset.precioInput || 0;
+        inpPrecio.placeholder = 'Precio';
+        inpPrecio.style.cssText = 'width:100%;font-size:13px;padding:2px;';
+
+        const inpTC = document.createElement('input');
+        inpTC.type = 'number'; inpTC.value = td.dataset.tc || 1;
+        inpTC.placeholder = 'Tipo de cambio';
+        inpTC.style.cssText = 'width:100%;font-size:13px;padding:2px;';
+        inpTC.style.display = selMoneda.value === "USD" ? 'block' : 'none';
+
+        const btnOk = document.createElement('button');
+        btnOk.textContent = '✅ OK';
+        btnOk.style.cssText = 'font-size:12px;padding:4px;margin-top:2px;';
+
+        selMoneda.onchange = () => {
+          inpTC.style.display = selMoneda.value === "USD" ? 'block' : 'none';
+        };
+
+        wrap.append(selMoneda, inpPrecio, inpTC, btnOk);
+        td.innerHTML = ''; td.appendChild(wrap); inpPrecio.focus();
+
+        const confirmar = () => {
+          const m = selMoneda.value;
+          const pi = parseFloat(inpPrecio.value) || 0;
+          const tc = parseFloat(inpTC.value) || 1;
+          td.dataset.moneda = m;
+          td.dataset.precioInput = pi;
+          td.dataset.tc = tc;
+          td.dataset.precioArs = m === "USD" ? +(pi * tc) : pi;
+          recalcularColumna(ci);
+        };
+
+        btnOk.onclick = confirmar;
+        [inpPrecio, inpTC].forEach(el => el.onkeydown = e => { if (e.key === 'Enter') confirmar(); });
+        return;
+      }
+
+      if (tipo === 'comision') {
+        const sel = document.createElement('select');
+        [0,1,2,3,4,5].forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v; opt.textContent = `${v}%`;
+          if (v == (td.dataset.comisionPct || 3)) opt.selected = true;
+          sel.appendChild(opt);
+        });
+        sel.style.cssText = 'font-size:13px;padding:2px;';
+        td.innerHTML = ''; td.appendChild(sel); sel.focus();
+        const confirmar = () => { td.dataset.comisionPct = sel.value; recalcularColumna(ci); };
+        sel.onblur = confirmar;
+        sel.onchange = confirmar;
+        return;
+      }
+
+      if (tipo === 'kmCorto' || tipo === 'kmLargo') {
+        const filaIdx = tipo === 'kmCorto' ? FILA.kmCorto : FILA.kmLargo;
+        const tdKm = filas[filaIdx].cells[ci];
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.value = tdKm.dataset.km || 0;
+        inp.style.cssText = 'width:70px;font-size:13px;padding:2px;';
+        td.innerHTML = ''; td.appendChild(inp); inp.focus();
+        const confirmar = () => { tdKm.dataset.km = parseInt(inp.value) || 0; recalcularColumna(ci); };
+        inp.onblur = confirmar;
+        inp.onkeydown = e => { if (e.key === 'Enter') confirmar(); };
+        return;
+      }
+
+      if (tipo === 'fleteCorto' || tipo === 'fleteLargo') {
+        const filaIdx = tipo === 'fleteCorto' ? FILA.fleteCorto : FILA.fleteLargo;
+        const tdF = filas[filaIdx].cells[ci];
+        const inp = document.createElement('input');
+        inp.type = 'number'; inp.value = tdF.dataset.desc || 0;
+        inp.placeholder = 'Descuento %';
+        inp.style.cssText = 'width:80px;font-size:13px;padding:2px;';
+        td.innerHTML = ''; td.appendChild(inp); inp.focus();
+        const confirmar = () => { tdF.dataset.desc = parseFloat(inp.value) || 0; recalcularColumna(ci); };
+        inp.onblur = confirmar;
+        inp.onkeydown = e => { if (e.key === 'Enter') confirmar(); };
+        return;
+      }
+
+      // Texto simple (cliente, destino, producto, fijacion, toneladas, plazo, observaciones)
+      const actual = td.innerText.trim();
+      const inp = document.createElement('input');
+      inp.type = 'text'; inp.value = actual === '-' ? '' : actual;
+      inp.style.cssText = 'width:100%;font-size:13px;padding:2px;';
+      td.innerHTML = ''; td.appendChild(inp); inp.focus(); inp.select();
+      const confirmar = () => {
+        td.textContent = inp.value.trim() || '-';
+        marcarEditable(td, 'texto', ci);
+      };
+      inp.onblur = confirmar;
+      inp.onkeydown = e => { if (e.key === 'Enter') confirmar(); };
+    }
+
+    // ── Agregar alternativa ──
+    function agregarAlternativa() {
+      const cliente         = document.getElementById('cliente').value;
+      const producto        = document.getElementById('producto').value;
+      const destino         = document.getElementById('destino').value;
+      const moneda          = document.getElementById('moneda').value;
+      const tipoCambio      = parseFloat(document.getElementById('tipoCambio').value) || 1;
+      const precioInput     = parseFloat(document.getElementById('precioBruto').value) || 0;
+      const precioBruto     = moneda === "USD" ? +(precioInput * tipoCambio) : precioInput;
+      const kmCorto         = parseInt(document.getElementById('kmCorto').value) || 0;
+      const kmLargo         = parseInt(document.getElementById('kmLargo').value) || 0;
+      const fijacion        = formatearFecha(document.getElementById('fijacion').value);
+      const toneladas       = document.getElementById('toneladas').value;
+      const plazo           = document.getElementById('plazoPago').value;
+      const descCorto       = parseFloat(document.getElementById('descCorto').value) || 0;
+      const descLargo       = parseFloat(document.getElementById('descLargo').value) || 0;
+      const comisionPct     = parseFloat(document.getElementById('comision').value) || 3;
+      const observaciones   = document.getElementById('observaciones').value || "-";
+
+      let fleteCorto = obtenerTarifaPorKm(kmCorto) * (1 - descCorto / 100);
+      let fleteLargo = obtenerTarifaPorKm(kmLargo) * (1 - descLargo / 100);
+      const comision = +(precioBruto * (comisionPct / 100)).toFixed(2);
+      const productor = +(precioBruto - comision - fleteCorto - fleteLargo).toFixed(2);
+
+      let precioBrutoHTML = formatoNumero(precioBruto);
+      if (moneda === "USD") precioBrutoHTML += `<br><small>USD ${precioInput} a TC $${tipoCambio}</small>`;
+
+      const fleteCortoHTML = descCorto > 0
+        ? `${formatoNumero(fleteCorto)}<br><small>(-${descCorto}%)</small>`
+        : formatoNumero(fleteCorto);
+      const fleteLargoHTML = descLargo > 0
+        ? `${formatoNumero(fleteLargo)}<br><small>(-${descLargo}%)</small>`
+        : formatoNumero(fleteLargo);
+
+      const datos = [
+        cliente || "-",
+        producto || "-",
+        destino || "-",
+        precioBrutoHTML,
+        `${formatoNumero(comision)}<br><small>(${comisionPct}%)</small>`,
+        kmCorto || "-",
+        fleteCortoHTML,
+        kmLargo || "-",
+        fleteLargoHTML,
+        `<strong>${formatoNumero(productor)}</strong>`,
+        fijacion,
+        toneladas || "-",
+        plazo || "-",
+        observaciones
+      ];
+
+      // Encabezado
+      const header = document.getElementById('header');
+      const th = document.createElement('th');
+      th.textContent = `Alternativa ${contador}`;
+      header.appendChild(th);
+
+      // Botón borrar
+      const colIndex = header.cells.length - 1;
+      const thBorrar = document.createElement('th');
+      const botonBorrar = document.createElement('button');
+      botonBorrar.textContent = "🗑️";
+      botonBorrar.onclick = () => borrarColumna(colIndex);
+      thBorrar.appendChild(botonBorrar);
+      document.getElementById('borrarIndividual').appendChild(thBorrar);
+
+      contador++;
+
+      // Poblar filas
+      const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+      for (let i = 0; i < datos.length; i++) {
+        const td = document.createElement('td');
+        td.innerHTML = datos[i];
+        filas[i].appendChild(td);
+      }
+
+      const ci = header.cells.length - 1;
+
+      // Dataset raw para recalcular + marcar editables
+      const tdPrecio = filas[FILA.precioBruto].cells[ci];
+      tdPrecio.dataset.precioArs   = precioBruto;
+      tdPrecio.dataset.precioInput = precioInput;
+      tdPrecio.dataset.tc          = tipoCambio;
+      tdPrecio.dataset.moneda      = moneda;
+      marcarEditable(tdPrecio, 'precioBruto', ci);
+
+      const tdCom = filas[FILA.comision].cells[ci];
+      tdCom.dataset.comisionPct = comisionPct;
+      marcarEditable(tdCom, 'comision', ci);
+
+      const tdKC = filas[FILA.kmCorto].cells[ci];
+      tdKC.dataset.km = kmCorto;
+      marcarEditable(tdKC, 'kmCorto', ci);
+
+      const tdFC = filas[FILA.fleteCorto].cells[ci];
+      tdFC.dataset.desc = descCorto;
+      marcarEditable(tdFC, 'fleteCorto', ci);
+
+      const tdKL = filas[FILA.kmLargo].cells[ci];
+      tdKL.dataset.km = kmLargo;
+      marcarEditable(tdKL, 'kmLargo', ci);
+
+      const tdFL = filas[FILA.fleteLargo].cells[ci];
+      tdFL.dataset.desc = descLargo;
+      marcarEditable(tdFL, 'fleteLargo', ci);
+
+      // Texto simple
+      [FILA.cliente, FILA.producto, FILA.destino, FILA.fijacion,
+       FILA.toneladas, FILA.plazo, FILA.observaciones].forEach(idx => {
+        marcarEditable(filas[idx].cells[ci], 'texto', ci);
+      });
+
+      // Checkbox
+      const filaSeleccion = filas[filas.length - 1];
+      const tdSel = document.createElement('td');
+      tdSel.classList.add('ocultar-al-exportar');
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.disabled = !cliente || !destino || !precioInput || !kmCorto || !kmLargo || !toneladas || !plazo;
+      checkbox.addEventListener('change', function () {
+        if (this.checked) {
+          document.querySelectorAll('#tablaNegocios input[type="checkbox"]')
+            .forEach(cb => { if (cb !== this) cb.checked = false; });
+        }
+      });
+      tdSel.appendChild(checkbox);
+      filaSeleccion.appendChild(tdSel);
+
+      // Limpiar solo campos que no se conservan entre alternativas
+      ['destino','precioBruto','descCorto','kmLargo','descLargo','plazoPago','observaciones'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+      document.getElementById('comision').value = '3';
+    }
+
+    function borrarUltima() {
+      const tabla = document.getElementById('tablaNegocios');
+      const columnas = tabla.rows[0].cells.length;
+      if (columnas <= 1) return;
+      for (let fila of tabla.rows) fila.deleteCell(columnas - 1);
+      contador--;
+    }
+
+    function borrarTodo() {
+      const tabla = document.getElementById('tablaNegocios');
+      while (tabla.rows[0].cells.length > 1) borrarUltima();
+      contador = 1;
+      const boton = document.getElementById('cerrarNegocio');
+      boton.classList.remove('confirmado');
+      boton.classList.add('pendiente');
+      boton.innerHTML = "🔒 CERRAR NEGOCIO";
+    }
+
+    function ocultarYCapturar(callback) {
+      const tabla = document.getElementById('tablaNegocios');
+      const ocultar = document.querySelectorAll('.ocultar-al-exportar');
+      // Temporalmente quitar sticky de primera columna para que html2canvas la capture bien
+      const stickyEls = tabla.querySelectorAll('td:first-child, th:first-child');
+      stickyEls.forEach(el => el.style.position = 'relative');
+      ocultar.forEach(el => el.style.display = 'none');
+      html2canvas(tabla, {
+        scrollX: 0, scrollY: -window.scrollY,
+        width: tabla.offsetWidth, windowWidth: tabla.offsetWidth,
+        useCORS: true
+      }).then(canvas => {
+        ocultar.forEach(el => el.style.display = '');
+        stickyEls.forEach(el => el.style.position = '');
+        callback(canvas);
+      });
+    }
+
+    function compartirImagen() {
+      // Generar imagen primero, luego compartir
+      // En mobile algunos browsers bloquean share si hay demasiado tiempo async
+      // Solución: si share falla, abrir imagen en nueva pestaña para compartir manual
+      ocultarYCapturar(canvas => {
+        canvas.toBlob(blob => {
+          const archivo = new File([blob], "agrosalado.png", { type: "image/png" });
+          if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
+            navigator.share({ title: 'Comparador AGROSALADO', files: [archivo] })
+              .catch(e => {
+                // Si share falla, abrir imagen en nueva pestaña
+                const url = URL.createObjectURL(blob);
+                window.open(url, '_blank');
+              });
+          } else {
+            // Fallback: abrir imagen en nueva pestaña
+            const url = URL.createObjectURL(blob);
+            window.open(url, '_blank');
+          }
+        });
+      });
+    }
+
+    function capturarImagen() {
+      ocultarYCapturar(canvas => {
+        const nuevaVentana = window.open();
+        nuevaVentana.document.write(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Captura AGROSALADO</title>
+            <style>
+              body { margin: 0; background: #f2f2f2; font-family: Arial, sans-serif; }
+              .toolbar { position: sticky; top: 0; background: #007bff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; z-index: 10; }
+              .toolbar button { background: white; color: #007bff; border: none; border-radius: 6px; padding: 8px 16px; font-size: 1em; font-weight: bold; cursor: pointer; }
+              img { width: 100%; display: block; }
+            </style>
+          </head>
+          <body>
+            <div class="toolbar">
+              <button onclick="window.close()">← Volver</button>
+            </div>
+            <img src="${canvas.toDataURL('image/png')}">
+          </body>
+          </html>
+        `);
+      });
+    }
+
+    function copiarImagen() {
+      ocultarYCapturar(canvas => {
+        canvas.toBlob(blob => {
+          navigator.clipboard.write([new ClipboardItem({ "image/png": blob })])
+            .then(() => alert("🖼️ Imagen copiada al portapapeles"))
+            .catch(err => alert("❌ No se pudo copiar imagen: " + err));
+        });
+      });
+    }
+
+    function copiarParaExcel() {
+      const tabla = document.getElementById('tablaNegocios');
+      let texto = "";
+      for (let fila of tabla.rows) {
+        if (fila.classList.contains("ocultar-al-exportar")) continue;
+        texto += Array.from(fila.cells)
+          .filter(c => !c.classList.contains("ocultar-al-exportar"))
+          .map(c => c.innerText.trim())
+          .join("\t") + "\n";
+      }
+      navigator.clipboard.writeText(texto)
+        .then(() => alert("✅ Copiado en formato para Excel"))
+        .catch(err => alert("❌ Error al copiar: " + err));
+    }
+
+    function borrarColumna(index) {
+      const tabla = document.getElementById('tablaNegocios');
+      const header = document.getElementById('header');
+      if (header.cells.length <= 1 || index < 1) return;
+      for (let fila of tabla.rows) {
+        if (fila.cells.length > index) fila.deleteCell(index);
+      }
+      let n = 1;
+      for (let i = 1; i < header.cells.length; i++) {
+        header.cells[i].textContent = `Alternativa ${n++}`;
+      }
+      contador = n;
+    }
+
+    function cerrarNegocio() {
+      const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+      const ultimaFila = filas[filas.length - 1];
+      let sel = -1;
+      for (let i = 1; i < ultimaFila.cells.length; i++) {
+        const cb = ultimaFila.cells[i].querySelector('input[type="checkbox"]');
+        if (cb && cb.checked) { sel = i; break; }
+      }
+      if (sel === -1) { alert("⚠️ Debe seleccionar una alternativa antes de cerrar el negocio."); return; }
+      const btn = document.getElementById('cerrarNegocio');
+      btn.innerHTML = "✅ CERRADO";
+      btn.classList.remove("pendiente");
+      btn.classList.add("confirmado");
+    }
+  </script>
+</body>
+</html>
