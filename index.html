@@ -267,34 +267,61 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.08);
       padding: 10px 14px;
       margin-bottom: 12px;
+    }
+    .panel-tc .tc-header {
       display: flex;
       align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
     }
-    .panel-tc .tc-label {
-      font-size: 0.85em;
-      color: #555;
-      white-space: nowrap;
-    }
-    .panel-tc .tc-valor {
+    .panel-tc .tc-titulo {
       font-weight: bold;
-      font-size: 1em;
+      font-size: 0.9em;
       color: #2c3e50;
     }
     .panel-tc .tc-fecha {
       font-size: 0.75em;
       color: #888;
+      margin-left: auto;
+    }
+    .panel-tc .tc-grillas {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+    }
+    .panel-tc .tc-item {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 6px 8px;
+    }
+    .panel-tc .tc-label {
+      font-size: 0.72em;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .panel-tc .tc-valores {
+      display: flex;
+      gap: 8px;
+      margin-top: 2px;
+    }
+    .panel-tc .tc-valor {
+      font-size: 0.88em;
+      font-weight: bold;
+      color: #2c3e50;
+    }
+    .panel-tc .tc-sublabel {
+      font-size: 0.68em;
+      color: #999;
     }
     .panel-tc button {
       width: auto;
-      padding: 6px 14px;
-      font-size: 0.85em;
-      margin-left: auto;
+      padding: 5px 12px;
+      font-size: 0.82em;
     }
     .panel-tc .tc-cargando {
-      font-size: 0.85em;
-      color: #888;
+      font-size: 0.8em;
+      color: #aaa;
       font-style: italic;
     }
 
@@ -341,21 +368,44 @@
   </div>
 
   <div class="panel-tc ocultar-al-exportar">
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;">
-      <span class="tc-label">💵 TC Divisa BNA</span>
+    <div class="tc-header">
+      <span class="tc-titulo">💵 Tipos de Cambio</span>
       <span class="tc-fecha" id="tcFecha"></span>
-      <button onclick="cargarTC()" id="btnActualizarTC" style="margin-left:auto;">🔄</button>
+      <button onclick="cargarTC()" id="btnActualizarTC">🔄</button>
     </div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;width:100%;margin-top:4px;">
-      <div>
-        <div class="tc-label">Compra</div>
-        <div class="tc-valor" id="tcCompra"><span class="tc-cargando">...</span></div>
+    <div class="tc-grillas">
+      <div class="tc-item">
+        <div class="tc-label">Oficial BNA</div>
+        <div class="tc-valores">
+          <div><div class="tc-sublabel">Compra</div><div class="tc-valor" id="tcOficialCompra"><span class="tc-cargando">...</span></div></div>
+          <div><div class="tc-sublabel">Venta</div><div class="tc-valor" id="tcOficialVenta"><span class="tc-cargando">...</span></div></div>
+          <button onclick="usarTcEnFormulario('oficial')" style="margin-left:auto;align-self:flex-end;padding:3px 8px;font-size:0.75em;">Usar</button>
+        </div>
       </div>
-      <div>
-        <div class="tc-label">Venta</div>
-        <div class="tc-valor" id="tcVenta"><span class="tc-cargando">...</span></div>
+      <div class="tc-item">
+        <div class="tc-label">Blue</div>
+        <div class="tc-valores">
+          <div><div class="tc-sublabel">Compra</div><div class="tc-valor" id="tcBlueCompra"><span class="tc-cargando">...</span></div></div>
+          <div><div class="tc-sublabel">Venta</div><div class="tc-valor" id="tcBlueVenta"><span class="tc-cargando">...</span></div></div>
+          <button onclick="usarTcEnFormulario('blue')" style="margin-left:auto;align-self:flex-end;padding:3px 8px;font-size:0.75em;">Usar</button>
+        </div>
       </div>
-      <button onclick="usarTcEnFormulario()" style="margin-left:auto;align-self:flex-end;">Usar compra</button>
+      <div class="tc-item">
+        <div class="tc-label">Bolsa (MEP)</div>
+        <div class="tc-valores">
+          <div><div class="tc-sublabel">Compra</div><div class="tc-valor" id="tcBolsaCompra"><span class="tc-cargando">...</span></div></div>
+          <div><div class="tc-sublabel">Venta</div><div class="tc-valor" id="tcBolsaVenta"><span class="tc-cargando">...</span></div></div>
+          <button onclick="usarTcEnFormulario('bolsa')" style="margin-left:auto;align-self:flex-end;padding:3px 8px;font-size:0.75em;">Usar</button>
+        </div>
+      </div>
+      <div class="tc-item">
+        <div class="tc-label">Mayorista</div>
+        <div class="tc-valores">
+          <div><div class="tc-sublabel">Compra</div><div class="tc-valor" id="tcMayoristaCompra"><span class="tc-cargando">...</span></div></div>
+          <div><div class="tc-sublabel">Venta</div><div class="tc-valor" id="tcMayoristaVenta"><span class="tc-cargando">...</span></div></div>
+          <button onclick="usarTcEnFormulario('mayorista')" style="margin-left:auto;align-self:flex-end;padding:3px 8px;font-size:0.75em;">Usar</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -494,20 +544,35 @@
       if (btn) btn.textContent = '🔄';
     }
 
-    // ── TC Divisa BNA automático ──
-    let tcBNA = null;
+    // ── Tipos de Cambio ──
+    let tcDatos = {};
 
     function formatearFechaTc(fecha) {
       return fecha.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
            + ' ' + fecha.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
     }
 
-    function mostrarTC(compra, venta, fechaStr, sinConexion = false) {
-      tcBNA = venta;
-      document.getElementById('tcCompra').textContent = '$ ' + compra.toLocaleString('es-AR', { minimumFractionDigits: 2 });
-      document.getElementById('tcVenta').textContent  = '$ ' + venta.toLocaleString('es-AR',  { minimumFractionDigits: 2 });
-      document.getElementById('tcFecha').textContent  = sinConexion
-        ? '⚠️ sin conexión · último: ' + fechaStr
+    function fmtTC(v) {
+      return '$ ' + parseFloat(v).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    function mostrarTC(datos, fechaStr, sinConexion = false) {
+      tcDatos = datos;
+      const ids = {
+        oficial:   ['tcOficialCompra',   'tcOficialVenta'],
+        blue:      ['tcBlueCompra',      'tcBlueVenta'],
+        bolsa:     ['tcBolsaCompra',     'tcBolsaVenta'],
+        mayorista: ['tcMayoristaCompra', 'tcMayoristaVenta'],
+      };
+      for (const [casa, [idC, idV]] of Object.entries(ids)) {
+        const d = datos[casa];
+        if (d) {
+          document.getElementById(idC).textContent = fmtTC(d.compra);
+          document.getElementById(idV).textContent = fmtTC(d.venta);
+        }
+      }
+      document.getElementById('tcFecha').textContent = sinConexion
+        ? '⚠️ último: ' + fechaStr
         : 'act. ' + fechaStr;
       document.getElementById('tcFecha').style.color = sinConexion ? '#e67e22' : '#888';
     }
@@ -516,36 +581,31 @@
       const btn = document.getElementById('btnActualizarTC');
       if (btn) btn.textContent = '⏳';
       try {
-        const res = await fetch('https://dolarapi.com/v1/ar/dolares/oficial');
-        const data = await res.json();
-        const compra   = data.compra;
-        const venta    = data.venta;
-        const fechaStr = formatearFechaTc(new Date(data.fechaActualizacion));
-        localStorage.setItem('tcBNA', JSON.stringify({ compra, venta, fechaStr }));
-        tcCompraActual = compra;
-        mostrarTC(compra, venta, fechaStr, false);
+        const res = await fetch('/.netlify/functions/tc');
+        const datos = await res.json();
+        const fechaRef = datos.oficial ? datos.oficial.fecha : null;
+        const fechaStr = fechaRef ? formatearFechaTc(new Date(fechaRef)) : '';
+        localStorage.setItem('tcDatos', JSON.stringify({ datos, fechaStr }));
+        mostrarTC(datos, fechaStr, false);
       } catch (e) {
-        const guardado = localStorage.getItem('tcBNA');
+        const guardado = localStorage.getItem('tcDatos');
         if (guardado) {
-          const { compra, venta, fechaStr } = JSON.parse(guardado);
-          tcCompraActual = compra;
-          mostrarTC(compra, venta, fechaStr, true);
+          const { datos, fechaStr } = JSON.parse(guardado);
+          mostrarTC(datos, fechaStr, true);
         } else {
-          document.getElementById('tcCompra').innerHTML = '<span style="color:#ad1e19">-</span>';
-          document.getElementById('tcVenta').innerHTML  = '<span style="color:#ad1e19">sin conexión</span>';
-          document.getElementById('tcFecha').textContent = '';
+          document.getElementById('tcFecha').textContent = 'sin conexión';
+          document.getElementById('tcFecha').style.color = '#ad1e19';
         }
       }
       if (btn) btn.textContent = '🔄';
     }
 
-    let tcCompraActual = null;
-
-    function usarTcEnFormulario() {
-      if (!tcCompraActual) return;
+    function usarTcEnFormulario(casa) {
+      const d = tcDatos[casa];
+      if (!d) return;
       document.getElementById('moneda').value = 'USD';
       toggleTipoCambio();
-      document.getElementById('tipoCambio').value = tcCompraActual;
+      document.getElementById('tipoCambio').value = d.compra;
     }
 
     function toggleTipoCambio() {
