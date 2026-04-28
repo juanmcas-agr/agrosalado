@@ -22,12 +22,13 @@ exports.handler = async function() {
     }
   }
 
-  const fechaMatch = html.match(/(\d{2}\/\d{2}\/\d{4})/);
-  const fecha = fechaMatch ? fechaMatch[1] : '';
+// Buscar todas las fechas y tomar la más reciente (año 2024+)
+const todasFechas = [...html.matchAll(/(\d{2}\/\d{2}\/20\d{2})/g)].map(m => m[1]);
+const fecha = todasFechas.find(f => parseInt(f.split('/')[2]) >= 2024) || '';
 
   return {
     statusCode: 200,
     headers: { 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({ granos, fecha, fuente: 'BCR Cámara Arbitral' })
+    body: JSON.stringify({ granos, fecha, fuente: 'Bolsa de Comercio de Rosario' })
   };
 };
