@@ -371,7 +371,13 @@
     <div class="tc-header">
       <span class="tc-titulo">💵 Tipos de Cambio</span>
       <span class="tc-fecha" id="tcFecha"></span>
+      <button onclick="abrirBuscadorFecha()" id="btnBuscarFecha" title="Buscar por fecha">🔍</button>
       <button onclick="cargarTC()" id="btnActualizarTC">🔄</button>
+    </div>
+    <div id="buscadorFecha" style="display:none;margin-top:8px;display:none;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input type="date" id="tcFechaBuscar" style="font-size:14px;padding:5px 8px;border-radius:6px;border:1px solid #ccc;height:36px;">
+      <button onclick="cargarTCFecha()" style="width:auto;padding:5px 12px;font-size:0.85em;">Buscar</button>
+      <button onclick="cerrarBuscadorFecha()" style="width:auto;padding:5px 12px;font-size:0.85em;background:#888;">✕</button>
     </div>
     <div class="tc-grillas">
       <div class="tc-item">
@@ -575,6 +581,36 @@
         ? '⚠️ último: ' + fechaStr
         : 'act. ' + fechaStr;
       document.getElementById('tcFecha').style.color = sinConexion ? '#e67e22' : '#888';
+    }
+
+    function abrirBuscadorFecha() {
+      const div = document.getElementById('buscadorFecha');
+      div.style.display = div.style.display === 'flex' ? 'none' : 'flex';
+    }
+
+    function cerrarBuscadorFecha() {
+      document.getElementById('buscadorFecha').style.display = 'none';
+      document.getElementById('tcFechaBuscar').value = '';
+    }
+
+    async function cargarTCFecha() {
+      const fechaInput = document.getElementById('tcFechaBuscar').value;
+      if (!fechaInput) { cargarTC(); return; }
+      // Convertir de YYYY-MM-DD a YYYY/MM/DD para la API
+      const fechaApi = fechaInput.replace(/-/g, '/');
+      const btn = document.getElementById('btnActualizarTC');
+      if (btn) btn.textContent = '⏳';
+      try {
+        const res = await fetch(`/.netlify/functions/tc?fecha=${fechaApi}`);
+        const datos = await res.json();
+        const fechaRef = datos.oficial ? datos.oficial.fecha : null;
+        const fechaStr = fechaRef ? formatearFechaTc(new Date(fechaRef)) : fechaInput;
+        mostrarTC(datos, fechaStr, false);
+        cerrarBuscadorFecha();
+      } catch(e) {
+        alert('No se encontraron datos para esa fecha.');
+      }
+      if (btn) btn.textContent = '🔄';
     }
 
     async function cargarTC() {
