@@ -535,8 +535,10 @@
     // ── Pizarra BCR ──
     // ── Modal Pizarra ──
     let pizarraValorActual = 0;
+    let pizarraClaveActual = '';
 
     function abrirUsarPizarra(clave) {
+      pizarraClaveActual = clave;
       const nombres = { soja: 'Soja', maiz: 'Maíz', trigo: 'Trigo', girasol: 'Girasol', sorgo: 'Sorgo' };
       const ids = { soja: 'pizSoja', maiz: 'pizMaiz', trigo: 'pizTrigo', girasol: 'pizGirasol', sorgo: 'pizSorgo' };
       const valorTexto = document.getElementById(ids[clave]).textContent;
@@ -566,6 +568,10 @@
     function confirmarUsarPizarra() {
       const desc = parseFloat(document.getElementById('modalDescuento').value) || 0;
       const resultado = +(pizarraValorActual * (1 - desc / 100)).toFixed(2);
+      // Mapear clave al valor del select
+      const productos = { soja: 'SOJA', maiz: 'MAIZ', trigo: 'TRIGO', girasol: 'GIRASOL AO', sorgo: 'OTROS' };
+      const productoSelect = productos[pizarraClaveActual];
+      if (productoSelect) document.getElementById('producto').value = productoSelect;
       // Cargar en formulario como pesos
       document.getElementById('moneda').value = 'ARS';
       toggleTipoCambio();
