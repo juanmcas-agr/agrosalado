@@ -5,7 +5,8 @@ exports.handler = async function() {
   const casas = ['oficial', 'blue', 'bolsa', 'mayorista'];
   const resultado = {};
   for (const casa of casas) {
-    const d = data.find(x => x.casa === casa);
+    const registros = data.filter(x => x.casa === casa);
+    const d = registros[registros.length - 1]; // el más reciente
     if (d) resultado[casa] = { compra: d.compra, venta: d.venta, fecha: d.fecha };
   }
 
