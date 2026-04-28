@@ -202,6 +202,64 @@
       th, td { font-size: 0.92em; padding: 10px 14px; }
     }
 
+    /* ── PANEL PIZARRA ── */
+    .panel-pizarra {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      padding: 10px 14px;
+      margin-bottom: 12px;
+    }
+    .panel-pizarra .pizarra-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .panel-pizarra .pizarra-titulo {
+      font-weight: bold;
+      font-size: 0.9em;
+      color: #2c3e50;
+    }
+    .panel-pizarra .pizarra-fecha {
+      font-size: 0.75em;
+      color: #888;
+      margin-left: auto;
+    }
+    .panel-pizarra .pizarra-granos {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 6px;
+    }
+    .panel-pizarra .grano {
+      background: #f8f9fa;
+      border-radius: 6px;
+      padding: 6px 8px;
+      text-align: center;
+    }
+    .panel-pizarra .grano-nombre {
+      font-size: 0.72em;
+      color: #666;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+    .panel-pizarra .grano-valor {
+      font-size: 0.92em;
+      font-weight: bold;
+      color: #2c3e50;
+      margin-top: 2px;
+    }
+    .panel-pizarra .grano-cargando {
+      font-size: 0.8em;
+      color: #aaa;
+      font-style: italic;
+    }
+    .panel-pizarra button {
+      width: auto;
+      padding: 5px 12px;
+      font-size: 0.82em;
+    }
+
     /* ── PANEL TC ── */
     .panel-tc {
       background: white;
@@ -251,6 +309,36 @@
 <body>
 
   <h2>Comparador de Alternativas Comerciales - AGROSALADO</h2>
+
+  <div class="panel-pizarra ocultar-al-exportar">
+    <div class="pizarra-header">
+      <span class="pizarra-titulo">🌾 Pizarra BCR</span>
+      <span class="pizarra-fecha" id="pizarraFecha"><span class="grano-cargando">cargando...</span></span>
+      <button onclick="cargarPizarra()">🔄</button>
+    </div>
+    <div class="pizarra-granos">
+      <div class="grano">
+        <div class="grano-nombre">Soja</div>
+        <div class="grano-valor" id="pizSoja"><span class="grano-cargando">...</span></div>
+      </div>
+      <div class="grano">
+        <div class="grano-nombre">Maíz</div>
+        <div class="grano-valor" id="pizMaiz"><span class="grano-cargando">...</span></div>
+      </div>
+      <div class="grano">
+        <div class="grano-nombre">Trigo</div>
+        <div class="grano-valor" id="pizTrigo"><span class="grano-cargando">...</span></div>
+      </div>
+      <div class="grano">
+        <div class="grano-nombre">Girasol</div>
+        <div class="grano-valor" id="pizGirasol"><span class="grano-cargando">...</span></div>
+      </div>
+      <div class="grano">
+        <div class="grano-nombre">Sorgo</div>
+        <div class="grano-valor" id="pizSorgo"><span class="grano-cargando">...</span></div>
+      </div>
+    </div>
+  </div>
 
   <div class="panel-tc ocultar-al-exportar">
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;width:100%;">
@@ -365,6 +453,47 @@
 
     let contador = 1;
 
+    // ── Pizarra BCR ──
+    function formatoPesos(valor) {
+      return '$ ' + parseFloat(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    async function cargarPizarra() {
+      const btn = document.querySelector('.panel-pizarra button');
+      if (btn) btn.textContent = '⏳';
+      try {
+        const res = await fetch('/.netlify/functions/pizarra');
+        const data = await res.json();
+        const g = data.granos;
+        document.getElementById('pizSoja').textContent    = formatoPesos(g.soja);
+        document.getElementById('pizMaiz').textContent    = formatoPesos(g.maiz);
+        document.getElementById('pizTrigo').textContent   = formatoPesos(g.trigo);
+        document.getElementById('pizGirasol').textContent = formatoPesos(g.girasol);
+        document.getElementById('pizSorgo').textContent   = formatoPesos(g.sorgo);
+        document.getElementById('pizarraFecha').textContent = 'BCR · ' + data.fecha;
+        document.getElementById('pizarraFecha').style.color = '#888';
+        // Guardar en localStorage
+        localStorage.setItem('pizarraBCR', JSON.stringify({ granos: g, fecha: data.fecha }));
+      } catch(e) {
+        // Fallback a localStorage
+        const guardado = localStorage.getItem('pizarraBCR');
+        if (guardado) {
+          const { granos: g, fecha } = JSON.parse(guardado);
+          document.getElementById('pizSoja').textContent    = formatoPesos(g.soja);
+          document.getElementById('pizMaiz').textContent    = formatoPesos(g.maiz);
+          document.getElementById('pizTrigo').textContent   = formatoPesos(g.trigo);
+          document.getElementById('pizGirasol').textContent = formatoPesos(g.girasol);
+          document.getElementById('pizSorgo').textContent   = formatoPesos(g.sorgo);
+          document.getElementById('pizarraFecha').textContent = '⚠️ sin conexión · último: ' + fecha;
+          document.getElementById('pizarraFecha').style.color = '#e67e22';
+        } else {
+          document.getElementById('pizarraFecha').textContent = 'sin conexión';
+          document.getElementById('pizarraFecha').style.color = '#ad1e19';
+        }
+      }
+      if (btn) btn.textContent = '🔄';
+    }
+
     // ── TC Divisa BNA automático ──
     let tcBNA = null;
 
@@ -445,6 +574,7 @@
     window.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
       cargarTC();
+      cargarPizarra();
 
       // Enter avanza al siguiente campo de texto/número del formulario
       // Saltea desplegables (select) y date
