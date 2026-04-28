@@ -1,15 +1,6 @@
-const https = require('https');
-
 exports.handler = async function() {
-  const url = 'https://dolarapi.com/v1/ar/dolares';
-
-  const data = await new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, res => {
-      let body = '';
-      res.on('data', chunk => body += chunk);
-      res.on('end', () => resolve(JSON.parse(body)));
-    }).on('error', reject);
-  });
+  const res = await fetch('https://dolarapi.com/v1/ar/dolares');
+  const data = await res.json();
 
   const casas = ['oficial', 'blue', 'bolsa', 'mayorista'];
   const resultado = {};
