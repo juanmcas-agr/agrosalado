@@ -1,12 +1,19 @@
-exports.handler = async function() {
-  const res = await fetch('https://api.argentinadatos.com/v1/cotizaciones/dolares');
+exports.handler = async function(event) {
+  const fecha = event.queryStringParameters && event.queryStringParameters.fecha;
+  
+  let url = 'https://api.argentinadatos.com/v1/cotizaciones/dolares';
+  if (fecha) url += `/${fecha}`; // formato YYYY-MM-DD
+
+  const res = await fetch(url);
   const data = await res.json();
 
   const casas = ['oficial', 'blue', 'bolsa', 'mayorista'];
   const resultado = {};
+  const lista = Array.isArray(data) ? data : [data];
+
   for (const casa of casas) {
-    const registros = data.filter(x => x.casa === casa);
-    const d = registros[registros.length - 1]; // el más reciente
+    const registros = lista.filter(x => x.casa === casa);
+    const d = registros[registros.length - 1];
     if (d) resultado[casa] = { compra: d.compra, venta: d.venta, fecha: d.fecha };
   }
 
