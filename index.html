@@ -347,22 +347,27 @@
       <div class="grano">
         <div class="grano-nombre">Soja</div>
         <div class="grano-valor" id="pizSoja"><span class="grano-cargando">...</span></div>
+        <button onclick="abrirUsarPizarra('soja')" style="margin-top:4px;width:100%;padding:3px 6px;font-size:0.75em;">Usar</button>
       </div>
       <div class="grano">
         <div class="grano-nombre">Maíz</div>
         <div class="grano-valor" id="pizMaiz"><span class="grano-cargando">...</span></div>
+        <button onclick="abrirUsarPizarra('maiz')" style="margin-top:4px;width:100%;padding:3px 6px;font-size:0.75em;">Usar</button>
       </div>
       <div class="grano">
         <div class="grano-nombre">Trigo</div>
         <div class="grano-valor" id="pizTrigo"><span class="grano-cargando">...</span></div>
+        <button onclick="abrirUsarPizarra('trigo')" style="margin-top:4px;width:100%;padding:3px 6px;font-size:0.75em;">Usar</button>
       </div>
       <div class="grano">
         <div class="grano-nombre">Girasol</div>
         <div class="grano-valor" id="pizGirasol"><span class="grano-cargando">...</span></div>
+        <button onclick="abrirUsarPizarra('girasol')" style="margin-top:4px;width:100%;padding:3px 6px;font-size:0.75em;">Usar</button>
       </div>
       <div class="grano">
         <div class="grano-nombre">Sorgo</div>
         <div class="grano-valor" id="pizSorgo"><span class="grano-cargando">...</span></div>
+        <button onclick="abrirUsarPizarra('sorgo')" style="margin-top:4px;width:100%;padding:3px 6px;font-size:0.75em;">Usar</button>
       </div>
     </div>
   </div>
@@ -496,6 +501,24 @@
     </button>
   </div>
 
+  <!-- Modal usar pizarra -->
+  <div id="modalPizarra" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:320px;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1em;margin-bottom:4px;" id="modalPizarraTitulo"></div>
+      <div style="font-size:1.3em;font-weight:bold;color:#2c3e50;margin-bottom:12px;" id="modalPizarraValor"></div>
+      <label style="font-size:0.85em;color:#555;">Descuento (%)</label>
+      <div style="display:flex;align-items:center;gap:8px;margin-top:4px;margin-bottom:16px;">
+        <input type="number" id="modalDescuento" placeholder="0" min="0" max="100" style="width:100%;font-size:16px;height:44px;padding:8px;border-radius:6px;border:1px solid #ccc;">
+      </div>
+      <div style="font-size:0.85em;color:#555;margin-bottom:4px;">Precio resultante:</div>
+      <div style="font-size:1.2em;font-weight:bold;color:#28a745;margin-bottom:16px;" id="modalPizarraResultado"></div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="confirmarUsarPizarra()" style="flex:1;padding:12px;font-size:1em;">✅ Cargar en formulario</button>
+        <button onclick="cerrarModalPizarra()" style="flex:1;padding:12px;font-size:1em;background:#888;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Índices de fila en tbody (0-based)
     const FILA = {
@@ -510,6 +533,46 @@
     let contador = 1;
 
     // ── Pizarra BCR ──
+    // ── Modal Pizarra ──
+    let pizarraValorActual = 0;
+
+    function abrirUsarPizarra(clave) {
+      const nombres = { soja: 'Soja', maiz: 'Maíz', trigo: 'Trigo', girasol: 'Girasol', sorgo: 'Sorgo' };
+      const ids = { soja: 'pizSoja', maiz: 'pizMaiz', trigo: 'pizTrigo', girasol: 'pizGirasol', sorgo: 'pizSorgo' };
+      const valorTexto = document.getElementById(ids[clave]).textContent;
+      // Extraer número del texto "$ 265.400"
+      const numero = parseFloat(valorTexto.replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
+      pizarraValorActual = numero;
+
+      document.getElementById('modalPizarraTitulo').textContent = 'Pizarra ' + nombres[clave];
+      document.getElementById('modalPizarraValor').textContent = valorTexto;
+      document.getElementById('modalDescuento').value = '';
+      document.getElementById('modalPizarraResultado').textContent = valorTexto;
+      document.getElementById('modalPizarra').style.display = 'flex';
+      document.getElementById('modalDescuento').focus();
+
+      // Actualizar resultado en tiempo real
+      document.getElementById('modalDescuento').oninput = function() {
+        const desc = parseFloat(this.value) || 0;
+        const resultado = +(pizarraValorActual * (1 - desc / 100)).toFixed(2);
+        document.getElementById('modalPizarraResultado').textContent = formatoPesos(resultado);
+      };
+    }
+
+    function cerrarModalPizarra() {
+      document.getElementById('modalPizarra').style.display = 'none';
+    }
+
+    function confirmarUsarPizarra() {
+      const desc = parseFloat(document.getElementById('modalDescuento').value) || 0;
+      const resultado = +(pizarraValorActual * (1 - desc / 100)).toFixed(2);
+      // Cargar en formulario como pesos
+      document.getElementById('moneda').value = 'ARS';
+      toggleTipoCambio();
+      document.getElementById('precioBruto').value = resultado;
+      cerrarModalPizarra();
+    }
+
     function formatoPesos(valor) {
       return '$ ' + parseFloat(valor).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     }
