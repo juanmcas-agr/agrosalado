@@ -787,7 +787,7 @@
       const precioInput = parseFloat(tdPrecio.dataset.precioInput) || 0;
       const tc          = parseFloat(tdPrecio.dataset.tc) || 1;
       const moneda      = tdPrecio.dataset.moneda || "ARS";
-      const comisionPct = parseFloat(tdComision.dataset.comisionPct) || 3;
+      const comisionPct = tdComision.dataset.comisionPct !== undefined ? parseFloat(tdComision.dataset.comisionPct) : 3;
       const kmCorto     = parseInt(tdKmCorto.dataset.km) || 0;
       const kmLargo     = parseInt(tdKmLargo.dataset.km) || 0;
       const descCorto   = parseFloat(tdFCorto.dataset.desc) || 0;
@@ -966,7 +966,7 @@
       const plazo           = document.getElementById('plazoPago').value;
       const descCorto       = parseFloat(document.getElementById('descCorto').value) || 0;
       const descLargo       = parseFloat(document.getElementById('descLargo').value) || 0;
-      const comisionPct     = parseFloat(document.getElementById('comision').value) || 3;
+      const comisionPct     = parseFloat(document.getElementById('comision').value ?? 3);
       const observaciones   = document.getElementById('observaciones').value || "-";
 
       let fleteCorto = obtenerTarifaPorKm(kmCorto) * (1 - descCorto / 100);
