@@ -853,17 +853,17 @@
         const selMoneda = document.createElement('select');
         selMoneda.innerHTML = '<option value="ARS">$ Pesos</option><option value="USD">USD</option>';
         selMoneda.value = td.dataset.moneda || "ARS";
-        selMoneda.style.cssText = 'font-size:13px;padding:2px;';
+        selMoneda.style.cssText = 'font-size:16px;padding:2px;';
 
         const inpPrecio = document.createElement('input');
         inpPrecio.type = 'number'; inpPrecio.value = td.dataset.precioInput || 0;
         inpPrecio.placeholder = 'Precio';
-        inpPrecio.style.cssText = 'width:100%;font-size:13px;padding:2px;';
+        inpPrecio.style.cssText = 'width:100%;font-size:16px;padding:2px;';
 
         const inpTC = document.createElement('input');
         inpTC.type = 'number'; inpTC.value = td.dataset.tc || 1;
         inpTC.placeholder = 'Tipo de cambio';
-        inpTC.style.cssText = 'width:100%;font-size:13px;padding:2px;';
+        inpTC.style.cssText = 'width:100%;font-size:16px;padding:2px;';
         inpTC.style.display = selMoneda.value === "USD" ? 'block' : 'none';
 
         const btnOk = document.createElement('button');
@@ -888,7 +888,7 @@
           recalcularColumna(ci);
         };
 
-        btnOk.onclick = confirmar;
+        btnOk.onclick = (e) => { e.stopPropagation(); confirmar(); };
         [inpPrecio, inpTC].forEach(el => el.onkeydown = e => { if (e.key === 'Enter') confirmar(); });
         return;
       }
@@ -901,7 +901,7 @@
           if (v == (td.dataset.comisionPct || 3)) opt.selected = true;
           sel.appendChild(opt);
         });
-        sel.style.cssText = 'font-size:13px;padding:2px;';
+        sel.style.cssText = 'font-size:16px;padding:2px;';
         td.innerHTML = ''; td.appendChild(sel); sel.focus();
         const confirmar = () => { td.dataset.comisionPct = sel.value; recalcularColumna(ci); };
         sel.onblur = confirmar;
@@ -914,7 +914,7 @@
         const tdKm = filas[filaIdx].cells[ci];
         const inp = document.createElement('input');
         inp.type = 'number'; inp.value = tdKm.dataset.km || 0;
-        inp.style.cssText = 'width:70px;font-size:13px;padding:2px;';
+        inp.style.cssText = 'width:70px;font-size:16px;padding:2px;';
         td.innerHTML = ''; td.appendChild(inp); inp.focus();
         const confirmar = () => { tdKm.dataset.km = parseInt(inp.value) || 0; recalcularColumna(ci); };
         inp.onblur = confirmar;
@@ -928,7 +928,7 @@
         const inp = document.createElement('input');
         inp.type = 'number'; inp.value = tdF.dataset.desc || 0;
         inp.placeholder = 'Descuento %';
-        inp.style.cssText = 'width:80px;font-size:13px;padding:2px;';
+        inp.style.cssText = 'width:80px;font-size:16px;padding:2px;';
         td.innerHTML = ''; td.appendChild(inp); inp.focus();
         const confirmar = () => { tdF.dataset.desc = parseFloat(inp.value) || 0; recalcularColumna(ci); };
         inp.onblur = confirmar;
@@ -940,7 +940,7 @@
       const actual = td.innerText.trim();
       const inp = document.createElement('input');
       inp.type = 'text'; inp.value = actual === '-' ? '' : actual;
-      inp.style.cssText = 'width:100%;font-size:13px;padding:2px;';
+      inp.style.cssText = 'width:100%;font-size:16px;padding:2px;';
       td.innerHTML = ''; td.appendChild(inp); inp.focus(); inp.select();
       const confirmar = () => {
         td.textContent = inp.value.trim() || '-';
