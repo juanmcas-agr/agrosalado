@@ -1129,7 +1129,7 @@
         canvas.toBlob(blob => {
           const archivo = new File([blob], "agrosalado.png", { type: "image/png" });
           if (navigator.canShare && navigator.canShare({ files: [archivo] })) {
-            navigator.share({ title: 'Comparador AGROSALADO', files: [archivo] })
+            navigator.share({ files: [archivo] })
               .catch(e => {
                 // Si share falla, abrir imagen en nueva pestaña
                 const url = URL.createObjectURL(blob);
