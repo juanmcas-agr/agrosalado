@@ -1,0 +1,153 @@
+* { box-sizing: border-box; }
+
+body {
+  margin: 0; padding: 12px;
+  font-family: Arial, sans-serif;
+  background-color: #f2f2f2;
+  color: #2c3e50;
+}
+
+h1, h2, h3 { color: #2c3e50; }
+h1 { text-align: center; font-size: 1.4em; }
+h2 { font-size: 1.15em; margin: 14px 0 8px; }
+h3 { font-size: 1em; margin: 14px 0 6px; }
+
+.oculto { display: none !important; }
+
+/* ─── formularios ─── */
+.formulario {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  margin-bottom: 14px;
+}
+
+.formulario label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.formulario input,
+.formulario select,
+.formulario textarea {
+  font-size: 16px; /* evita zoom en iPhone */
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  width: 100%;
+  background: white;
+}
+
+.formulario .full { grid-column: 1 / -1; }
+
+button {
+  background-color: #007bff; color: white;
+  border: none; cursor: pointer;
+  border-radius: 6px; padding: 12px;
+  font-size: 1em;
+}
+button:active { filter: brightness(0.9); }
+
+.boton-secundario {
+  background-color: #6c757d;
+  margin-bottom: 10px;
+}
+
+.boton-anular {
+  background-color: #ad1e19;
+  padding: 6px 10px;
+  font-size: 0.85em;
+}
+
+/* ─── mensajes / banners ─── */
+.mensaje { font-size: 0.9em; min-height: 1.2em; margin: 4px 0; }
+.mensaje.error { color: #ad1e19; font-weight: bold; }
+.mensaje.ok { color: #1e7e34; font-weight: bold; }
+.mensaje.advertencia { color: #8a6100; font-weight: bold; }
+
+.banner-sync {
+  text-align: center;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  margin-bottom: 10px;
+}
+.banner-sync.ok { background: #d4edda; color: #1e7e34; }
+.banner-sync.advertencia { background: #fff3cd; color: #8a6100; }
+.banner-sync.error { background: #f8d7da; color: #ad1e19; }
+
+/* ─── login ─── */
+.pantalla-login {
+  max-width: 360px;
+  margin: 60px auto;
+}
+
+/* ─── layout general de la app ─── */
+.encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.navegacion {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.navegacion button {
+  flex: 1;
+  background-color: #e9ecef;
+  color: #2c3e50;
+}
+.navegacion button.activo {
+  background-color: #007bff;
+  color: white;
+}
+
+/* ─── tablas ─── */
+.tabla-scroll { overflow-x: auto; }
+
+.tabla {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  margin-bottom: 14px;
+  font-size: 0.9em;
+}
+.tabla th, .tabla td {
+  padding: 8px;
+  border-bottom: 1px solid #eee;
+  text-align: left;
+  white-space: nowrap;
+}
+.tabla tr.anulado { color: #999; text-decoration: line-through; }
+
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+}
+.filtros label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85em;
+  gap: 2px;
+}
+.filtros select, .filtros input {
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}

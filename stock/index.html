@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGROSALADO Stock</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="AGROSALADO Stock">
+  <link rel="apple-touch-icon" href="icons/icon-512.png">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+
+  <!-- ─── LOGIN ─── -->
+  <section id="pantalla-login" class="pantalla-login">
+    <h1>AGROSALADO Stock</h1>
+    <form id="login-form" class="formulario">
+      <input id="login-email" type="email" placeholder="Email" required autocomplete="username">
+      <input id="login-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+      <button type="submit">Ingresar</button>
+      <div id="login-mensaje" class="mensaje"></div>
+    </form>
+  </section>
+
+  <!-- ─── APP ─── -->
+  <div id="app-shell" class="oculto">
+    <header class="encabezado">
+      <span id="usuario-nombre"></span>
+      <button id="logout-boton" class="boton-secundario">Salir</button>
+    </header>
+
+    <div id="sync-estado" class="banner-sync"></div>
+
+    <nav class="navegacion">
+      <button data-ir="cargar">Cargar movimiento</button>
+      <button data-ir="dashboard">Stock</button>
+      <button data-ir="historial">Historial</button>
+    </nav>
+
+    <!-- ─── CARGAR MOVIMIENTO ─── -->
+    <section id="pantalla-cargar" data-screen="cargar" class="oculto">
+      <h2>Cargar movimiento</h2>
+      <button id="mov-feedlot" type="button" class="boton-secundario">Enviar a Feed Lot</button>
+
+      <form id="mov-form" class="formulario">
+        <label>Tipo de movimiento
+          <select id="mov-tipo"></select>
+        </label>
+
+        <label>Fecha
+          <input id="mov-fecha" type="date" required>
+        </label>
+
+        <div data-campo="establecimiento_origen">
+          <label>Establecimiento de origen
+            <select id="mov-establecimiento-origen"></select>
+          </label>
+        </div>
+
+        <div data-campo="establecimiento_destino">
+          <label>Establecimiento de destino
+            <select id="mov-establecimiento-destino"></select>
+          </label>
+        </div>
+
+        <div data-campo="categoria_origen">
+          <label>Categoría de origen
+            <select id="mov-categoria-origen"></select>
+          </label>
+        </div>
+
+        <div data-campo="categoria_destino">
+          <label>Categoría de destino
+            <select id="mov-categoria-destino"></select>
+          </label>
+        </div>
+
+        <label>Cantidad de cabezas
+          <input id="mov-cabezas" type="number" min="1" step="1" required>
+        </label>
+
+        <label>Kilos promedio por cabeza
+          <input id="mov-kilos" type="number" min="1" step="0.1" required>
+        </label>
+
+        <label class="full">Observaciones (opcional)
+          <textarea id="mov-observaciones" rows="2"></textarea>
+        </label>
+
+        <button type="submit" class="full">Guardar movimiento</button>
+        <div id="mov-mensaje" class="mensaje full"></div>
+      </form>
+    </section>
+
+    <!-- ─── DASHBOARD ─── -->
+    <section id="pantalla-dashboard" data-screen="dashboard" class="oculto">
+      <h2>Stock actual</h2>
+      <div id="dash-estado" class="mensaje"></div>
+      <button id="dash-actualizar" class="boton-secundario">Actualizar</button>
+
+      <h3>Total de la empresa: <span id="dash-total-general">0</span> cabezas</h3>
+
+      <h3>Por categoría (todos los establecimientos)</h3>
+      <table id="dash-global-tabla" class="tabla">
+        <thead><tr><th>Categoría</th><th>Cabezas</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>Por establecimiento</h3>
+      <table id="dash-establecimientos-tabla" class="tabla">
+        <thead><tr><th>Establecimiento</th><th>Cabezas</th></tr></thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>Detalle por establecimiento</h3>
+      <label>Establecimiento
+        <select id="dash-establecimiento"></select>
+      </label>
+      <table id="dash-drilldown-tabla" class="tabla">
+        <thead><tr><th>Categoría</th><th>Cabezas</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+
+    <!-- ─── HISTORIAL ─── -->
+    <section id="pantalla-historial" data-screen="historial" class="oculto">
+      <h2>Historial de movimientos</h2>
+
+      <div class="filtros">
+        <select id="hist-filtro-establecimiento"></select>
+        <select id="hist-filtro-tipo"></select>
+        <label>Desde <input id="hist-filtro-desde" type="date"></label>
+        <label>Hasta <input id="hist-filtro-hasta" type="date"></label>
+        <button id="hist-filtrar" class="boton-secundario">Filtrar</button>
+      </div>
+
+      <div id="hist-mensaje" class="mensaje"></div>
+
+      <div class="tabla-scroll">
+        <table id="hist-tabla" class="tabla">
+          <thead>
+            <tr>
+              <th>Fecha</th><th>Tipo</th><th>Origen</th><th>Destino</th>
+              <th>Cabezas</th><th>Kg/cab.</th><th>Cargado por</th><th>Obs.</th><th>Estado</th><th></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
+    }
+  </script>
+</body>
+</html>
