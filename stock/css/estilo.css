@@ -4,9 +4,15 @@ body {
   margin: 0; padding: 12px;
   padding-bottom: 76px;
   font-family: Arial, sans-serif;
-  background: linear-gradient(rgba(242,242,242,0.93), rgba(242,242,242,0.93)),
-              url('/assets/fondo-login.jpg') center top/cover no-repeat fixed;
+  background-color: #f2f2f2;
   color: #2c3e50;
+}
+
+/* Fondo fijo real (background-attachment:fixed no funciona en iOS Safari) */
+.fondo-fijo {
+  position: fixed; inset: 0; z-index: -1;
+  background: linear-gradient(rgba(242,242,242,0.55), rgba(242,242,242,0.55)),
+              url('/assets/fondo-login.jpg') center top/cover no-repeat;
 }
 
 /* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria) ── */
