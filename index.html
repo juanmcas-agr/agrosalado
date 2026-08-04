@@ -15,10 +15,39 @@
 
     body {
       margin: 0; padding: 12px;
+      padding-bottom: 76px;
       font-family: Arial, sans-serif;
       background-color: #f2f2f2;
       overflow-x: hidden;
     }
+
+    /* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria) ── */
+    .tab-bar-inferior {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      display: flex;
+      background: white;
+      box-shadow: 0 -1px 6px rgba(0,0,0,0.12);
+      z-index: 500;
+      padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .tab-bar-inferior button {
+      flex: 1;
+      width: auto;
+      background: white;
+      color: #6c757d;
+      border: none;
+      border-radius: 0;
+      padding: 8px 4px 7px;
+      font-size: 0.75em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      cursor: pointer;
+    }
+    .tab-bar-inferior button .tab-icono { font-size: 1.3em; }
+    .tab-bar-inferior button.activo { color: #007bff; font-weight: bold; }
 
     h2 {
       text-align: center; font-size: 1.3em;
@@ -500,6 +529,18 @@
       🔒 CERRAR NEGOCIO
     </button>
   </div>
+
+  <nav class="tab-bar-inferior">
+    <button type="button" class="activo">
+      <span class="tab-icono">🌾</span> Granos
+    </button>
+    <button type="button" onclick="window.location.href = '/stock/'">
+      <span class="tab-icono">🐄</span> Hacienda
+    </button>
+    <button type="button" onclick="alert('Pos. Granaria: próximamente 🚧')">
+      <span class="tab-icono">📈</span> Pos. Granaria
+    </button>
+  </nav>
 
   <!-- Modal usar pizarra -->
   <div id="modalPizarra" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
