@@ -11,79 +11,89 @@ function el(id) {
   return document.getElementById(id);
 }
 
-function poblarSelect(select, opciones, { placeholder } = {}) {
-  select.innerHTML = '';
-  if (placeholder) {
-    const opt = document.createElement('option');
-    opt.value = '';
-    opt.textContent = placeholder;
-    select.appendChild(opt);
-  }
+// ─── grupos de botones (reemplazan los <select>: son pocas opciones y así
+// queda "pintado" el elegido, más rápido de tocar en el campo) ───
+
+function crearGrupoBotones(id, opciones) {
+  const contenedor = el(id);
+  contenedor.classList.add('grupo-botones');
+  contenedor.innerHTML = '';
   for (const o of opciones) {
-    const opt = document.createElement('option');
-    opt.value = o.id;
-    opt.textContent = o.nombre;
-    select.appendChild(opt);
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.className = 'boton-opcion';
+    boton.dataset.value = o.id;
+    boton.textContent = o.nombre;
+    boton.addEventListener('click', () => {
+      contenedor.querySelectorAll('.boton-opcion').forEach((b) => b.classList.remove('seleccionado'));
+      boton.classList.add('seleccionado');
+      contenedor.dispatchEvent(new Event('cambio'));
+    });
+    contenedor.appendChild(boton);
   }
 }
 
-function poblarSelects() {
-  const selTipo = el('mov-tipo');
-  selTipo.innerHTML = '';
-  for (const [id, cfg] of Object.entries(TIPOS_MOVIMIENTO)) {
-    const opt = document.createElement('option');
-    opt.value = id;
-    opt.textContent = cfg.nombre;
-    selTipo.appendChild(opt);
-  }
+function obtenerSeleccion(id) {
+  const boton = el(id).querySelector('.boton-opcion.seleccionado');
+  return boton ? boton.dataset.value : '';
+}
 
-  poblarSelect(el('mov-establecimiento-origen'), ESTABLECIMIENTOS, { placeholder: 'Elegir...' });
-  poblarSelect(el('mov-establecimiento-destino'), ESTABLECIMIENTOS, { placeholder: 'Elegir...' });
-  poblarSelect(el('mov-categoria-origen'), CATEGORIAS, { placeholder: 'Elegir...' });
-  poblarSelect(el('mov-categoria-destino'), CATEGORIAS, { placeholder: 'Elegir...' });
+function establecerSeleccion(id, valor) {
+  const contenedor = el(id);
+  contenedor.querySelectorAll('.boton-opcion').forEach((b) => {
+    b.classList.toggle('seleccionado', b.dataset.value === valor);
+  });
+  contenedor.dispatchEvent(new Event('cambio'));
+}
+
+function limpiarSeleccion(id) {
+  el(id).querySelectorAll('.boton-opcion').forEach((b) => b.classList.remove('seleccionado'));
+}
+
+function poblarGrupos() {
+  crearGrupoBotones('mov-tipo', Object.entries(TIPOS_MOVIMIENTO).map(([id, cfg]) => ({ id, nombre: cfg.nombre })));
+  crearGrupoBotones('mov-establecimiento-origen', ESTABLECIMIENTOS);
+  crearGrupoBotones('mov-establecimiento-destino', ESTABLECIMIENTOS);
+  crearGrupoBotones('mov-categoria-origen', CATEGORIAS);
+  crearGrupoBotones('mov-categoria-destino', CATEGORIAS);
 }
 
 function actualizarCamposVisibles() {
-  const tipo = el('mov-tipo').value;
+  const tipo = obtenerSeleccion('mov-tipo');
+  if (!tipo) return;
   const cfg = TIPOS_MOVIMIENTO[tipo];
+
   for (const campo of CAMPOS) {
     const contenedor = document.querySelector(`[data-campo="${campo}"]`);
-    const visible = cfg.campos.includes(campo);
-    contenedor.classList.toggle('oculto', !visible);
-    contenedor.querySelector('select').required = visible;
+    contenedor.classList.toggle('oculto', !cfg.campos.includes(campo));
   }
 
-  const selCategoriaDestino = el('mov-categoria-destino');
-  if (cfg.categoriasPermitidas) {
-    poblarSelect(
-      selCategoriaDestino,
-      CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id)),
-      { placeholder: 'Elegir...' }
-    );
-  } else if (selCategoriaDestino.options.length !== CATEGORIAS.length + 1) {
-    poblarSelect(selCategoriaDestino, CATEGORIAS, { placeholder: 'Elegir...' });
-  }
+  // Siempre se reconstruye para que quede sin selección al cambiar de tipo
+  // (evita arrastrar una categoría elegida que ya no corresponde).
+  crearGrupoBotones(
+    'mov-categoria-destino',
+    cfg.categoriasPermitidas ? CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id)) : CATEGORIAS
+  );
 }
 
 function activarAccesoRapidoFeedLot() {
   el('mov-feedlot').addEventListener('click', () => {
-    el('mov-tipo').value = 'traslado';
-    actualizarCamposVisibles();
-    el('mov-establecimiento-destino').value = 'feed_lot';
+    establecerSeleccion('mov-tipo', 'traslado');
+    establecerSeleccion('mov-establecimiento-destino', 'feed_lot');
   });
 }
 
 function leerFormulario() {
-  const tipo = el('mov-tipo').value;
+  const tipo = obtenerSeleccion('mov-tipo');
   const cfg = TIPOS_MOVIMIENTO[tipo];
   return {
     tipo,
     cfg,
     fecha: el('mov-fecha').value,
-    establecimiento_origen: cfg.campos.includes('establecimiento_origen') ? el('mov-establecimiento-origen').value : null,
-    establecimiento_destino: cfg.campos.includes('establecimiento_destino') ? el('mov-establecimiento-destino').value : null,
-    categoria_origen: cfg.campos.includes('categoria_origen') ? el('mov-categoria-origen').value : null,
-    categoria_destino: cfg.campos.includes('categoria_destino') ? el('mov-categoria-destino').value : null,
+    establecimiento_origen: cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null,
+    establecimiento_destino: cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null,
+    categoria_origen: cfg.campos.includes('categoria_origen') ? obtenerSeleccion('mov-categoria-origen') : null,
+    categoria_destino: cfg.campos.includes('categoria_destino') ? obtenerSeleccion('mov-categoria-destino') : null,
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
     observaciones: el('mov-observaciones').value.trim() || null,
@@ -149,9 +159,14 @@ function mostrarMensaje(texto, tipo) {
 }
 
 function resetFormulario() {
-  el('mov-form').reset();
+  el('mov-cabezas').value = '';
+  el('mov-kilos').value = '';
+  el('mov-observaciones').value = '';
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
-  actualizarCamposVisibles();
+  limpiarSeleccion('mov-establecimiento-origen');
+  limpiarSeleccion('mov-establecimiento-destino');
+  limpiarSeleccion('mov-categoria-origen');
+  establecerSeleccion('mov-tipo', Object.keys(TIPOS_MOVIMIENTO)[0]);
 }
 
 async function onSubmit(evento) {
@@ -173,10 +188,10 @@ async function onSubmit(evento) {
 }
 
 export function initMovimientos() {
-  poblarSelects();
+  poblarGrupos();
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
-  el('mov-tipo').addEventListener('change', actualizarCamposVisibles);
-  actualizarCamposVisibles();
+  el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
+  establecerSeleccion('mov-tipo', Object.keys(TIPOS_MOVIMIENTO)[0]);
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
 }

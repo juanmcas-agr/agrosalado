@@ -83,6 +83,30 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 
 .formulario .full { grid-column: 1 / -1; }
 
+.etiqueta-grupo { font-size: 0.9em; margin-bottom: 4px; }
+
+.grupo-botones {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+}
+.boton-opcion {
+  background: #e9ecef;
+  color: #2c3e50;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 10px 8px;
+  font-size: 0.9em;
+  text-align: center;
+  cursor: pointer;
+}
+.boton-opcion.seleccionado {
+  background: #007bff;
+  color: white;
+  border-color: #007bff;
+  font-weight: bold;
+}
+
 button {
   background-color: #007bff; color: white;
   border: none; cursor: pointer;

@@ -56,36 +56,33 @@
       <button id="mov-feedlot" type="button" class="boton-secundario">Enviar a Feed Lot</button>
 
       <form id="mov-form" class="formulario">
-        <label>Tipo de movimiento
-          <select id="mov-tipo"></select>
-        </label>
+        <div class="full">
+          <div class="etiqueta-grupo">Tipo de movimiento</div>
+          <div id="mov-tipo"></div>
+        </div>
 
         <label>Fecha
           <input id="mov-fecha" type="date" required>
         </label>
 
-        <div data-campo="establecimiento_origen">
-          <label>Establecimiento de origen
-            <select id="mov-establecimiento-origen"></select>
-          </label>
+        <div data-campo="establecimiento_origen" class="full">
+          <div class="etiqueta-grupo">Establecimiento de origen</div>
+          <div id="mov-establecimiento-origen"></div>
         </div>
 
-        <div data-campo="establecimiento_destino">
-          <label>Establecimiento de destino
-            <select id="mov-establecimiento-destino"></select>
-          </label>
+        <div data-campo="establecimiento_destino" class="full">
+          <div class="etiqueta-grupo">Establecimiento de destino</div>
+          <div id="mov-establecimiento-destino"></div>
         </div>
 
-        <div data-campo="categoria_origen">
-          <label>Categoría de origen
-            <select id="mov-categoria-origen"></select>
-          </label>
+        <div data-campo="categoria_origen" class="full">
+          <div class="etiqueta-grupo">Categoría de origen</div>
+          <div id="mov-categoria-origen"></div>
         </div>
 
-        <div data-campo="categoria_destino">
-          <label>Categoría de destino
-            <select id="mov-categoria-destino"></select>
-          </label>
+        <div data-campo="categoria_destino" class="full">
+          <div class="etiqueta-grupo">Categoría de destino</div>
+          <div id="mov-categoria-destino"></div>
         </div>
 
         <label>Cantidad de cabezas
