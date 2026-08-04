@@ -6,14 +6,6 @@ function el(id) {
   return document.getElementById(id);
 }
 
-function nombreEstablecimiento(id) {
-  return ESTABLECIMIENTOS.find((e) => e.id === id)?.nombre || id;
-}
-
-function nombreCategoria(id) {
-  return CATEGORIAS.find((c) => c.id === id)?.nombre || id;
-}
-
 async function obtenerStock() {
   const { data, error } = await supabase.from('stock_actual').select('*');
   if (!error) {
@@ -79,48 +71,14 @@ function renderPorEstablecimiento(rows) {
   }
 }
 
-function renderDrilldown(rows) {
-  const establecimientoId = el('dash-establecimiento').value;
-  const porCategoria = {};
-  for (const c of CATEGORIAS) porCategoria[c.id] = 0;
-  for (const r of rows) {
-    if (r.establecimiento === establecimientoId) porCategoria[r.categoria] = (porCategoria[r.categoria] || 0) + r.cabezas;
-  }
-
-  const tbody = el('dash-drilldown-tabla').querySelector('tbody');
-  tbody.innerHTML = '';
-  for (const c of CATEGORIAS) {
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${c.nombre}</td><td>${porCategoria[c.id]}</td>`;
-    tbody.appendChild(tr);
-  }
-}
-
-function poblarSelectEstablecimiento() {
-  const select = el('dash-establecimiento');
-  if (select.options.length) return;
-  for (const e of ESTABLECIMIENTOS) {
-    const opt = document.createElement('option');
-    opt.value = e.id;
-    opt.textContent = e.nombre;
-    select.appendChild(opt);
-  }
-}
-
-let ultimasFilas = [];
-
 export async function refrescarDashboard() {
   const { rows, offline, fetchedAt } = await obtenerStock();
-  ultimasFilas = rows;
   renderEstado({ offline, fetchedAt });
   renderGlobal(rows);
   renderPorEstablecimiento(rows);
-  renderDrilldown(rows);
 }
 
 export function initDashboard() {
-  poblarSelectEstablecimiento();
-  el('dash-establecimiento').addEventListener('change', () => renderDrilldown(ultimasFilas));
   el('dash-actualizar').addEventListener('click', refrescarDashboard);
   refrescarDashboard();
 }
