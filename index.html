@@ -354,6 +354,30 @@
       font-style: italic;
     }
 
+    /* ── GATE DE LOGIN (solo owners acceden a Granos) ── */
+    #gate-overlay {
+      position: fixed; inset: 0;
+      background: #f2f2f2;
+      z-index: 9999;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 12px;
+      padding: 20px;
+    }
+    #gate-overlay.oculto { display: none; }
+    #gate-overlay .oculto { display: none; }
+    #gate-overlay form {
+      display: flex; flex-direction: column; gap: 10px;
+      width: 100%; max-width: 320px;
+      background: white; padding: 16px; border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    #gate-overlay input {
+      font-size: 16px; padding: 8px 10px;
+      border-radius: 6px; border: 1px solid #ccc;
+    }
+    #gate-overlay button { width: 100%; }
+    #gate-mensaje { color: #ad1e19; font-size: 0.85em; min-height: 1.2em; }
+
     /* ── PRINT ── */
     @media print {
       body * { visibility: hidden; }
@@ -363,6 +387,71 @@
   </style>
 </head>
 <body>
+
+  <div id="gate-overlay">
+    <div id="gate-cargando">Verificando acceso…</div>
+    <form id="gate-form" class="oculto">
+      <h3 style="margin:0;text-align:center;color:#2c3e50;">AGROSALADO</h3>
+      <input id="gate-email" type="email" placeholder="Email" required autocomplete="username">
+      <input id="gate-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+      <button type="submit">Ingresar</button>
+      <div id="gate-mensaje"></div>
+    </form>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+    const supabase = createClient(
+      'https://uiummeoayxwayxntjjsv.supabase.co',
+      'sb_publishable_I9x0D8vsS_XvDW0lrUy5fQ_DEIJpDK6'
+    );
+
+    const overlay = document.getElementById('gate-overlay');
+    const cargando = document.getElementById('gate-cargando');
+    const form = document.getElementById('gate-form');
+    const mensaje = document.getElementById('gate-mensaje');
+
+    function mostrarFormulario(texto) {
+      cargando.classList.add('oculto');
+      form.classList.remove('oculto');
+      mensaje.textContent = texto || '';
+    }
+
+    async function verificarAcceso() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        mostrarFormulario();
+        return;
+      }
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('rol')
+        .eq('user_id', session.user.id)
+        .single();
+
+      if (!perfil || perfil.rol !== 'owner') {
+        window.location.replace('/stock/');
+        return;
+      }
+      overlay.classList.add('oculto');
+    }
+
+    form.addEventListener('submit', async (evento) => {
+      evento.preventDefault();
+      mensaje.textContent = '';
+      const email = document.getElementById('gate-email').value.trim();
+      const password = document.getElementById('gate-password').value;
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        mensaje.textContent = 'No se pudo iniciar sesión. Revisá el email y la contraseña.';
+        return;
+      }
+      verificarAcceso();
+    });
+
+    verificarAcceso();
+  </script>
 
   <h2>Comparador de Alternativas Comerciales - AGROSALADO</h2>
 
