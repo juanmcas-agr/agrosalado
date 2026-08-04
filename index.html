@@ -18,8 +18,21 @@
       margin: 0; padding: 12px;
       padding-bottom: 76px;
       font-family: Arial, sans-serif;
-      background-color: #f2f2f2;
+      background: linear-gradient(rgba(242,242,242,0.93), rgba(242,242,242,0.93)),
+                  url('/assets/fondo-login.jpg') center top/cover no-repeat fixed;
       overflow-x: hidden;
+    }
+
+    .header-marca {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px;
+      margin: 8px 0 16px;
+    }
+    .header-marca img { height: 42px; width: auto; display: block; }
+    .header-marca span {
+      font-size: 1.3em; font-weight: bold;
+      color: #1d5236;
+      letter-spacing: 0.02em;
     }
 
     /* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria) ── */
@@ -462,7 +475,10 @@
     verificarAcceso();
   </script>
 
-  <h2>Comparador de Alternativas Comerciales - AGROSALADO</h2>
+  <div class="header-marca">
+    <img src="/assets/icon-mark.png" alt="">
+    <span>AGROSALADO</span>
+  </div>
 
   <div class="panel-pizarra ocultar-al-exportar">
     <div class="pizarra-header">
