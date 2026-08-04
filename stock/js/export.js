@@ -5,16 +5,31 @@ function nombreConFecha(base, ext = 'xlsx') {
 }
 
 function filasMatrizParaExcel(matriz) {
-  return ESTABLECIMIENTOS.map((e) => {
+  const totalesPorCategoria = {};
+  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
+
+  const filas = ESTABLECIMIENTOS.map((e) => {
     const fila = { Establecimiento: e.nombre };
     let total = 0;
     for (const c of CATEGORIAS) {
       fila[c.nombre] = matriz[e.id][c.id];
       total += matriz[e.id][c.id];
+      totalesPorCategoria[c.id] += matriz[e.id][c.id];
     }
     fila.Total = total;
     return fila;
   });
+
+  const filaTotal = { Establecimiento: 'Total' };
+  let totalGeneral = 0;
+  for (const c of CATEGORIAS) {
+    filaTotal[c.nombre] = totalesPorCategoria[c.id];
+    totalGeneral += totalesPorCategoria[c.id];
+  }
+  filaTotal.Total = totalGeneral;
+  filas.push(filaTotal);
+
+  return filas;
 }
 
 export function exportarMatrizStock(matriz, nombreBase, tituloHoja) {

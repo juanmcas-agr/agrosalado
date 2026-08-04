@@ -85,13 +85,24 @@ function renderPorEstablecimiento(matriz) {
 
   const tbody = tabla.querySelector('tbody');
   tbody.innerHTML = '';
+  const totalesPorCategoria = {};
+  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
+
   for (const e of ESTABLECIMIENTOS) {
     const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
+    for (const c of CATEGORIAS) totalesPorCategoria[c.id] += matriz[e.id][c.id];
     const tr = document.createElement('tr');
     tr.innerHTML =
       `<td>${e.nombre}</td>${CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}</td>`).join('')}<td><strong>${totalFila}</strong></td>`;
     tbody.appendChild(tr);
   }
+
+  const totalGeneral = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
+  const trTotal = document.createElement('tr');
+  trTotal.classList.add('fila-total');
+  trTotal.innerHTML =
+    `<td><strong>Total</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
+  tbody.appendChild(trTotal);
 }
 
 function poblarSelectFecha() {

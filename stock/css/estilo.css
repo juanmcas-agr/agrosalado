@@ -170,6 +170,7 @@ button:active { filter: brightness(0.9); }
   white-space: nowrap;
 }
 .tabla tr.anulado { color: #999; text-decoration: line-through; }
+.tabla tr.fila-total td { background: #e9ecef; border-top: 2px solid #ccc; }
 
 .filtros {
   display: flex;
