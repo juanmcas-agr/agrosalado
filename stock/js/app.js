@@ -4,6 +4,7 @@ import { initMovimientos } from './movimientos.js';
 import { initDashboard } from './dashboard.js';
 import { initHistorial } from './historial.js';
 import { initRouter } from './router.js';
+import { VERSION } from './config.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -87,6 +88,7 @@ function wireAuth() {
 }
 
 async function main() {
+  el('version-footer').textContent = `v.${VERSION}`;
   wireLogin();
   wireAuth();
   onSyncChange(actualizarBannerSync);

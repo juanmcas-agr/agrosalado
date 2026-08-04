@@ -82,6 +82,17 @@ button:active { filter: brightness(0.9); }
 .banner-sync.advertencia { background: #fff3cd; color: #8a6100; }
 .banner-sync.error { background: #f8d7da; color: #ad1e19; }
 
+/* ─── versión ─── */
+.version-footer {
+  position: fixed;
+  left: 6px;
+  bottom: 4px;
+  font-size: 0.7em;
+  color: #999;
+  z-index: 100;
+  pointer-events: none;
+}
+
 /* ─── login ─── */
 .pantalla-login {
   max-width: 360px;
