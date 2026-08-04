@@ -162,6 +162,20 @@ create trigger trg_validar_movimiento
   before insert on movimientos
   for each row execute function validar_movimiento();
 
+-- "Fecha de registro" (created_at) inamovible: ni una actualización
+-- (por ejemplo al anular un movimiento) puede cambiarla.
+create or replace function bloquear_cambio_created_at() returns trigger
+language plpgsql as $$
+begin
+  new.created_at := old.created_at;
+  return new;
+end;
+$$;
+
+create trigger trg_bloquear_created_at
+  before update on movimientos
+  for each row execute function bloquear_cambio_created_at();
+
 -- ─── Vistas de stock ────────────────────────────────────────────────────
 
 create view movimiento_lineas as

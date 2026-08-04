@@ -41,7 +41,8 @@ export function exportarMatrizStock(matriz, nombreBase, tituloHoja) {
 
 export function exportarHistorial(filasHistorial, nombreBase = 'historial_movimientos') {
   const filas = filasHistorial.map((f) => ({
-    Fecha: f.fecha,
+    'Fecha movimiento': f.fecha,
+    'Fecha de registro': new Date(f.created_at).toLocaleString('es-AR'),
     Tipo: f.tipo_movimiento_nombre,
     'Establecimiento origen': f.establecimiento_origen_nombre || '',
     'Categoría origen': f.categoria_origen_nombre || '',

@@ -85,6 +85,7 @@ function renderFilas(filas) {
     if (fila.anulado) tr.classList.add('anulado');
     tr.innerHTML = `
       <td>${fila.fecha}</td>
+      <td>${new Date(fila.created_at).toLocaleString('es-AR')}</td>
       <td>${fila.tipo_movimiento_nombre}</td>
       <td>${origen}</td>
       <td>${destino}</td>

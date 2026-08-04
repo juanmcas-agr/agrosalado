@@ -74,12 +74,28 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 .formulario select,
 .formulario textarea {
   font-size: 16px; /* evita zoom en iPhone */
+  height: 44px;
   padding: 8px 10px;
   border-radius: 6px;
   border: 1px solid #ccc;
   width: 100%;
+  max-width: 100%;
   background: white;
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
 }
+
+.formulario select { -webkit-appearance: auto; appearance: auto; }
+
+.formulario input[type="date"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.formulario textarea { height: auto; }
 
 .formulario .full { grid-column: 1 / -1; }
 
