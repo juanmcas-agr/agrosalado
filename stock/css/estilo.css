@@ -125,9 +125,16 @@ button:active { filter: brightness(0.9); }
 
 /* ─── login ─── */
 .pantalla-login {
-  max-width: 360px;
-  margin: 60px auto;
+  position: fixed; inset: 0;
+  z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: linear-gradient(rgba(242,242,242,0.85), rgba(242,242,242,0.85)),
+              url('/assets/fondo-login.jpg') center/cover no-repeat;
 }
+.pantalla-login .login-logo { width: 100%; max-width: 220px; height: auto; display: block; }
+.pantalla-login .formulario { width: 100%; max-width: 320px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
 
 /* ─── layout general de la app ─── */
 .encabezado {

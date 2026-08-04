@@ -7,7 +7,8 @@
   <link rel="manifest" href="manifest.json">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="AGROSALADO">
-  <link rel="apple-touch-icon" href="icono.png">
+  <link rel="apple-touch-icon" href="/assets/icon-512.png">
+  <link rel="icon" href="/assets/icon-64.png">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="tarifas.js"></script>
   <style>
@@ -357,7 +358,8 @@
     /* ── GATE DE LOGIN (solo owners acceden a Granos) ── */
     #gate-overlay {
       position: fixed; inset: 0;
-      background: #f2f2f2;
+      background: linear-gradient(rgba(242,242,242,0.85), rgba(242,242,242,0.85)),
+                  url('/assets/fondo-login.jpg') center/cover no-repeat;
       z-index: 9999;
       display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 12px;
@@ -365,11 +367,12 @@
     }
     #gate-overlay.oculto { display: none; }
     #gate-overlay .oculto { display: none; }
+    #gate-overlay .gate-logo { width: 100%; max-width: 220px; height: auto; display: block; margin-bottom: 4px; }
     #gate-overlay form {
       display: flex; flex-direction: column; gap: 10px;
       width: 100%; max-width: 320px;
       background: white; padding: 16px; border-radius: 8px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      box-shadow: 0 2px 12px rgba(0,0,0,0.15);
     }
     #gate-overlay input {
       font-size: 16px; padding: 8px 10px;
@@ -389,9 +392,9 @@
 <body>
 
   <div id="gate-overlay">
+    <img src="/assets/logo-full.png" alt="AGROSALADO" class="gate-logo">
     <div id="gate-cargando">Verificando acceso…</div>
     <form id="gate-form" class="oculto">
-      <h3 style="margin:0;text-align:center;color:#2c3e50;">AGROSALADO</h3>
       <input id="gate-email" type="email" placeholder="Email" required autocomplete="username">
       <input id="gate-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
       <button type="submit">Ingresar</button>

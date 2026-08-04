@@ -2,7 +2,7 @@
 // No cachea llamadas a Supabase — eso lo maneja IndexedDB (ver js/db-local.js
 // y js/sync.js), para no tener dos mecanismos de "offline" compitiendo.
 
-const CACHE_NAME = 'agrosalado-stock-shell-v3';
+const CACHE_NAME = 'agrosalado-stock-shell-v4';
 const APP_SHELL = [
   './',
   './index.html',
@@ -19,7 +19,10 @@ const APP_SHELL = [
   './js/router.js',
   './js/supabaseClient.js',
   './js/sync.js',
-  './icons/icon-512.png',
+  '/assets/icon-512.png',
+  '/assets/icon-192.png',
+  '/assets/logo-full.png',
+  '/assets/fondo-login.jpg',
   'https://esm.sh/@supabase/supabase-js@2',
   'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
 ];
