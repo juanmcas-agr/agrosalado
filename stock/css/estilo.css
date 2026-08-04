@@ -41,7 +41,7 @@ body {
   cursor: pointer;
 }
 .tab-bar-inferior button .tab-icono { font-size: 1.3em; }
-.tab-bar-inferior button.activo { color: #007bff; font-weight: bold; }
+.tab-bar-inferior button.activo { color: #8a5a34; font-weight: bold; }
 .tab-bar-inferior button:disabled { cursor: default; }
 
 h1, h2, h3 { color: #2c3e50; }
@@ -99,12 +99,19 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 
 .formulario .full { grid-column: 1 / -1; }
 
-.etiqueta-grupo { font-size: 0.9em; margin-bottom: 4px; }
+.campo-grupo { margin: 6px 0; }
+.campo-grupo + .campo-grupo { margin-top: 14px; }
+
+.etiqueta-grupo { font-size: 0.9em; font-weight: bold; margin-bottom: 6px; }
 
 .grupo-botones {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-  gap: 8px;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f7f7f7;
 }
 .boton-opcion {
   background: #e9ecef;
@@ -115,16 +122,20 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
   font-size: 0.9em;
   text-align: center;
   cursor: pointer;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .boton-opcion.seleccionado {
-  background: #007bff;
+  background: #8a5a34;
   color: white;
-  border-color: #007bff;
+  border-color: #8a5a34;
   font-weight: bold;
 }
 
 button {
-  background-color: #007bff; color: white;
+  background-color: #8a5a34; color: white;
   border: none; cursor: pointer;
   border-radius: 6px; padding: 12px;
   font-size: 1em;
@@ -203,7 +214,7 @@ button:active { filter: brightness(0.9); }
   color: #2c3e50;
 }
 .navegacion button.activo {
-  background-color: #007bff;
+  background-color: #8a5a34;
   color: white;
 }
 
