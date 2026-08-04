@@ -2,10 +2,40 @@
 
 body {
   margin: 0; padding: 12px;
+  padding-bottom: 76px;
   font-family: Arial, sans-serif;
   background-color: #f2f2f2;
   color: #2c3e50;
 }
+
+/* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria) ── */
+.tab-bar-inferior {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  background: white;
+  box-shadow: 0 -1px 6px rgba(0,0,0,0.12);
+  z-index: 500;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tab-bar-inferior button {
+  flex: 1;
+  width: auto;
+  background: white;
+  color: #6c757d;
+  border: none;
+  border-radius: 0;
+  padding: 8px 4px 7px;
+  font-size: 0.75em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.tab-bar-inferior button .tab-icono { font-size: 1.3em; }
+.tab-bar-inferior button.activo { color: #007bff; font-weight: bold; }
+.tab-bar-inferior button:disabled { cursor: default; }
 
 h1, h2, h3 { color: #2c3e50; }
 h1 { text-align: center; font-size: 1.4em; }
@@ -86,7 +116,7 @@ button:active { filter: brightness(0.9); }
 .version-footer {
   position: fixed;
   left: 6px;
-  bottom: 4px;
+  bottom: 58px;
   font-size: 0.7em;
   color: #999;
   z-index: 100;

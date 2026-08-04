@@ -51,6 +51,11 @@ function mostrarApp(perfil) {
   iniciarPantallasDeLaApp(perfil.rol);
 }
 
+function wireTabBar() {
+  el('tabbar-granos').addEventListener('click', () => { window.location.href = '/'; });
+  el('tabbar-posgranaria').addEventListener('click', () => alert('Pos. Granaria: próximamente 🚧'));
+}
+
 function wireLogin() {
   el('login-form').addEventListener('submit', async (evento) => {
     evento.preventDefault();
@@ -89,6 +94,7 @@ function wireAuth() {
 
 async function main() {
   el('version-footer').textContent = `v.${VERSION}`;
+  wireTabBar();
   wireLogin();
   wireAuth();
   onSyncChange(actualizarBannerSync);
