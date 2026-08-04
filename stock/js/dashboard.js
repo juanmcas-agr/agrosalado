@@ -55,15 +55,26 @@ function renderGlobal(rows) {
 }
 
 function renderPorEstablecimiento(rows) {
-  const totales = {};
-  for (const e of ESTABLECIMIENTOS) totales[e.id] = 0;
-  for (const r of rows) totales[r.establecimiento] = (totales[r.establecimiento] || 0) + r.cabezas;
+  const matriz = {};
+  for (const e of ESTABLECIMIENTOS) {
+    matriz[e.id] = {};
+    for (const c of CATEGORIAS) matriz[e.id][c.id] = 0;
+  }
+  for (const r of rows) {
+    if (matriz[r.establecimiento]) matriz[r.establecimiento][r.categoria] = (matriz[r.establecimiento][r.categoria] || 0) + r.cabezas;
+  }
 
-  const tbody = el('dash-establecimientos-tabla').querySelector('tbody');
+  const tabla = el('dash-establecimientos-tabla');
+  tabla.querySelector('thead').innerHTML =
+    `<tr><th>Establecimiento</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
+
+  const tbody = tabla.querySelector('tbody');
   tbody.innerHTML = '';
   for (const e of ESTABLECIMIENTOS) {
+    const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${e.nombre}</td><td>${totales[e.id]}</td>`;
+    tr.innerHTML =
+      `<td>${e.nombre}</td>${CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}</td>`).join('')}<td><strong>${totalFila}</strong></td>`;
     tbody.appendChild(tr);
   }
 }
