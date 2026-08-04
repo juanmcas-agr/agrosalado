@@ -413,6 +413,7 @@
     const mensaje = document.getElementById('gate-mensaje');
 
     function mostrarFormulario(texto) {
+      overlay.classList.remove('oculto');
       cargando.classList.add('oculto');
       form.classList.remove('oculto');
       mensaje.textContent = texto || '';
@@ -449,6 +450,11 @@
       }
       verificarAcceso();
     });
+
+    // Reacciona en vivo a cambios de sesión, incluidos los que pasan en otra
+    // pestaña (login/logout ahí actualiza el localStorage compartido y
+    // dispara este evento acá también) — así no hace falta recargar.
+    supabase.auth.onAuthStateChange(() => verificarAcceso());
 
     verificarAcceso();
   </script>
