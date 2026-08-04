@@ -15,7 +15,7 @@ let appIniciada = false;
 function iniciarPantallasDeLaApp(rol) {
   if (appIniciada) return;
   appIniciada = true;
-  if (rol === 'encargado' || rol === 'administrativo') initMovimientos();
+  initMovimientos();
   initDashboard();
   initHistorial();
   initRouter(rol);

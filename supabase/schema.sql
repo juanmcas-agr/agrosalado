@@ -226,7 +226,7 @@ create policy movimientos_select on movimientos for select to authenticated usin
 create policy movimientos_insert on movimientos for insert to authenticated
   with check (
     usuario_id = auth.uid()
-    and rol_actual() in ('encargado', 'administrativo')
+    and rol_actual() in ('encargado', 'administrativo', 'owner')
   );
 
 create policy movimientos_anular on movimientos for update to authenticated

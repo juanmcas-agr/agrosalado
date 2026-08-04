@@ -1,6 +1,7 @@
 import { supabase } from './supabaseClient.js';
 import { ESTABLECIMIENTOS, TIPOS_MOVIMIENTO } from './config.js';
 import { getEstado } from './auth.js';
+import { exportarHistorial } from './export.js';
 
 const VENTANA_ANULACION_HORAS = 48;
 
@@ -105,6 +106,8 @@ function renderFilas(filas) {
   }
 }
 
+let ultimasFilas = [];
+
 export async function cargarHistorial() {
   let query = supabase.from('historial_movimientos').select('*').limit(200);
 
@@ -127,11 +130,18 @@ export async function cargarHistorial() {
     return;
   }
   el('hist-mensaje').textContent = '';
+  ultimasFilas = data;
   renderFilas(data);
+}
+
+function exportar() {
+  if (!ultimasFilas.length) return;
+  exportarHistorial(ultimasFilas);
 }
 
 export function initHistorial() {
   poblarFiltros();
   el('hist-filtrar').addEventListener('click', cargarHistorial);
+  el('hist-exportar').addEventListener('click', exportar);
   cargarHistorial();
 }

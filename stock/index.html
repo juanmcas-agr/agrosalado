@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="AGROSALADO Stock">
   <link rel="apple-touch-icon" href="icons/icon-512.png">
   <link rel="stylesheet" href="css/estilo.css">
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -100,6 +101,7 @@
       <h2>Stock actual</h2>
       <div id="dash-estado" class="mensaje"></div>
       <button id="dash-actualizar" class="boton-secundario">Actualizar</button>
+      <button id="dash-exportar" class="boton-secundario">Exportar stock actual (Excel)</button>
 
       <h3>Total de la empresa: <span id="dash-total-general">0</span> cabezas</h3>
 
@@ -116,6 +118,14 @@
           <tbody></tbody>
         </table>
       </div>
+
+      <h3>Exportar stock a una fecha</h3>
+      <div class="filtros">
+        <label>Fecha <input id="dash-fecha" type="date"></label>
+        <select id="dash-fecha-establecimiento"></select>
+        <button id="dash-fecha-exportar" class="boton-secundario">Exportar Excel</button>
+      </div>
+      <div id="dash-fecha-mensaje" class="mensaje"></div>
     </section>
 
     <!-- ─── HISTORIAL ─── -->
@@ -128,6 +138,7 @@
         <label>Desde <input id="hist-filtro-desde" type="date"></label>
         <label>Hasta <input id="hist-filtro-hasta" type="date"></label>
         <button id="hist-filtrar" class="boton-secundario">Filtrar</button>
+        <button id="hist-exportar" class="boton-secundario">Exportar Excel</button>
       </div>
 
       <div id="hist-mensaje" class="mensaje"></div>
