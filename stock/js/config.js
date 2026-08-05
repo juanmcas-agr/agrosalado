@@ -1,6 +1,5 @@
-// Fase preliminar: v.0.1, v.0.1.1, v.0.1.2... (el tercer número sube con cada
-// modificación). Cuando pasemos a algo definitivo, arranca v.1.x.x.
-export const VERSION = '0.1.9';
+// v.1.x.x: fase definitiva. El tercer número sube con cada modificación.
+export const VERSION = '1.0.0';
 
 // Completar con los datos del proyecto de Supabase (Project Settings > API).
 // La "anon key" es pública y segura para exponer en el cliente.

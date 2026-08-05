@@ -97,6 +97,14 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 
 .formulario textarea { height: auto; }
 
+.formulario input:focus,
+.formulario select:focus,
+.formulario textarea:focus {
+  outline: none;
+  border-color: #8a5a34;
+  box-shadow: 0 0 0 2px rgba(138,90,52,0.15);
+}
+
 .formulario .full { grid-column: 1 / -1; }
 
 .campo-grupo { margin: 6px 0; }
@@ -198,8 +206,24 @@ button:active { filter: brightness(0.9); }
 .encabezado {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 8px;
+}
+.encabezado .titulo-app {
+  margin: 0;
+  font-size: 1.5em;
+  letter-spacing: 0.04em;
+  color: #1d5236;
+}
+.encabezado-rincon {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.encabezado-rincon #usuario-nombre {
+  font-size: 0.7em;
+  color: #888;
 }
 
 .navegacion {

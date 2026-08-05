@@ -250,6 +250,42 @@ create policy movimientos_anular on movimientos for update to authenticated
   )
   with check (true);
 
+-- ─── Negocios (app Granos) ───────────────────────────────────────────────
+-- Comparte el mismo proyecto/usuarios que Hacienda. Solo owners.
+
+create table negocios_guardados (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
+  cliente text not null,
+  datos jsonb not null,
+  creado_at timestamptz not null default now(),
+  expira_at timestamptz not null default (now() + interval '40 days')
+);
+
+create table negocios_historial (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
+  cliente text not null,
+  fecha_cierre date not null,
+  datos jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table negocios_guardados enable row level security;
+alter table negocios_historial enable row level security;
+
+create policy negocios_guardados_select on negocios_guardados for select to authenticated
+  using (rol_actual() = 'owner');
+create policy negocios_guardados_insert on negocios_guardados for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy negocios_guardados_delete on negocios_guardados for delete to authenticated
+  using (rol_actual() = 'owner');
+
+create policy negocios_historial_select on negocios_historial for select to authenticated
+  using (rol_actual() = 'owner');
+create policy negocios_historial_insert on negocios_historial for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:

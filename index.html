@@ -430,6 +430,9 @@
       'https://uiummeoayxwayxntjjsv.supabase.co',
       'sb_publishable_I9x0D8vsS_XvDW0lrUy5fQ_DEIJpDK6'
     );
+    // Expuesto para que el script clásico de más abajo (guardar/recuperar
+    // negocio) pueda usar el mismo cliente autenticado.
+    window.supabaseClient = supabase;
 
     const overlay = document.getElementById('gate-overlay');
     const cargando = document.getElementById('gate-cargando');
@@ -646,10 +649,24 @@
   </table>
   </div>
 
+  <div class="botones">
+    <button onclick="guardarNegocio()">💾 Guardar</button>
+    <button onclick="abrirModalRecuperar()">📂 Recuperar negocio</button>
+  </div>
+
   <div style="margin-top: 0; text-align: center;">
     <button id="cerrarNegocio" onclick="cerrarNegocio()" class="pendiente">
       🔒 CERRAR NEGOCIO
     </button>
+  </div>
+
+  <!-- Modal recuperar negocio -->
+  <div id="modalRecuperar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:420px;max-height:75vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">Recuperar negocio</div>
+      <div id="listaNegocios" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <button onclick="cerrarModalRecuperar()" style="margin-top:16px;background:#888;">Cancelar</button>
+    </div>
   </div>
 
   <nav class="tab-bar-inferior">
@@ -1266,6 +1283,152 @@
       boton.innerHTML = "🔒 CERRAR NEGOCIO";
     }
 
+    // ── Guardar / Recuperar negocio / Historial ──
+
+    function fechaMostradaAIso(fechaDMY) {
+      if (!fechaDMY || fechaDMY === '-') return '';
+      const partes = fechaDMY.split('/');
+      if (partes.length !== 3) return '';
+      const [d, m, y] = partes;
+      return `${y}-${m}-${d}`;
+    }
+
+    function leerAlternativaDesdeColumna(ci) {
+      const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+      const tdPrecio = filas[FILA.precioBruto].cells[ci];
+      const tdComision = filas[FILA.comision].cells[ci];
+      const tdKmCorto = filas[FILA.kmCorto].cells[ci];
+      const tdKmLargo = filas[FILA.kmLargo].cells[ci];
+      const tdFCorto = filas[FILA.fleteCorto].cells[ci];
+      const tdFLargo = filas[FILA.fleteLargo].cells[ci];
+
+      const textoDe = (idx) => {
+        const texto = filas[idx].cells[ci].innerText.trim();
+        return texto === '-' ? '' : texto;
+      };
+
+      return {
+        cliente: textoDe(FILA.cliente),
+        producto: textoDe(FILA.producto),
+        destino: textoDe(FILA.destino),
+        moneda: tdPrecio.dataset.moneda || 'ARS',
+        tipoCambio: tdPrecio.dataset.tc || '',
+        precioInput: tdPrecio.dataset.precioInput || '',
+        comisionPct: tdComision.dataset.comisionPct ?? '3',
+        kmCorto: tdKmCorto.dataset.km || '',
+        descCorto: tdFCorto.dataset.desc || '',
+        kmLargo: tdKmLargo.dataset.km || '',
+        descLargo: tdFLargo.dataset.desc || '',
+        fijacionIso: fechaMostradaAIso(textoDe(FILA.fijacion)),
+        toneladas: textoDe(FILA.toneladas),
+        plazo: textoDe(FILA.plazo),
+        observaciones: textoDe(FILA.observaciones),
+      };
+    }
+
+    function leerTodasLasAlternativas() {
+      const header = document.getElementById('header');
+      const alternativas = [];
+      for (let ci = 1; ci < header.cells.length; ci++) {
+        alternativas.push(leerAlternativaDesdeColumna(ci));
+      }
+      return alternativas;
+    }
+
+    function restaurarAlternativa(v) {
+      document.getElementById('cliente').value = v.cliente || '';
+      document.getElementById('producto').value = v.producto || 'SOJA';
+      document.getElementById('destino').value = v.destino || '';
+      document.getElementById('moneda').value = v.moneda || 'ARS';
+      toggleTipoCambio();
+      document.getElementById('tipoCambio').value = v.tipoCambio || '';
+      document.getElementById('precioBruto').value = v.precioInput || '';
+      document.getElementById('comision').value = v.comisionPct ?? '3';
+      document.getElementById('kmCorto').value = v.kmCorto || '';
+      document.getElementById('descCorto').value = v.descCorto || '';
+      document.getElementById('kmLargo').value = v.kmLargo || '';
+      document.getElementById('descLargo').value = v.descLargo || '';
+      document.getElementById('fijacion').value = v.fijacionIso || '';
+      document.getElementById('toneladas').value = v.toneladas || '';
+      document.getElementById('plazoPago').value = v.plazo || '';
+      document.getElementById('observaciones').value = v.observaciones || '';
+      agregarAlternativa();
+    }
+
+    function cargarNegocioEnTabla(datos) {
+      const alternativas = (datos && datos.alternativas) || [];
+      if (!alternativas.length) return;
+      if (document.getElementById('header').cells.length > 1) {
+        if (!confirm('Esto va a reemplazar lo que tenés cargado ahora en la tabla. ¿Continuar?')) return;
+      }
+      borrarTodo();
+      alternativas.forEach(restaurarAlternativa);
+    }
+
+    async function guardarNegocio() {
+      const alternativas = leerTodasLasAlternativas();
+      const conCliente = alternativas.find(a => a.cliente);
+      if (!alternativas.length || !conCliente) {
+        alert('⚠️ Cargá al menos una alternativa con Cliente antes de guardar.');
+        return;
+      }
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { alert('No hay sesión activa.'); return; }
+      const { error } = await window.supabaseClient.from('negocios_guardados').insert({
+        usuario_id: session.user.id,
+        cliente: conCliente.cliente,
+        datos: { alternativas },
+      });
+      if (error) { alert('❌ No se pudo guardar: ' + error.message); return; }
+      alert('💾 Negocio guardado. Vas a poder recuperarlo durante 40 días desde "Recuperar negocio".');
+    }
+
+    async function abrirModalRecuperar() {
+      const lista = document.getElementById('listaNegocios');
+      lista.innerHTML = 'Cargando…';
+      document.getElementById('modalRecuperar').style.display = 'flex';
+
+      const [{ data: guardados, error: e1 }, { data: historial, error: e2 }] = await Promise.all([
+        window.supabaseClient.from('negocios_guardados').select('*')
+          .gt('expira_at', new Date().toISOString()).order('creado_at', { ascending: false }),
+        window.supabaseClient.from('negocios_historial').select('*')
+          .order('fecha_cierre', { ascending: false }).limit(100),
+      ]);
+
+      if (e1 || e2) {
+        lista.innerHTML = 'No se pudo cargar la lista (¿sin conexión?).';
+        return;
+      }
+
+      lista.innerHTML = '';
+      if (!guardados.length && !historial.length) {
+        lista.innerHTML = '<div style="color:#888;">Todavía no hay negocios guardados ni cerrados.</div>';
+        return;
+      }
+
+      const agregarItem = (registro, esHistorial) => {
+        const fecha = esHistorial
+          ? formatearFecha(registro.fecha_cierre)
+          : new Date(registro.creado_at).toLocaleDateString('es-AR');
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:8px;gap:8px;';
+        div.innerHTML = `<div><strong>${registro.cliente}</strong><br><small>${esHistorial ? 'Cerrado' : 'Guardado'} · ${fecha}</small></div>`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Traer';
+        btn.style.cssText = 'width:auto;padding:6px 12px;font-size:0.85em;';
+        btn.onclick = () => { cargarNegocioEnTabla(registro.datos); cerrarModalRecuperar(); };
+        div.appendChild(btn);
+        lista.appendChild(div);
+      };
+
+      guardados.forEach((r) => agregarItem(r, false));
+      historial.forEach((r) => agregarItem(r, true));
+    }
+
+    function cerrarModalRecuperar() {
+      document.getElementById('modalRecuperar').style.display = 'none';
+    }
+
     function ocultarYCapturar(callback) {
       const tabla = document.getElementById('tablaNegocios');
       const ocultar = document.querySelectorAll('.ocultar-al-exportar');
@@ -1373,7 +1536,7 @@
       contador = n;
     }
 
-    function cerrarNegocio() {
+    async function cerrarNegocio() {
       const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
       const ultimaFila = filas[filas.length - 1];
       let sel = -1;
@@ -1382,6 +1545,23 @@
         if (cb && cb.checked) { sel = i; break; }
       }
       if (sel === -1) { alert("⚠️ Debe seleccionar una alternativa antes de cerrar el negocio."); return; }
+
+      const alternativas = leerTodasLasAlternativas();
+      const cliente = (alternativas[sel - 1] && alternativas[sel - 1].cliente)
+        || (alternativas.find(a => a.cliente) && alternativas.find(a => a.cliente).cliente);
+      if (cliente) {
+        const { data: { session } } = await window.supabaseClient.auth.getSession();
+        if (session) {
+          const { error } = await window.supabaseClient.from('negocios_historial').insert({
+            usuario_id: session.user.id,
+            cliente,
+            fecha_cierre: new Date().toISOString().slice(0, 10),
+            datos: { alternativas, seleccionada: sel - 1 },
+          });
+          if (error) console.error('No se pudo guardar en el historial de negocios:', error);
+        }
+      }
+
       const btn = document.getElementById('cerrarNegocio');
       btn.innerHTML = "✅ CERRADO";
       btn.classList.remove("pendiente");
