@@ -6,8 +6,14 @@
 // > Environment variables) y un remitente en un dominio verificado en
 // https://resend.com/domains — mientras no esté verificado, usar
 // 'onboarding@resend.dev' como remitente para pruebas.
+//
+// Con onboarding@resend.dev (sin dominio verificado), Resend solo entrega
+// al mail con el que te registraste en Resend. Para probar de punta a
+// punta mientras el dominio verifica, se puede setear RESEND_TO (uno o
+// varios mails separados por coma) apuntando a ese mail; sin esa variable
+// se usan los destinatarios reales del negocio.
 
-const DESTINATARIOS = [
+const DESTINATARIOS_DEFAULT = [
   'braian.papastabru@agrosalado.com',
   'facturacion@agrosalado.com',
   'juan.uranga@agrosalado.com',
@@ -34,10 +40,13 @@ exports.handler = async function (event) {
     }
 
     const remitente = process.env.RESEND_FROM || 'AGROSALADO <onboarding@resend.dev>';
+    const destinatarios = process.env.RESEND_TO
+      ? process.env.RESEND_TO.split(',').map((m) => m.trim()).filter(Boolean)
+      : DESTINATARIOS_DEFAULT;
 
     const payload = {
       from: remitente,
-      to: DESTINATARIOS,
+      to: destinatarios,
       subject,
       html: mensajeHtml,
     };
