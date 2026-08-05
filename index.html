@@ -1290,7 +1290,23 @@
       tdSel.classList.add('ocultar-al-exportar');
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
-      checkbox.disabled = !cliente || !destino || !precioInput || !kmCorto || !kmLargo || !toneladas || !plazo;
+
+      const camposFaltantes = [];
+      if (!cliente) camposFaltantes.push('Cliente');
+      if (!destino) camposFaltantes.push('Destino');
+      if (!precioInput) camposFaltantes.push('Precio Bruto');
+      if (!kmCorto) camposFaltantes.push('KM Flete Corto');
+      if (!kmLargo) camposFaltantes.push('KM Flete Largo');
+      if (!toneladas) camposFaltantes.push('Toneladas');
+      if (!plazo) camposFaltantes.push('Plazo de Pago');
+
+      checkbox.disabled = camposFaltantes.length > 0;
+      if (camposFaltantes.length) {
+        tdSel.style.cursor = 'help';
+        tdSel.title = 'Para seleccionar, completá: ' + camposFaltantes.join(', ');
+        tdSel.addEventListener('click', () => alert('⚠️ Para seleccionar esta alternativa, completá primero: ' + camposFaltantes.join(', ')));
+      }
+
       checkbox.addEventListener('change', function () {
         if (this.checked) {
           document.querySelectorAll('#tablaNegocios input[type="checkbox"]')
@@ -1471,6 +1487,27 @@
       document.getElementById('modalRecuperar').style.display = 'none';
     }
 
+    async function enviarLiquidacionPorEmail(cliente) {
+      ocultarYCapturar((canvas) => {
+        const dataUrl = canvas.toDataURL('image/png');
+        const base64 = dataUrl.split(',')[1];
+        fetch('/.netlify/functions/enviar-liquidacion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ imagenBase64: base64, cliente }),
+        })
+          .then(async (res) => {
+            if (!res.ok) {
+              const detalle = await res.text();
+              throw new Error(detalle);
+            }
+          })
+          .catch((error) => {
+            alert('⚠️ El negocio se cerró, pero no se pudo mandar el mail de liquidación: ' + error.message);
+          });
+      });
+    }
+
     function ocultarYCapturar(callback) {
       const tabla = document.getElementById('tablaNegocios');
       const ocultar = document.querySelectorAll('.ocultar-al-exportar');
@@ -1603,6 +1640,8 @@
           if (error) console.error('No se pudo guardar en el historial de negocios:', error);
         }
       }
+
+      enviarLiquidacionPorEmail(cliente);
 
       const btn = document.getElementById('cerrarNegocio');
       btn.innerHTML = "✅ CERRADO";
