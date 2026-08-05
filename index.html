@@ -1161,6 +1161,44 @@
 
       // Precio a productor
       tdProd.innerHTML = `<strong>${formatoNumero(productor)}</strong>`;
+
+      actualizarSeleccionable(ci);
+    }
+
+    // ── Habilita/deshabilita el tilde de selección de una columna según si
+    // ya tiene los campos obligatorios completos (se re-evalúa cada vez que
+    // se edita algo inline, no solo al agregar la alternativa) ──
+    function actualizarSeleccionable(ci) {
+      const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+      const filaSeleccion = filas[filas.length - 1];
+      const tdSel = filaSeleccion.cells[ci];
+      const checkbox = tdSel && tdSel.querySelector('input[type="checkbox"]');
+      if (!tdSel || !checkbox) return;
+
+      const textoDe = (idx) => {
+        const t = filas[idx].cells[ci].innerText.trim();
+        return t === '-' ? '' : t;
+      };
+      const tdPrecio = filas[FILA.precioBruto].cells[ci];
+      const cliente = textoDe(FILA.cliente);
+      const producto = textoDe(FILA.producto);
+      const precioInput = parseFloat(tdPrecio.dataset.precioInput) || 0;
+      const toneladasTexto = textoDe(FILA.toneladas);
+      const liquidaSaldo = toneladasTexto === 'Liquida saldo';
+      const plazo = textoDe(FILA.plazo);
+
+      const camposFaltantes = [];
+      if (!cliente) camposFaltantes.push('Cliente');
+      if (!producto) camposFaltantes.push('Producto');
+      if (!precioInput) camposFaltantes.push('Precio Bruto');
+      if (!toneladasTexto && !liquidaSaldo) camposFaltantes.push('Toneladas (o tildar "Liquida saldo")');
+      if (!plazo) camposFaltantes.push('Plazo de Pago');
+
+      checkbox.disabled = camposFaltantes.length > 0;
+      if (checkbox.disabled && checkbox.checked) checkbox.checked = false;
+      tdSel.dataset.faltantes = camposFaltantes.join(', ');
+      tdSel.style.cursor = camposFaltantes.length ? 'help' : '';
+      tdSel.title = camposFaltantes.length ? 'Para seleccionar, completá: ' + camposFaltantes.join(', ') : '';
     }
 
     // ── Marcar celda como editable (hover amarillo + cursor) ──
@@ -1276,6 +1314,7 @@
       const confirmar = () => {
         td.textContent = inp.value.trim() || '-';
         marcarEditable(td, 'texto', ci);
+        actualizarSeleccionable(ci);
       };
       inp.onblur = confirmar;
       inp.onkeydown = e => { if (e.key === 'Enter') confirmar(); };
@@ -1404,20 +1443,9 @@
       const checkbox = document.createElement('input');
       checkbox.type = 'checkbox';
 
-      const camposFaltantes = [];
-      if (!cliente) camposFaltantes.push('Cliente');
-      if (!producto) camposFaltantes.push('Producto');
-      if (!precioInput) camposFaltantes.push('Precio Bruto');
-      if (!toneladas && !liquidaSaldo) camposFaltantes.push('Toneladas (o tildar "Liquida saldo")');
-      if (!plazo) camposFaltantes.push('Plazo de Pago');
-
-      checkbox.disabled = camposFaltantes.length > 0;
-      if (camposFaltantes.length) {
-        tdSel.style.cursor = 'help';
-        tdSel.title = 'Para seleccionar, completá: ' + camposFaltantes.join(', ');
-        tdSel.addEventListener('click', () => alert('⚠️ Para seleccionar esta alternativa, completá primero: ' + camposFaltantes.join(', ')));
-      }
-
+      tdSel.addEventListener('click', () => {
+        if (checkbox.disabled) alert('⚠️ Para seleccionar esta alternativa, completá primero: ' + (tdSel.dataset.faltantes || ''));
+      });
       checkbox.addEventListener('change', function () {
         if (this.checked) {
           document.querySelectorAll('#tablaNegocios input[type="checkbox"]')
@@ -1426,6 +1454,7 @@
       });
       tdSel.appendChild(checkbox);
       filaSeleccion.appendChild(tdSel);
+      actualizarSeleccionable(ci);
 
       // Limpiar solo campos que no se conservan entre alternativas
       ['destino','precioBruto','descCorto','kmLargo','descLargo','plazoPago','observaciones'].forEach(id => {
@@ -1862,11 +1891,10 @@
       }
       if (sel === -1) { alert("⚠️ Debe seleccionar una alternativa antes de cerrar el negocio."); return; }
 
-      const alternativas = leerTodasLasAlternativas();
-      const elegida = alternativas[sel - 1];
-      const cliente = (elegida && elegida.cliente)
-        || (alternativas.find(a => a.cliente) && alternativas.find(a => a.cliente).cliente);
-      const numeroOrden = (elegida && elegida.codigo) || '-';
+      // Solo se guarda la alternativa elegida, no las comparativas descartadas.
+      const elegida = leerAlternativaDesdeColumna(sel);
+      const cliente = elegida.cliente;
+      const numeroOrden = elegida.codigo || '-';
 
       let nombreUsuario = '';
       if (cliente) {
@@ -1878,7 +1906,7 @@
             cliente,
             numero_orden: numeroOrden,
             fecha_cierre: new Date().toISOString().slice(0, 10),
-            datos: { alternativas, seleccionada: sel - 1 },
+            datos: { alternativas: [elegida], seleccionada: 0 },
           });
           if (error) console.error('No se pudo guardar en el historial de negocios:', error);
         }
