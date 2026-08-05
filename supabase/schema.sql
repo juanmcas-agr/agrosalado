@@ -337,6 +337,7 @@ create table negocios_historial (
   id uuid primary key default gen_random_uuid(),
   usuario_id uuid not null references auth.users(id),
   cliente text not null,
+  numero_orden text,
   fecha_cierre date not null,
   datos jsonb not null,
   created_at timestamptz not null default now()
@@ -356,6 +357,8 @@ create policy negocios_historial_select on negocios_historial for select to auth
   using (rol_actual() = 'owner');
 create policy negocios_historial_insert on negocios_historial for insert to authenticated
   with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy negocios_historial_delete on negocios_historial for delete to authenticated
+  using (rol_actual() = 'owner');
 
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).

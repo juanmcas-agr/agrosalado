@@ -152,17 +152,19 @@
     /* Campos que ocupan todo el ancho en mobile */
     .formulario .full { grid-column: 1 / -1; }
 
-    .formulario label.chk-inline {
-      flex-direction: row;
-      align-items: center;
-      gap: 6px;
-      font-size: 0.9em;
-      color: #2c3e50;
-    }
-    .formulario label.chk-inline input[type="checkbox"] {
-      width: auto; height: auto;
-    }
     .formulario input:disabled { background: #eee; color: #999; }
+
+    .formulario .boton-toggle {
+      background: #e9ecef;
+      color: #2c3e50;
+      border: 1px solid #ccc;
+    }
+    .formulario .boton-toggle.activo {
+      background: #8a5a34;
+      color: white;
+      border-color: #8a5a34;
+      font-weight: bold;
+    }
 
     .campo-con-boton { display: flex; gap: 6px; }
     .campo-con-boton input { flex: 1; }
@@ -676,9 +678,7 @@
     <input type="number" id="descLargo" placeholder="Descuento Flete Largo (%)">
     <input type="date" id="fijacion" class="full">
     <input type="number" id="toneladas" placeholder="Toneladas">
-    <label class="chk-inline">
-      <input type="checkbox" id="liquidaSaldo"> Liquida saldo
-    </label>
+    <button type="button" id="liquidaSaldo" class="boton-toggle" onclick="toggleLiquidaSaldo()">Liquida saldo</button>
     <div class="campo-con-boton">
       <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
       <button type="button" onclick="togglePlazoFecha()">📅</button>
@@ -740,6 +740,10 @@
   <div id="modalRecuperar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
     <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:420px;max-height:75vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
       <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">Recuperar negocio</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button type="button" id="tabGuardados" class="boton-toggle" onclick="cambiarTabRecuperar('guardados')" style="flex:1;">Guardados</button>
+        <button type="button" id="tabCerrados" class="boton-toggle" onclick="cambiarTabRecuperar('cerrados')" style="flex:1;">Cerrados</button>
+      </div>
       <div id="listaNegocios" style="display:flex;flex-direction:column;gap:8px;"></div>
       <button onclick="cerrarModalRecuperar()" style="margin-top:16px;background:#888;">Cancelar</button>
     </div>
@@ -996,6 +1000,25 @@
       return `${partes[2]}/${partes[1]}/${partes[0]}`;
     }
 
+    // Código único por alternativa: se genera al agregarla y viaja con ella
+    // (guardar/recuperar, cerrar negocio) para poder identificarla en los
+    // mails de liquidación/anulación.
+    function generarCodigoUnico() {
+      return Date.now().toString(36).toUpperCase().slice(-4)
+        + Math.random().toString(36).toUpperCase().slice(2, 5);
+    }
+
+    function renderEncabezadoAlternativa(th, numero) {
+      const codigo = th.dataset.codigo || '';
+      th.textContent = `Alternativa ${numero}`;
+      if (codigo) {
+        const spanCodigo = document.createElement('div');
+        spanCodigo.style.cssText = 'font-size:0.7em;font-weight:normal;opacity:0.75;';
+        spanCodigo.textContent = `N° ${codigo}`;
+        th.appendChild(spanCodigo);
+      }
+    }
+
     function togglePlazoFecha() {
       const campo = document.getElementById('plazoPagoFecha');
       const mostrar = campo.style.display === 'none';
@@ -1015,14 +1038,18 @@
       document.getElementById('version-footer').textContent = 'v.' + d.version;
     }).catch(() => {});
 
+    function toggleLiquidaSaldo(forzar) {
+      const btn = document.getElementById('liquidaSaldo');
+      const activo = forzar !== undefined ? forzar : !btn.classList.contains('activo');
+      btn.classList.toggle('activo', activo);
+      btn.textContent = activo ? '✓ Liquida saldo' : 'Liquida saldo';
+      const ton = document.getElementById('toneladas');
+      ton.disabled = activo;
+      if (activo) ton.value = '';
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
-
-      document.getElementById('liquidaSaldo').addEventListener('change', function () {
-        const ton = document.getElementById('toneladas');
-        ton.disabled = this.checked;
-        if (this.checked) ton.value = '';
-      });
       cargarTC();
       cargarPizarra();
 
@@ -1236,7 +1263,8 @@
     }
 
     // ── Agregar alternativa ──
-    function agregarAlternativa() {
+    function agregarAlternativa(codigoExistente) {
+      const codigo           = codigoExistente || generarCodigoUnico();
       const cliente         = document.getElementById('cliente').value;
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
@@ -1247,7 +1275,7 @@
       const kmCorto         = parseInt(document.getElementById('kmCorto').value) || 0;
       const kmLargo         = parseInt(document.getElementById('kmLargo').value) || 0;
       const fijacion        = formatearFecha(document.getElementById('fijacion').value);
-      const liquidaSaldo    = document.getElementById('liquidaSaldo').checked;
+      const liquidaSaldo    = document.getElementById('liquidaSaldo').classList.contains('activo');
       const toneladas       = document.getElementById('toneladas').value;
       const toneladasTexto  = liquidaSaldo ? 'Liquida saldo' : toneladas;
       const plazo           = document.getElementById('plazoPago').value;
@@ -1291,7 +1319,8 @@
       // Encabezado
       const header = document.getElementById('header');
       const th = document.createElement('th');
-      th.textContent = `Alternativa ${contador}`;
+      th.dataset.codigo = codigo;
+      renderEncabezadoAlternativa(th, contador);
       header.appendChild(th);
 
       // Botón borrar
@@ -1428,7 +1457,10 @@
         return texto === '-' ? '' : texto;
       };
 
+      const codigo = document.getElementById('header').cells[ci].dataset.codigo || generarCodigoUnico();
+
       return {
+        codigo,
         cliente: textoDe(FILA.cliente),
         producto: textoDe(FILA.producto),
         destino: textoDe(FILA.destino),
@@ -1471,12 +1503,11 @@
       document.getElementById('kmLargo').value = v.kmLargo || '';
       document.getElementById('descLargo').value = v.descLargo || '';
       document.getElementById('fijacion').value = v.fijacionIso || '';
-      document.getElementById('liquidaSaldo').checked = !!v.liquidaSaldo;
-      document.getElementById('toneladas').disabled = !!v.liquidaSaldo;
+      toggleLiquidaSaldo(!!v.liquidaSaldo);
       document.getElementById('toneladas').value = v.liquidaSaldo ? '' : (v.toneladas || '');
       document.getElementById('plazoPago').value = v.plazo || '';
       document.getElementById('observaciones').value = v.observaciones || '';
-      agregarAlternativa();
+      agregarAlternativa(v.codigo);
     }
 
     function cargarNegocioEnTabla(datos) {
@@ -1507,12 +1538,15 @@
       alert('💾 Negocio guardado. Vas a poder recuperarlo durante 40 días desde "Recuperar negocio".');
     }
 
+    let cacheGuardados = [];
+    let cacheCerrados = [];
+
     async function abrirModalRecuperar() {
       const lista = document.getElementById('listaNegocios');
       lista.innerHTML = 'Cargando…';
       document.getElementById('modalRecuperar').style.display = 'flex';
 
-      const [{ data: guardados, error: e1 }, { data: historial, error: e2 }] = await Promise.all([
+      const [{ data: guardados, error: e1 }, { data: cerrados, error: e2 }] = await Promise.all([
         window.supabaseClient.from('negocios_guardados').select('*')
           .gt('expira_at', new Date().toISOString()).order('creado_at', { ascending: false }),
         window.supabaseClient.from('negocios_historial').select('*')
@@ -1524,54 +1558,126 @@
         return;
       }
 
+      cacheGuardados = guardados;
+      cacheCerrados = cerrados;
+      cambiarTabRecuperar('guardados');
+    }
+
+    function cambiarTabRecuperar(tab) {
+      document.getElementById('tabGuardados').classList.toggle('activo', tab === 'guardados');
+      document.getElementById('tabCerrados').classList.toggle('activo', tab === 'cerrados');
+
+      const lista = document.getElementById('listaNegocios');
       lista.innerHTML = '';
-      if (!guardados.length && !historial.length) {
-        lista.innerHTML = '<div style="color:#888;">Todavía no hay negocios guardados ni cerrados.</div>';
+      const datos = tab === 'guardados' ? cacheGuardados : cacheCerrados;
+
+      if (!datos.length) {
+        lista.innerHTML = `<div style="color:#888;">${tab === 'guardados' ? 'No hay negocios guardados.' : 'No hay negocios cerrados.'}</div>`;
         return;
       }
 
-      const agregarItem = (registro, esHistorial) => {
-        const fecha = esHistorial
+      datos.forEach((registro) => {
+        const fecha = tab === 'cerrados'
           ? formatearFecha(registro.fecha_cierre)
           : new Date(registro.creado_at).toLocaleDateString('es-AR');
+        const numeroOrden = tab === 'cerrados' && registro.numero_orden ? ` · N° ${registro.numero_orden}` : '';
+
         const div = document.createElement('div');
         div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:8px;gap:8px;';
-        div.innerHTML = `<div><strong>${registro.cliente}</strong><br><small>${esHistorial ? 'Cerrado' : 'Guardado'} · ${fecha}</small></div>`;
-        const btn = document.createElement('button');
-        btn.textContent = 'Traer';
-        btn.style.cssText = 'width:auto;padding:6px 12px;font-size:0.85em;';
-        btn.onclick = () => { cargarNegocioEnTabla(registro.datos); cerrarModalRecuperar(); };
-        div.appendChild(btn);
-        lista.appendChild(div);
-      };
+        div.innerHTML = `<div><strong>${registro.cliente}</strong><br><small>${fecha}${numeroOrden}</small></div>`;
 
-      guardados.forEach((r) => agregarItem(r, false));
-      historial.forEach((r) => agregarItem(r, true));
+        const acciones = document.createElement('div');
+        acciones.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+
+        const btnTraer = document.createElement('button');
+        btnTraer.textContent = 'Traer';
+        btnTraer.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;';
+        btnTraer.onclick = () => { cargarNegocioEnTabla(registro.datos); cerrarModalRecuperar(); };
+
+        const btnEliminar = document.createElement('button');
+        btnEliminar.textContent = '🗑️';
+        btnEliminar.title = 'Eliminar';
+        btnEliminar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#ad1e19;';
+        btnEliminar.onclick = () => tab === 'guardados' ? eliminarGuardado(registro) : eliminarCerrado(registro);
+
+        acciones.append(btnTraer, btnEliminar);
+        div.appendChild(acciones);
+        lista.appendChild(div);
+      });
+    }
+
+    async function eliminarGuardado(registro) {
+      if (!confirm(`¿Eliminar el negocio guardado de "${registro.cliente}"?`)) return;
+      const { error } = await window.supabaseClient.from('negocios_guardados').delete().eq('id', registro.id);
+      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+      cacheGuardados = cacheGuardados.filter((r) => r.id !== registro.id);
+      cambiarTabRecuperar('guardados');
+    }
+
+    async function eliminarCerrado(registro) {
+      const numero = registro.numero_orden || '-';
+      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero})?\n\nSe va a mandar un mail avisando la anulación.`)) return;
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const [nombreQuienAnula, nombreQuienCreo] = await Promise.all([
+        obtenerNombreUsuario(session && session.user.id),
+        obtenerNombreUsuario(registro.usuario_id),
+      ]);
+
+      const { error } = await window.supabaseClient.from('negocios_historial').delete().eq('id', registro.id);
+      if (error) { alert('No se pudo anular: ' + error.message); return; }
+
+      cacheCerrados = cacheCerrados.filter((r) => r.id !== registro.id);
+      cambiarTabRecuperar('cerrados');
+
+      await enviarMailLiquidacion({
+        subject: `ANULACION ORDEN DE LIQUIDACION N° ${numero}`,
+        tituloAviso: 'AVISO DE NEGOCIO ANULADO',
+        cliente: registro.cliente,
+        numeroOrden: numero,
+        lineasExtra: [
+          `Cargado originalmente por: ${nombreQuienCreo || '-'}`,
+          `Anulado por: ${nombreQuienAnula || '-'}`,
+        ],
+      });
     }
 
     function cerrarModalRecuperar() {
       document.getElementById('modalRecuperar').style.display = 'none';
     }
 
-    async function enviarLiquidacionPorEmail(cliente) {
-      ocultarYCapturar((canvas) => {
-        const dataUrl = canvas.toDataURL('image/png');
-        const base64 = dataUrl.split(',')[1];
-        fetch('/.netlify/functions/enviar-liquidacion', {
+    async function obtenerNombreUsuario(userId) {
+      if (!userId) return '';
+      const { data } = await window.supabaseClient.from('perfiles')
+        .select('nombre_completo').eq('user_id', userId).single();
+      return data ? data.nombre_completo : '';
+    }
+
+    async function enviarMailLiquidacion({ subject, tituloAviso, cliente, numeroOrden, lineasExtra, canvas }) {
+      const cuerpoLineas = [
+        `<p><strong>${tituloAviso}</strong></p>`,
+        cliente ? `<p>Cliente: ${cliente}</p>` : '',
+        numeroOrden ? `<p>N° de orden: ${numeroOrden}</p>` : '',
+        ...(lineasExtra || []).map((l) => `<p>${l}</p>`),
+      ].join('');
+
+      const body = { subject, mensajeHtml: cuerpoLineas };
+      if (canvas) body.imagenBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+      try {
+        const res = await fetch('/.netlify/functions/enviar-liquidacion', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imagenBase64: base64, cliente }),
-        })
-          .then(async (res) => {
-            if (!res.ok) {
-              const detalle = await res.text();
-              throw new Error(detalle);
-            }
-          })
-          .catch((error) => {
-            alert('⚠️ El negocio se cerró, pero no se pudo mandar el mail de liquidación: ' + error.message);
-          });
-      });
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(await res.text());
+      } catch (error) {
+        alert('⚠️ No se pudo mandar el mail: ' + error.message);
+      }
+    }
+
+    function enviarMailLiquidacionConCaptura(datos) {
+      ocultarYCapturar((canvas) => enviarMailLiquidacion({ ...datos, canvas }));
     }
 
     function ocultarYCapturar(callback) {
@@ -1676,7 +1782,7 @@
       }
       let n = 1;
       for (let i = 1; i < header.cells.length; i++) {
-        header.cells[i].textContent = `Alternativa ${n++}`;
+        renderEncabezadoAlternativa(header.cells[i], n++);
       }
       contador = n;
     }
@@ -1692,14 +1798,20 @@
       if (sel === -1) { alert("⚠️ Debe seleccionar una alternativa antes de cerrar el negocio."); return; }
 
       const alternativas = leerTodasLasAlternativas();
-      const cliente = (alternativas[sel - 1] && alternativas[sel - 1].cliente)
+      const elegida = alternativas[sel - 1];
+      const cliente = (elegida && elegida.cliente)
         || (alternativas.find(a => a.cliente) && alternativas.find(a => a.cliente).cliente);
+      const numeroOrden = (elegida && elegida.codigo) || '-';
+
+      let nombreUsuario = '';
       if (cliente) {
         const { data: { session } } = await window.supabaseClient.auth.getSession();
         if (session) {
+          nombreUsuario = await obtenerNombreUsuario(session.user.id);
           const { error } = await window.supabaseClient.from('negocios_historial').insert({
             usuario_id: session.user.id,
             cliente,
+            numero_orden: numeroOrden,
             fecha_cierre: new Date().toISOString().slice(0, 10),
             datos: { alternativas, seleccionada: sel - 1 },
           });
@@ -1707,7 +1819,13 @@
         }
       }
 
-      enviarLiquidacionPorEmail(cliente);
+      enviarMailLiquidacionConCaptura({
+        subject: `NUEVA ORDEN DE LIQUIDACION N° ${numeroOrden}`,
+        tituloAviso: 'ATENCIÓN: NO DUPLICAR LIQUIDACIÓN',
+        cliente,
+        numeroOrden,
+        lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
+      });
 
       const btn = document.getElementById('cerrarNegocio');
       btn.innerHTML = "✅ CERRADO";

@@ -1,5 +1,7 @@
-// Envía el mail de "Nueva orden de liquidación" al cerrar un negocio en
-// la app Granos, con la captura de la tabla adjunta.
+// Envía mails de liquidación (nueva orden) y anulación de negocios
+// cerrados en la app Granos. El asunto y el cuerpo los arma el cliente
+// (index.html); esta función solo los reenvía por Resend, con la
+// captura de la tabla adjunta cuando corresponde.
 // Requiere la variable de entorno RESEND_API_KEY (Netlify > Site settings
 // > Environment variables) y un remitente en un dominio verificado en
 // https://resend.com/domains — mientras no esté verificado, usar
@@ -26,12 +28,22 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { imagenBase64, cliente } = JSON.parse(event.body);
-    if (!imagenBase64) {
-      return { statusCode: 400, body: JSON.stringify({ error: 'Falta la imagen del negocio.' }) };
+    const { imagenBase64, subject, mensajeHtml } = JSON.parse(event.body);
+    if (!subject || !mensajeHtml) {
+      return { statusCode: 400, body: JSON.stringify({ error: 'Falta el asunto o el cuerpo del mail.' }) };
     }
 
     const remitente = process.env.RESEND_FROM || 'AGROSALADO <onboarding@resend.dev>';
+
+    const payload = {
+      from: remitente,
+      to: DESTINATARIOS,
+      subject,
+      html: mensajeHtml,
+    };
+    if (imagenBase64) {
+      payload.attachments = [{ filename: 'negocio.png', content: imagenBase64 }];
+    }
 
     const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -39,22 +51,7 @@ exports.handler = async function (event) {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        from: remitente,
-        to: DESTINATARIOS,
-        subject: 'NUEVA ORDEN DE LIQUIDACIÓN',
-        html: `
-          <p><strong>ATENCIÓN: NO DUPLICAR LIQUIDACIÓN</strong></p>
-          ${cliente ? `<p>Cliente: ${cliente}</p>` : ''}
-          <p>Se adjunta la captura del negocio cerrado.</p>
-        `,
-        attachments: [
-          {
-            filename: 'negocio.png',
-            content: imagenBase64,
-          },
-        ],
-      }),
+      body: JSON.stringify(payload),
     });
 
     if (!res.ok) {
