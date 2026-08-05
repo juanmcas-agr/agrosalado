@@ -1508,7 +1508,7 @@
       return alternativas;
     }
 
-    function restaurarAlternativa(v) {
+    async function restaurarAlternativa(v) {
       document.getElementById('cliente').value = v.cliente || '';
       document.getElementById('producto').value = v.producto || 'SOJA';
       document.getElementById('destino').value = v.destino || '';
@@ -1526,17 +1526,28 @@
       document.getElementById('toneladas').value = v.liquidaSaldo ? '' : (v.toneladas || '');
       document.getElementById('plazoPago').value = v.plazo || '';
       document.getElementById('observaciones').value = v.observaciones || '';
-      agregarAlternativa(v.codigo);
+      await agregarAlternativa(v.codigo || undefined);
     }
 
-    function cargarNegocioEnTabla(datos) {
+    async function cargarNegocioEnTabla(datos, opciones) {
+      const { omitirConfirmacion = false, limpiarCodigos = false } = opciones || {};
       const alternativas = (datos && datos.alternativas) || [];
       if (!alternativas.length) return;
-      if (document.getElementById('header').cells.length > 1) {
+      if (!omitirConfirmacion && document.getElementById('header').cells.length > 1) {
         if (!confirm('Esto va a reemplazar lo que tenés cargado ahora en la tabla. ¿Continuar?')) return;
       }
       borrarTodo();
-      alternativas.forEach(restaurarAlternativa);
+      for (const alt of alternativas) {
+        await restaurarAlternativa(limpiarCodigos ? { ...alt, codigo: '' } : alt);
+      }
+      // Vuelve a marcar la alternativa que estaba seleccionada, si la tenemos.
+      if (typeof datos.seleccionada === 'number') {
+        const filas = document.getElementById('tablaNegocios').tBodies[0].rows;
+        const filaSel = filas[filas.length - 1];
+        const celda = filaSel.cells[datos.seleccionada + 1];
+        const cb = celda && celda.querySelector('input[type="checkbox"]');
+        if (cb && !cb.disabled) cb.checked = true;
+      }
     }
 
     async function guardarNegocio() {
@@ -1619,14 +1630,23 @@
         btnTraer.textContent = 'Traer';
         btnTraer.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;';
         btnTraer.onclick = () => { cargarNegocioEnTabla(registro.datos); cerrarModalRecuperar(); };
+        acciones.appendChild(btnTraer);
+
+        if (tab === 'cerrados') {
+          const btnRectificar = document.createElement('button');
+          btnRectificar.textContent = '🛠️';
+          btnRectificar.title = 'Rectificar (anula y lo carga para corregir)';
+          btnRectificar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#a67c2e;';
+          btnRectificar.onclick = () => rectificarCerrado(registro);
+          acciones.appendChild(btnRectificar);
+        }
 
         const btnEliminar = document.createElement('button');
         btnEliminar.textContent = '🗑️';
         btnEliminar.title = 'Eliminar';
         btnEliminar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#ad1e19;';
         btnEliminar.onclick = () => tab === 'guardados' ? eliminarGuardado(registro) : eliminarCerrado(registro);
-
-        acciones.append(btnTraer, btnEliminar);
+        acciones.appendChild(btnEliminar);
         div.appendChild(acciones);
         lista.appendChild(div);
       });
@@ -1640,9 +1660,10 @@
       cambiarTabRecuperar('guardados');
     }
 
-    async function eliminarCerrado(registro) {
+    // Anula (borra) un negocio cerrado y manda el mail de anulación.
+    // Devuelve true si se pudo anular, para que quien llama decida qué hacer después.
+    async function anularNegocioCerrado(registro) {
       const numero = registro.numero_orden || '-';
-      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero})?\n\nSe va a mandar un mail avisando la anulación.`)) return;
 
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       const [nombreQuienAnula, nombreQuienCreo] = await Promise.all([
@@ -1651,14 +1672,13 @@
       ]);
 
       const { error } = await window.supabaseClient.from('negocios_historial').delete().eq('id', registro.id);
-      if (error) { alert('No se pudo anular: ' + error.message); return; }
+      if (error) { alert('No se pudo anular: ' + error.message); return false; }
 
       cacheCerrados = cacheCerrados.filter((r) => r.id !== registro.id);
-      cambiarTabRecuperar('cerrados');
 
       await enviarMailLiquidacion({
         subject: `ANULACION ORDEN DE LIQUIDACION N° ${numero}`,
-        tituloAviso: 'AVISO DE NEGOCIO ANULADO',
+        tituloAviso: '¡ANULACION! NEGOCIO ANULADO',
         cliente: registro.cliente,
         numeroOrden: numero,
         lineasExtra: [
@@ -1666,6 +1686,25 @@
           `Anulado por: ${nombreQuienAnula || '-'}`,
         ],
       });
+      return true;
+    }
+
+    async function eliminarCerrado(registro) {
+      const numero = registro.numero_orden || '-';
+      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero})?\n\nSe va a mandar un mail avisando la anulación.`)) return;
+      const ok = await anularNegocioCerrado(registro);
+      if (ok) cambiarTabRecuperar('cerrados');
+    }
+
+    // Anula el cerrado (con su mail de ANULACION) y lo vuelve a cargar en la
+    // tabla, listo para corregir y cerrar de nuevo con un N° de orden nuevo.
+    async function rectificarCerrado(registro) {
+      const numero = registro.numero_orden || '-';
+      if (!confirm(`🛠️ Vas a ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero}) y cargarlo en la tabla para corregirlo.\n\nSe manda el mail de anulación y después lo editás y lo volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
+      const ok = await anularNegocioCerrado(registro);
+      if (!ok) return;
+      cerrarModalRecuperar();
+      await cargarNegocioEnTabla(registro.datos, { omitirConfirmacion: true, limpiarCodigos: true });
     }
 
     function cerrarModalRecuperar() {
