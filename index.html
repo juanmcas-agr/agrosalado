@@ -1042,11 +1042,17 @@
       const campo = document.getElementById('plazoPagoFecha');
       const mostrar = campo.style.display === 'none';
       campo.style.display = mostrar ? 'block' : 'none';
-      // El focus() no puede ir en el mismo tick que display:none -> block:
-      // el navegador todavía no terminó de calcular el layout del campo, y
-      // el selector nativo de fecha se abre y se cierra solo (hay que
-      // esperar un frame para que el foco "prenda" bien a la primera).
-      if (mostrar) requestAnimationFrame(() => campo.focus());
+      if (mostrar) {
+        // Forzar el reflow ANTES de enfocar (leer offsetHeight obliga al
+        // navegador a aplicar el display:block ya) para que el campo esté
+        // realmente listo. Tiene que ser síncrono, en el mismo gesto de
+        // click, si no el navegador no deja abrir el selector nativo solo.
+        void campo.offsetHeight;
+        campo.focus();
+        if (typeof campo.showPicker === 'function') {
+          try { campo.showPicker(); } catch (e) { /* no soportado en este navegador, focus() alcanza */ }
+        }
+      }
     }
 
     function aplicarPlazoFecha() {
