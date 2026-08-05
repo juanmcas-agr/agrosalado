@@ -1042,7 +1042,11 @@
       const campo = document.getElementById('plazoPagoFecha');
       const mostrar = campo.style.display === 'none';
       campo.style.display = mostrar ? 'block' : 'none';
-      if (mostrar) campo.focus();
+      // El focus() no puede ir en el mismo tick que display:none -> block:
+      // el navegador todavía no terminó de calcular el layout del campo, y
+      // el selector nativo de fecha se abre y se cierra solo (hay que
+      // esperar un frame para que el foco "prenda" bien a la primera).
+      if (mostrar) requestAnimationFrame(() => campo.focus());
     }
 
     function aplicarPlazoFecha() {
