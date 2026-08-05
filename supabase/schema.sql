@@ -360,6 +360,18 @@ create policy negocios_historial_insert on negocios_historial for insert to auth
 create policy negocios_historial_delete on negocios_historial for delete to authenticated
   using (rol_actual() = 'owner');
 
+-- Contador global y siempre creciente para el N° de orden de cada
+-- alternativa (formato DDDLLLAAHHMM armado en el cliente: DDD+LLL sale
+-- de esta secuencia, AA/HH/MM del momento de creación).
+create sequence if not exists orden_secuencia_seq;
+grant usage on sequence orden_secuencia_seq to authenticated;
+
+create or replace function siguiente_numero_orden() returns bigint
+language sql security definer as
+  $$ select nextval('orden_secuencia_seq') $$;
+
+grant execute on function siguiente_numero_orden() to authenticated;
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:

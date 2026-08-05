@@ -154,12 +154,12 @@
 
     .formulario input:disabled { background: #eee; color: #999; }
 
-    .formulario .boton-toggle {
+    .boton-toggle {
       background: #e9ecef;
       color: #2c3e50;
       border: 1px solid #ccc;
     }
-    .formulario .boton-toggle.activo {
+    .boton-toggle.activo {
       background: #8a5a34;
       color: white;
       border-color: #8a5a34;
@@ -1002,10 +1002,29 @@
 
     // Código único por alternativa: se genera al agregarla y viaja con ella
     // (guardar/recuperar, cerrar negocio) para poder identificarla en los
-    // mails de liquidación/anulación.
-    function generarCodigoUnico() {
-      return Date.now().toString(36).toUpperCase().slice(-4)
-        + Math.random().toString(36).toUpperCase().slice(2, 5);
+    // mails de liquidación/anulación. Formato DDDLLLAAHHMM (12 caracteres):
+    // DDD+LLL es un contador global siempre creciente (DDD 000-999, y al
+    // completar la vuelta LLL avanza una letra: ...999AAA -> 000AAB...),
+    // AA/HH/MM son año/hora/minuto de creación, para poder ubicarlo a ojo.
+    function formatearCodigoDesdeContador(n) {
+      const ddd = String(n % 1000).padStart(3, '0');
+      let li = Math.floor(n / 1000) % 17576; // 26^3 combinaciones de letras
+      let lll = '';
+      for (let i = 0; i < 3; i++) {
+        lll = String.fromCharCode(65 + (li % 26)) + lll;
+        li = Math.floor(li / 26);
+      }
+      const ahora = new Date();
+      const aa = String(ahora.getFullYear()).slice(-2);
+      const hh = String(ahora.getHours()).padStart(2, '0');
+      const mm = String(ahora.getMinutes()).padStart(2, '0');
+      return `${ddd}${lll}${aa}${hh}${mm}`;
+    }
+
+    async function generarCodigoUnico() {
+      const { data, error } = await window.supabaseClient.rpc('siguiente_numero_orden');
+      const n = (!error && data != null) ? Number(data) - 1 : Date.now();
+      return formatearCodigoDesdeContador(n);
     }
 
     function renderEncabezadoAlternativa(th, numero) {
@@ -1263,8 +1282,8 @@
     }
 
     // ── Agregar alternativa ──
-    function agregarAlternativa(codigoExistente) {
-      const codigo           = codigoExistente || generarCodigoUnico();
+    async function agregarAlternativa(codigoExistente) {
+      const codigo           = codigoExistente || await generarCodigoUnico();
       const cliente         = document.getElementById('cliente').value;
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
@@ -1457,7 +1476,7 @@
         return texto === '-' ? '' : texto;
       };
 
-      const codigo = document.getElementById('header').cells[ci].dataset.codigo || generarCodigoUnico();
+      const codigo = document.getElementById('header').cells[ci].dataset.codigo || formatearCodigoDesdeContador(Date.now());
 
       return {
         codigo,
@@ -1541,6 +1560,13 @@
     let cacheGuardados = [];
     let cacheCerrados = [];
 
+    function formatearFechaHora(iso) {
+      const d = new Date(iso);
+      const fecha = d.toLocaleDateString('es-AR');
+      const hora = d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false });
+      return `${fecha} ${hora}`;
+    }
+
     async function abrirModalRecuperar() {
       const lista = document.getElementById('listaNegocios');
       lista.innerHTML = 'Cargando…';
@@ -1578,8 +1604,8 @@
 
       datos.forEach((registro) => {
         const fecha = tab === 'cerrados'
-          ? formatearFecha(registro.fecha_cierre)
-          : new Date(registro.creado_at).toLocaleDateString('es-AR');
+          ? formatearFechaHora(registro.created_at)
+          : formatearFechaHora(registro.creado_at);
         const numeroOrden = tab === 'cerrados' && registro.numero_orden ? ` · N° ${registro.numero_orden}` : '';
 
         const div = document.createElement('div');
