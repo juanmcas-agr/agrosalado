@@ -2,7 +2,7 @@
 // No cachea llamadas a Supabase — eso lo maneja IndexedDB (ver js/db-local.js
 // y js/sync.js), para no tener dos mecanismos de "offline" compitiendo.
 
-const CACHE_NAME = 'agrosalado-stock-shell-v14';
+const CACHE_NAME = 'agrosalado-stock-shell-v15';
 const APP_SHELL = [
   './',
   './index.html',
@@ -52,6 +52,12 @@ self.addEventListener('fetch', (evento) => {
   // El bundle de supabase-js (esm.sh) sí se cachea, como parte del app-shell,
   // para que el JS de la app pueda cargar aunque no haya conexión.
   if (url.hostname.endsWith('.supabase.co')) {
+    return;
+  }
+
+  // version.json siempre de red: es justamente lo que usás para confirmar
+  // que un deploy nuevo llegó, cachearlo rompería ese propósito.
+  if (url.pathname === '/version.json') {
     return;
   }
 

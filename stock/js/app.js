@@ -4,7 +4,6 @@ import { initMovimientos } from './movimientos.js';
 import { initDashboard } from './dashboard.js';
 import { initHistorial } from './historial.js';
 import { initRouter } from './router.js';
-import { VERSION } from './config.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -115,7 +114,11 @@ function wireAuth() {
 }
 
 async function main() {
-  el('version-footer').textContent = `v.${VERSION}`;
+  // Versión única compartida con Granos: /version.json en la raíz del sitio
+  // (funciona igual desde /stock/ porque es una ruta absoluta).
+  fetch('/version.json').then((r) => r.json()).then((d) => {
+    el('version-footer').textContent = `v.${d.version}`;
+  }).catch(() => {});
   wireTabBar();
   wireLogin();
   wireMostrarClave();

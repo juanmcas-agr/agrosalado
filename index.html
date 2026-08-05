@@ -1010,10 +1010,12 @@
       document.getElementById('plazoPagoFecha').style.display = 'none';
     }
 
-    const VERSION = '1.0.0';
+    // Versión única compartida con la app Hacienda: /version.json en la raíz del sitio.
+    fetch('/version.json').then(r => r.json()).then(d => {
+      document.getElementById('version-footer').textContent = 'v.' + d.version;
+    }).catch(() => {});
 
     window.addEventListener("DOMContentLoaded", () => {
-      document.getElementById('version-footer').textContent = 'v.' + VERSION;
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
 
       document.getElementById('liquidaSaldo').addEventListener('change', function () {
