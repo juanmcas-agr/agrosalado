@@ -1,2 +1,6 @@
 [functions]
   directory = "netlify/functions"
+
+# 23:30 hora Argentina (UTC-3) = 02:30 UTC del día siguiente.
+[functions."resumen-diario-hacienda"]
+  schedule = "30 2 * * *"
