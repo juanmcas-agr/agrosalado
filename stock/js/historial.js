@@ -31,6 +31,15 @@ function poblarFiltros() {
       selTipo.appendChild(opt);
     }
   }
+
+  const selEstado = el('hist-filtro-estado');
+  if (!selEstado.options.length) {
+    selEstado.innerHTML = `
+      <option value="activos" selected>Sin anular</option>
+      <option value="anulados">Anulados</option>
+      <option value="">Todos</option>
+    `;
+  }
 }
 
 function puedeAnular(fila) {
@@ -123,6 +132,7 @@ export async function cargarHistorial() {
 
   const establecimiento = el('hist-filtro-establecimiento').value;
   const tipo = el('hist-filtro-tipo').value;
+  const estado = el('hist-filtro-estado').value;
   const desde = el('hist-filtro-desde').value;
   const hasta = el('hist-filtro-hasta').value;
 
@@ -130,6 +140,8 @@ export async function cargarHistorial() {
     query = query.or(`establecimiento_origen.eq.${establecimiento},establecimiento_destino.eq.${establecimiento}`);
   }
   if (tipo) query = query.eq('tipo_movimiento', tipo);
+  if (estado === 'activos') query = query.eq('anulado', false);
+  else if (estado === 'anulados') query = query.eq('anulado', true);
   if (desde) query = query.gte('fecha', desde);
   if (hasta) query = query.lte('fecha', hasta);
 
