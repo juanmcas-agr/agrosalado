@@ -92,6 +92,40 @@ export async function trySync() {
   }
 }
 
+// Se llama desde el banner "Tocá para reintentar": trySync() ignora para
+// siempre los movimientos que ya llegaron a 'error' (así no reintenta sin
+// parar algo roto), así que esta función los reintenta directo, una vez,
+// fuera de ese circuito, y avisa en el momento si siguen fallando (en vez
+// de dejarlos en 'pending' esperando 3 ciclos automáticos más).
+export async function reintentarErrores() {
+  const todos = await outboxGetAll();
+  const conError = todos.filter((m) => m.sync_status === 'error');
+  if (!conError.length) return [];
+
+  const siguenFallando = [];
+  for (const item of conError) {
+    const { sync_status, intentos, ultimo_error, creado_localmente_at, ...fila } = item;
+    const { error } = await supabase
+      .from('movimientos')
+      .upsert(fila, { onConflict: 'id', ignoreDuplicates: true });
+
+    if (!error) {
+      await outboxDelete(item.id);
+      continue;
+    }
+
+    await outboxUpdate(item.id, {
+      intentos: intentos + 1,
+      ultimo_error: error.message,
+      sync_status: 'error',
+    });
+    siguenFallando.push(error.message);
+  }
+
+  await reportarEstado();
+  return siguenFallando;
+}
+
 export function initSync() {
   window.addEventListener('online', () => trySync());
   document.addEventListener('visibilitychange', () => {

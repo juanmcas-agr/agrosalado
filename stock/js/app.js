@@ -1,5 +1,5 @@
 import { initAuth, onAuthChange, iniciarSesion, cerrarSesion, getEstado } from './auth.js';
-import { initSync, onSyncChange } from './sync.js';
+import { initSync, onSyncChange, reintentarErrores } from './sync.js';
 import { initMovimientos } from './movimientos.js';
 import { initDashboard } from './dashboard.js';
 import { initHistorial } from './historial.js';
@@ -24,14 +24,35 @@ function actualizarBannerSync({ pendientes, conError }) {
   const banner = el('sync-estado');
   if (conError) {
     banner.textContent = `${conError} movimiento(s) con error de sincronización. Tocá para reintentar.`;
-    banner.className = 'error';
+    banner.className = 'banner-sync error clickeable';
   } else if (pendientes) {
     banner.textContent = `${pendientes} movimiento(s) pendiente(s) de sincronizar...`;
-    banner.className = 'advertencia';
+    banner.className = 'banner-sync advertencia';
   } else {
     banner.textContent = 'Todo sincronizado.';
-    banner.className = 'ok';
+    banner.className = 'banner-sync ok';
   }
+}
+
+let reintentando = false;
+
+function wireSyncBanner() {
+  el('sync-estado').addEventListener('click', async () => {
+    if (reintentando) return;
+    reintentando = true;
+    const banner = el('sync-estado');
+    const original = banner.textContent;
+    banner.textContent = 'Reintentando...';
+    try {
+      const erroresRestantes = await reintentarErrores();
+      if (erroresRestantes.length) {
+        alert('Todavía no se pudieron sincronizar. Error de Supabase:\n\n' + erroresRestantes.join('\n'));
+      }
+    } finally {
+      reintentando = false;
+      if (banner.textContent === 'Reintentando...') banner.textContent = original;
+    }
+  });
 }
 
 function mostrarLogin(mensajeError) {
@@ -123,6 +144,7 @@ async function main() {
   wireLogin();
   wireMostrarClave();
   wireAuth();
+  wireSyncBanner();
   onSyncChange(actualizarBannerSync);
   await initAuth();
   initSync();

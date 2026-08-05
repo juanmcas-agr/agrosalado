@@ -213,6 +213,7 @@ button:active { filter: brightness(0.9); }
 .banner-sync.ok { background: #d4edda; color: #1e7e34; }
 .banner-sync.advertencia { background: #fff3cd; color: #8a6100; }
 .banner-sync.error { background: #f8d7da; color: #ad1e19; }
+.banner-sync.clickeable { cursor: pointer; }
 
 /* ─── versión ─── */
 .version-footer {
