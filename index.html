@@ -142,6 +142,22 @@
     /* Campos que ocupan todo el ancho en mobile */
     .formulario .full { grid-column: 1 / -1; }
 
+    .formulario label.chk-inline {
+      flex-direction: row;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.9em;
+      color: #2c3e50;
+    }
+    .formulario label.chk-inline input[type="checkbox"] {
+      width: auto; height: auto;
+    }
+    .formulario input:disabled { background: #eee; color: #999; }
+
+    .campo-con-boton { display: flex; gap: 6px; }
+    .campo-con-boton input { flex: 1; }
+    .campo-con-boton button { width: auto; padding: 0 12px; }
+
     /* ── BOTONES ── */
     button {
       background-color: #8a5a34; color: white;
@@ -645,7 +661,14 @@
     <input type="number" id="descLargo" placeholder="Descuento Flete Largo (%)">
     <input type="date" id="fijacion" class="full">
     <input type="number" id="toneladas" placeholder="Toneladas">
-    <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
+    <label class="chk-inline">
+      <input type="checkbox" id="liquidaSaldo"> Liquida saldo
+    </label>
+    <div class="campo-con-boton">
+      <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
+      <button type="button" onclick="togglePlazoFecha()">📅</button>
+    </div>
+    <input type="date" id="plazoPagoFecha" class="full" style="display:none;" onchange="aplicarPlazoFecha()">
     <input type="text" id="observaciones" placeholder="Observaciones" class="full">
   </div>
 
@@ -958,8 +981,28 @@
       return `${partes[2]}/${partes[1]}/${partes[0]}`;
     }
 
+    function togglePlazoFecha() {
+      const campo = document.getElementById('plazoPagoFecha');
+      const mostrar = campo.style.display === 'none';
+      campo.style.display = mostrar ? 'block' : 'none';
+      if (mostrar) campo.focus();
+    }
+
+    function aplicarPlazoFecha() {
+      const fecha = document.getElementById('plazoPagoFecha').value;
+      if (!fecha) return;
+      document.getElementById('plazoPago').value = formatearFecha(fecha);
+      document.getElementById('plazoPagoFecha').style.display = 'none';
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
+
+      document.getElementById('liquidaSaldo').addEventListener('change', function () {
+        const ton = document.getElementById('toneladas');
+        ton.disabled = this.checked;
+        if (this.checked) ton.value = '';
+      });
       cargarTC();
       cargarPizarra();
 
@@ -1184,7 +1227,9 @@
       const kmCorto         = parseInt(document.getElementById('kmCorto').value) || 0;
       const kmLargo         = parseInt(document.getElementById('kmLargo').value) || 0;
       const fijacion        = formatearFecha(document.getElementById('fijacion').value);
+      const liquidaSaldo    = document.getElementById('liquidaSaldo').checked;
       const toneladas       = document.getElementById('toneladas').value;
+      const toneladasTexto  = liquidaSaldo ? 'Liquida saldo' : toneladas;
       const plazo           = document.getElementById('plazoPago').value;
       const descCorto       = parseFloat(document.getElementById('descCorto').value) || 0;
       const descLargo       = parseFloat(document.getElementById('descLargo').value) || 0;
@@ -1218,7 +1263,7 @@
         fleteLargoHTML,
         `<strong>${formatoNumero(productor)}</strong>`,
         fijacion,
-        toneladas || "-",
+        toneladasTexto || "-",
         plazo || "-",
         observaciones
       ];
@@ -1293,11 +1338,9 @@
 
       const camposFaltantes = [];
       if (!cliente) camposFaltantes.push('Cliente');
-      if (!destino) camposFaltantes.push('Destino');
+      if (!producto) camposFaltantes.push('Producto');
       if (!precioInput) camposFaltantes.push('Precio Bruto');
-      if (!kmCorto) camposFaltantes.push('KM Flete Corto');
-      if (!kmLargo) camposFaltantes.push('KM Flete Largo');
-      if (!toneladas) camposFaltantes.push('Toneladas');
+      if (!toneladas && !liquidaSaldo) camposFaltantes.push('Toneladas (o tildar "Liquida saldo")');
       if (!plazo) camposFaltantes.push('Plazo de Pago');
 
       checkbox.disabled = camposFaltantes.length > 0;
@@ -1378,7 +1421,8 @@
         kmLargo: tdKmLargo.dataset.km || '',
         descLargo: tdFLargo.dataset.desc || '',
         fijacionIso: fechaMostradaAIso(textoDe(FILA.fijacion)),
-        toneladas: textoDe(FILA.toneladas),
+        toneladas: textoDe(FILA.toneladas) === 'Liquida saldo' ? '' : textoDe(FILA.toneladas),
+        liquidaSaldo: textoDe(FILA.toneladas) === 'Liquida saldo',
         plazo: textoDe(FILA.plazo),
         observaciones: textoDe(FILA.observaciones),
       };
@@ -1407,7 +1451,9 @@
       document.getElementById('kmLargo').value = v.kmLargo || '';
       document.getElementById('descLargo').value = v.descLargo || '';
       document.getElementById('fijacion').value = v.fijacionIso || '';
-      document.getElementById('toneladas').value = v.toneladas || '';
+      document.getElementById('liquidaSaldo').checked = !!v.liquidaSaldo;
+      document.getElementById('toneladas').disabled = !!v.liquidaSaldo;
+      document.getElementById('toneladas').value = v.liquidaSaldo ? '' : (v.toneladas || '');
       document.getElementById('plazoPago').value = v.plazo || '';
       document.getElementById('observaciones').value = v.observaciones || '';
       agregarAlternativa();
