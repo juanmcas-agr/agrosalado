@@ -29,7 +29,10 @@
     <img src="/assets/logo-full.png" alt="AGROSALADO" class="login-logo">
     <form id="login-form" class="formulario">
       <input id="login-email" type="email" placeholder="Email" required autocomplete="username">
-      <input id="login-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+      <div class="campo-password">
+        <input id="login-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+        <button type="button" id="login-mostrar-clave" class="boton-mostrar-clave">Mostrar</button>
+      </div>
       <button type="submit">Ingresar</button>
       <div id="login-mensaje" class="mensaje"></div>
     </form>
@@ -88,12 +91,32 @@
           <div id="mov-categoria-destino"></div>
         </div>
 
+        <div data-campo="titular_origen" class="campo-grupo full">
+          <div class="etiqueta-grupo">Titularidad de origen</div>
+          <div id="mov-titular-origen-tipo"></div>
+          <div id="mov-titular-origen-cap-wrap" class="oculto" style="margin-top:8px;">
+            <select id="mov-titular-origen-cap"></select>
+          </div>
+        </div>
+
+        <div data-campo="titular_destino" class="campo-grupo full">
+          <div class="etiqueta-grupo">Titularidad de destino</div>
+          <div id="mov-titular-destino-tipo"></div>
+          <div id="mov-titular-destino-cap-wrap" class="oculto" style="margin-top:8px;">
+            <select id="mov-titular-destino-cap"></select>
+          </div>
+        </div>
+
         <label>Cantidad de cabezas
           <input id="mov-cabezas" type="number" min="1" step="1" required>
         </label>
 
         <label>Kilos promedio por cabeza
           <input id="mov-kilos" type="number" min="1" step="0.1" required>
+        </label>
+
+        <label>Rodeo (opcional)
+          <input id="mov-rodeo" type="text">
         </label>
 
         <label class="full">Observaciones (opcional)
@@ -112,15 +135,29 @@
       <button id="dash-actualizar" class="boton-secundario">Actualizar</button>
       <button id="dash-exportar" class="boton-secundario">Exportar stock actual (Excel)</button>
 
-      <h3>Total de la empresa: <span id="dash-total-general">0</span> cabezas</h3>
+      <div class="resumen-titularidad">
+        <div><span>Agro Salado</span><strong id="dash-total-agro">0</strong></div>
+        <div><span>Doña Julia</span><strong id="dash-total-dona">0</strong></div>
+        <div><span>Grupo</span><strong id="dash-total-grupo">0</strong></div>
+        <div><span>Terceros</span><strong id="dash-total-terceros">0</strong></div>
+        <div class="destacado"><span>Total general</span><strong id="dash-total-general">0</strong></div>
+      </div>
 
       <h3>Por categoría (todos los establecimientos)</h3>
+      <div id="dash-categoria-vista"></div>
+      <div id="dash-categoria-cap-wrap" class="oculto" style="margin:8px 0;">
+        <select id="dash-categoria-cap-select"></select>
+      </div>
       <table id="dash-global-tabla" class="tabla">
         <thead><tr><th>Categoría</th><th>Cabezas</th></tr></thead>
         <tbody></tbody>
       </table>
 
       <h3>Por establecimiento</h3>
+      <div id="dash-establecimiento-vista"></div>
+      <div id="dash-establecimiento-cap-wrap" class="oculto" style="margin:8px 0;">
+        <select id="dash-establecimiento-cap-select"></select>
+      </div>
       <div class="tabla-scroll">
         <table id="dash-establecimientos-tabla" class="tabla">
           <thead></thead>
@@ -156,8 +193,8 @@
         <table id="hist-tabla" class="tabla">
           <thead>
             <tr>
-              <th>Fecha mov.</th><th>Fecha registro</th><th>Tipo</th><th>Origen</th><th>Destino</th>
-              <th>Cabezas</th><th>Kg/cab.</th><th>Cargado por</th><th>Obs.</th><th>Estado</th><th></th>
+              <th>Fecha mov.</th><th>Fecha registro</th><th>Tipo</th><th>Origen</th><th>Destino</th><th>Titular</th>
+              <th>Cabezas</th><th>Kg/cab.</th><th>Rodeo</th><th>Cargado por</th><th>Obs.</th><th>Estado</th><th></th>
             </tr>
           </thead>
           <tbody></tbody>

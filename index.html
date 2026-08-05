@@ -399,6 +399,13 @@
     }
     #gate-overlay button { width: 100%; }
     #gate-mensaje { color: #ad1e19; font-size: 0.85em; min-height: 1.2em; }
+    .campo-password { position: relative; }
+    .campo-password input { padding-right: 64px; width: 100%; box-sizing: border-box; }
+    .boton-mostrar-clave {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      width: auto; background: transparent; color: #666;
+      border: none; padding: 6px 8px; font-size: 0.8em;
+    }
 
     /* ── PRINT ── */
     @media print {
@@ -417,7 +424,10 @@
     <div id="gate-cargando">Verificando acceso…</div>
     <form id="gate-form" class="oculto">
       <input id="gate-email" type="email" placeholder="Email" required autocomplete="username">
-      <input id="gate-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+      <div class="campo-password">
+        <input id="gate-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+        <button type="button" id="gate-mostrar-clave" class="boton-mostrar-clave">Mostrar</button>
+      </div>
       <button type="submit">Ingresar</button>
       <div id="gate-mensaje"></div>
     </form>
@@ -445,6 +455,14 @@
       form.classList.remove('oculto');
       mensaje.textContent = texto || '';
     }
+
+    document.getElementById('gate-mostrar-clave').addEventListener('click', () => {
+      const input = document.getElementById('gate-password');
+      const boton = document.getElementById('gate-mostrar-clave');
+      const mostrar = input.type === 'password';
+      input.type = mostrar ? 'text' : 'password';
+      boton.textContent = mostrar ? 'Ocultar' : 'Mostrar';
+    });
 
     async function verificarAcceso() {
       const { data: { session } } = await supabase.auth.getSession();

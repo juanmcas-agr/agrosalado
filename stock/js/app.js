@@ -52,8 +52,30 @@ function mostrarApp(perfil) {
 }
 
 function wireTabBar() {
-  el('tabbar-granos').addEventListener('click', () => { window.location.href = '/'; });
-  el('tabbar-posgranaria').addEventListener('click', () => alert('Pos. Granaria: próximamente 🚧'));
+  el('tabbar-granos').addEventListener('click', () => {
+    if (getEstado().perfil?.rol !== 'owner') {
+      alert('No tenés permisos para acceder a Granos.');
+      return;
+    }
+    window.location.href = '/';
+  });
+  el('tabbar-posgranaria').addEventListener('click', () => {
+    if (getEstado().perfil?.rol !== 'owner') {
+      alert('No tenés permisos para acceder a Pos. Granaria.');
+      return;
+    }
+    alert('Pos. Granaria: próximamente 🚧');
+  });
+}
+
+function wireMostrarClave() {
+  const input = el('login-password');
+  const boton = el('login-mostrar-clave');
+  boton.addEventListener('click', () => {
+    const mostrar = input.type === 'password';
+    input.type = mostrar ? 'text' : 'password';
+    boton.textContent = mostrar ? 'Ocultar' : 'Mostrar';
+  });
 }
 
 function wireLogin() {
@@ -96,6 +118,7 @@ async function main() {
   el('version-footer').textContent = `v.${VERSION}`;
   wireTabBar();
   wireLogin();
+  wireMostrarClave();
   wireAuth();
   onSyncChange(actualizarBannerSync);
   await initAuth();

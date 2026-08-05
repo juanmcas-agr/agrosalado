@@ -52,6 +52,13 @@ function describirMovimiento(fila) {
   return { origen, destino };
 }
 
+function describirTitular(fila) {
+  if (fila.titular_origen_nombre && fila.titular_destino_nombre && fila.titular_origen !== fila.titular_destino) {
+    return `${fila.titular_origen_nombre} → ${fila.titular_destino_nombre}`;
+  }
+  return fila.titular_origen_nombre || fila.titular_destino_nombre || '—';
+}
+
 async function anularMovimiento(id) {
   if (!navigator.onLine) {
     alert('Necesitás conexión a internet para anular un movimiento.');
@@ -89,8 +96,10 @@ function renderFilas(filas) {
       <td>${fila.tipo_movimiento_nombre}</td>
       <td>${origen}</td>
       <td>${destino}</td>
+      <td>${describirTitular(fila)}</td>
       <td>${fila.cantidad_cabezas}</td>
       <td>${fila.kilos_promedio}</td>
+      <td>${fila.rodeo || ''}</td>
       <td>${fila.usuario_nombre || '—'}</td>
       <td>${fila.observaciones || ''}</td>
       <td>${fila.anulado ? `Anulado (${fila.anulado_motivo || 'sin motivo'})` : ''}</td>

@@ -107,6 +107,14 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 
 .formulario .full { grid-column: 1 / -1; }
 
+.campo-password { position: relative; }
+.campo-password input { padding-right: 64px; }
+.boton-mostrar-clave {
+  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+  width: auto; background: transparent; color: #666;
+  border: none; padding: 6px 8px; font-size: 0.8em;
+}
+
 .campo-grupo { margin: 6px 0; }
 .campo-grupo + .campo-grupo { margin-top: 14px; }
 
@@ -140,6 +148,13 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
   color: white;
   border-color: #8a5a34;
   font-weight: bold;
+}
+.boton-opcion.deshabilitado,
+.boton-opcion:disabled {
+  background: #e0e0e0;
+  color: #aaa;
+  border-color: #e0e0e0;
+  cursor: not-allowed;
 }
 
 button {
@@ -241,6 +256,32 @@ button:active { filter: brightness(0.9); }
   background-color: #8a5a34;
   color: white;
 }
+
+/* ─── resumen de titularidad ─── */
+.resumen-titularidad {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+.resumen-titularidad div {
+  background: white;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+.resumen-titularidad div.destacado {
+  background: #8a5a34;
+  color: white;
+}
+.resumen-titularidad span {
+  display: block;
+  font-size: 0.75em;
+  opacity: 0.8;
+  margin-bottom: 4px;
+}
+.resumen-titularidad strong { font-size: 1.3em; }
 
 /* ─── tablas ─── */
 .tabla-scroll { overflow-x: auto; }

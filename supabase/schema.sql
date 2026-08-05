@@ -31,6 +31,20 @@ insert into categorias (id, nombre, orden) values
   ('vaca_servicio_invierno', 'Vaca servicio de invierno', 5),
   ('toro', 'Toro', 6);
 
+create table titulares (
+  id text primary key,
+  nombre text not null,
+  tipo text not null check (tipo in ('propio', 'capitalizador')),
+  orden int not null default 0,
+  activo boolean not null default true
+);
+
+insert into titulares (id, nombre, tipo, orden) values
+  ('agro_salado', 'Agro Salado', 'propio', 1),
+  ('dona_julia', 'Doña Julia', 'propio', 2),
+  ('sgro', 'SGRO', 'capitalizador', 3),
+  ('cym', 'CYM', 'capitalizador', 4);
+
 create table tipos_movimiento (
   id text primary key,
   nombre text not null,
@@ -39,21 +53,24 @@ create table tipos_movimiento (
   requiere_establecimiento_destino boolean not null default false,
   requiere_categoria_origen boolean not null default false,
   requiere_categoria_destino boolean not null default false,
+  requiere_titular_origen boolean not null default false,
+  requiere_titular_destino boolean not null default false,
   orden int not null
 );
 
 insert into tipos_movimiento
-  (id, nombre, clase, requiere_establecimiento_origen, requiere_establecimiento_destino, requiere_categoria_origen, requiere_categoria_destino, orden) values
-  ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  1),
-  ('compra_invernada',    'Compra de invernada',                'entrada', false, true,  false, true,  2),
-  ('paricion',            'Parición',                           'entrada', false, true,  false, true,  3),
-  ('venta_gordo',         'Venta de gordo',                     'salida',  true,  false, true,  false, 4),
-  ('venta_vaca_prenada',  'Venta de vaca preñada',               'salida',  true,  false, true,  false, 5),
-  ('venta_invernada',     'Venta de invernada',                 'salida',  true,  false, true,  false, 6),
-  ('faena_conserva',      'Vaca faena / conserva',              'salida',  true,  false, true,  false, 7),
-  ('mortandad',           'Mortandad',                          'salida',  true,  false, true,  false, 8),
-  ('traslado',            'Traslado entre establecimientos',    'interna', true,  true,  true,  true,  9),
-  ('cambio_categoria',    'Cambio de categoría',                'interna', true,  true,  true,  true,  10);
+  (id, nombre, clase, requiere_establecimiento_origen, requiere_establecimiento_destino, requiere_categoria_origen, requiere_categoria_destino, requiere_titular_origen, requiere_titular_destino, orden) values
+  ('compra_invernada',    'Compra de invernada',                'entrada', false, true,  false, true,  false, true,  1),
+  ('paricion',            'Parición',                           'entrada', false, true,  false, true,  false, true,  2),
+  ('venta_gordo',         'Venta de gordo',                     'salida',  true,  false, true,  false, true,  false, 3),
+  ('venta_vaca_prenada',  'Venta de vaca preñada',               'salida',  true,  false, true,  false, true,  false, 4),
+  ('venta_invernada',     'Venta de invernada',                 'salida',  true,  false, true,  false, true,  false, 5),
+  ('faena_conserva',      'Vaca faena / conserva',              'salida',  true,  false, true,  false, true,  false, 6),
+  ('mortandad',           'Mortandad',                          'salida',  true,  false, true,  false, true,  false, 7),
+  ('traslado',            'Traslado entre establecimientos',    'interna', true,  true,  true,  true,  true,  true,  8),
+  ('cambio_categoria',    'Cambio de categoría',                'interna', true,  true,  true,  true,  true,  true,  9),
+  ('cambio_titular',      'Cambio de titularidad',              'interna', true,  true,  true,  true,  true,  true,  10),
+  ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  false, true,  11);
 
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
@@ -75,9 +92,12 @@ create table movimientos (
   establecimiento_destino text references establecimientos(id),
   categoria_origen text references categorias(id),
   categoria_destino text references categorias(id),
+  titular_origen text references titulares(id),
+  titular_destino text references titulares(id),
   cantidad_cabezas integer not null check (cantidad_cabezas > 0),
   kilos_promedio numeric(6,2) not null check (kilos_promedio > 0),
   usuario_id uuid not null references auth.users(id),
+  rodeo text,
   observaciones text,
   created_at timestamptz not null default now(),
   anulado boolean not null default false,
@@ -132,12 +152,29 @@ begin
     raise exception 'categoria_destino no corresponde para %', new.tipo_movimiento;
   end if;
 
+  if t.requiere_titular_origen and new.titular_origen is null then
+    raise exception 'Falta titular_origen para %', new.tipo_movimiento;
+  end if;
+  if not t.requiere_titular_origen and new.titular_origen is not null then
+    raise exception 'titular_origen no corresponde para %', new.tipo_movimiento;
+  end if;
+
+  if t.requiere_titular_destino and new.titular_destino is null then
+    raise exception 'Falta titular_destino para %', new.tipo_movimiento;
+  end if;
+  if not t.requiere_titular_destino and new.titular_destino is not null then
+    raise exception 'titular_destino no corresponde para %', new.tipo_movimiento;
+  end if;
+
   if new.tipo_movimiento = 'traslado' then
     if new.establecimiento_origen = new.establecimiento_destino then
       raise exception 'En un traslado, establecimiento_origen y destino deben ser distintos';
     end if;
     if new.categoria_origen <> new.categoria_destino then
       raise exception 'En un traslado, la categoría no cambia';
+    end if;
+    if new.titular_origen <> new.titular_destino then
+      raise exception 'En un traslado, la titularidad no cambia (usá "Cambio de titularidad" para eso)';
     end if;
   end if;
 
@@ -148,6 +185,25 @@ begin
     if new.categoria_origen = new.categoria_destino then
       raise exception 'En un cambio de categoría, la categoría origen y destino deben ser distintas';
     end if;
+    if new.titular_origen <> new.titular_destino then
+      raise exception 'En un cambio de categoría, la titularidad no cambia';
+    end if;
+  end if;
+
+  if new.tipo_movimiento = 'cambio_titular' then
+    if new.establecimiento_origen <> new.establecimiento_destino then
+      raise exception 'En un cambio de titularidad, el establecimiento no cambia';
+    end if;
+    if new.categoria_origen <> new.categoria_destino then
+      raise exception 'En un cambio de titularidad, la categoría no cambia';
+    end if;
+    if new.titular_origen = new.titular_destino then
+      raise exception 'En un cambio de titularidad, la titularidad origen y destino deben ser distintas';
+    end if;
+  end if;
+
+  if new.tipo_movimiento = 'apertura_stock' and rol_actual() <> 'owner' then
+    raise exception 'Solo un owner puede cargar una apertura de stock';
   end if;
 
   if new.fecha > current_date then
@@ -180,19 +236,25 @@ create trigger trg_bloquear_created_at
 
 create view movimiento_lineas as
   select id, fecha, establecimiento_destino as establecimiento, categoria_destino as categoria,
+         coalesce(titular_destino, 'agro_salado') as titular,
          cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
   where not anulado and establecimiento_destino is not null
   union all
   select id, fecha, establecimiento_origen as establecimiento, categoria_origen as categoria,
+         coalesce(titular_origen, 'agro_salado') as titular,
          -cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
   where not anulado and establecimiento_origen is not null;
+-- Nota: los movimientos previos a la funcionalidad de titularidad no tienen
+-- titular cargado; se asumen de Agro Salado (coalesce) para no perder stock
+-- en los totales. Si corresponde, se pueden corregir cargando un
+-- "Cambio de titularidad" para pasarlos al titular real.
 
 create view stock_actual as
-  select establecimiento, categoria, sum(delta_cabezas) as cabezas
+  select establecimiento, categoria, titular, sum(delta_cabezas) as cabezas
   from movimiento_lineas
-  group by establecimiento, categoria;
+  group by establecimiento, categoria, titular;
 
 -- ─── Vista de historial (con etiquetas legibles para la UI) ─────────────
 
@@ -204,7 +266,9 @@ create view historial_movimientos as
     m.establecimiento_destino, ed.nombre as establecimiento_destino_nombre,
     m.categoria_origen, co.nombre as categoria_origen_nombre,
     m.categoria_destino, cd.nombre as categoria_destino_nombre,
-    m.cantidad_cabezas, m.kilos_promedio, m.observaciones,
+    m.titular_origen, tio.nombre as titular_origen_nombre,
+    m.titular_destino, tid.nombre as titular_destino_nombre,
+    m.cantidad_cabezas, m.kilos_promedio, m.rodeo, m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo
   from movimientos m
@@ -213,6 +277,8 @@ create view historial_movimientos as
   left join establecimientos ed on ed.id = m.establecimiento_destino
   left join categorias co on co.id = m.categoria_origen
   left join categorias cd on cd.id = m.categoria_destino
+  left join titulares tio on tio.id = m.titular_origen
+  left join titulares tid on tid.id = m.titular_destino
   left join perfiles p on p.user_id = m.usuario_id
   order by m.fecha desc, m.created_at desc;
 
@@ -221,6 +287,7 @@ create view historial_movimientos as
 alter table perfiles enable row level security;
 alter table establecimientos enable row level security;
 alter table categorias enable row level security;
+alter table titulares enable row level security;
 alter table tipos_movimiento enable row level security;
 alter table movimientos enable row level security;
 
@@ -234,6 +301,10 @@ create policy perfiles_update_self on perfiles for update to authenticated using
 create policy lookup_select_establecimientos on establecimientos for select to authenticated using (true);
 create policy lookup_select_categorias on categorias for select to authenticated using (true);
 create policy lookup_select_tipos_movimiento on tipos_movimiento for select to authenticated using (true);
+
+create policy titulares_select on titulares for select to authenticated using (true);
+create policy titulares_insert on titulares for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
 create policy movimientos_select on movimientos for select to authenticated using (true);
 

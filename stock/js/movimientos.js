@@ -4,58 +4,116 @@ import {
 } from './config.js';
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
+import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
+import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
-const CAMPOS = ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen', 'categoria_destino'];
+const CAMPOS = [
+  'establecimiento_origen', 'establecimiento_destino',
+  'categoria_origen', 'categoria_destino',
+  'titular_origen', 'titular_destino',
+];
 
 function el(id) {
   return document.getElementById(id);
 }
 
-// ─── grupos de botones (reemplazan los <select>: son pocas opciones y así
-// queda "pintado" el elegido, más rápido de tocar en el campo) ───
-
-function crearGrupoBotones(id, opciones) {
-  const contenedor = el(id);
-  contenedor.classList.add('grupo-botones');
-  contenedor.innerHTML = '';
-  for (const o of opciones) {
-    const boton = document.createElement('button');
-    boton.type = 'button';
-    boton.className = 'boton-opcion';
-    boton.dataset.value = o.id;
-    boton.textContent = o.nombre;
-    boton.addEventListener('click', () => {
-      contenedor.querySelectorAll('.boton-opcion').forEach((b) => b.classList.remove('seleccionado'));
-      boton.classList.add('seleccionado');
-      contenedor.dispatchEvent(new Event('cambio'));
-    });
-    contenedor.appendChild(boton);
+function aplicarBloqueoAperturaStock() {
+  const boton = document.querySelector('#mov-tipo .boton-opcion[data-value="apertura_stock"]');
+  if (!boton) return;
+  const rol = getEstado().perfil?.rol;
+  if (rol !== 'owner') {
+    boton.disabled = true;
+    boton.classList.add('deshabilitado');
+    boton.title = 'Solo un owner puede cargar una apertura de stock';
   }
 }
 
-function obtenerSeleccion(id) {
-  const boton = el(id).querySelector('.boton-opcion.seleccionado');
-  return boton ? boton.dataset.value : '';
+// ─── titularidad: Agro Salado / Doña Julia / Capitalizador (+ lista) ───
+
+function poblarSelectCapitalizadores(idSelect) {
+  const select = el(idSelect);
+  const valorPrevio = select.value;
+  select.innerHTML = '';
+  const opcionVacia = document.createElement('option');
+  opcionVacia.value = '';
+  opcionVacia.textContent = 'Elegir...';
+  select.appendChild(opcionVacia);
+  for (const c of obtenerTitularesCache().filter((t) => t.tipo === 'capitalizador')) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nombre;
+    select.appendChild(opt);
+  }
+  const opcionNueva = document.createElement('option');
+  opcionNueva.value = '__nuevo__';
+  opcionNueva.textContent = '+ Agregar nuevo...';
+  select.appendChild(opcionNueva);
+  if (valorPrevio) select.value = valorPrevio;
 }
 
-function establecerSeleccion(id, valor) {
-  const contenedor = el(id);
-  contenedor.querySelectorAll('.boton-opcion').forEach((b) => {
-    b.classList.toggle('seleccionado', b.dataset.value === valor);
+function inicializarTitular(prefijo) {
+  const idTipo = `mov-titular-${prefijo}-tipo`;
+  const idSelectWrap = `mov-titular-${prefijo}-cap-wrap`;
+  const idSelect = `mov-titular-${prefijo}-cap`;
+
+  crearGrupoBotones(idTipo, [
+    { id: 'agro_salado', nombre: 'Agro Salado' },
+    { id: 'dona_julia', nombre: 'Doña Julia' },
+    { id: 'capitalizador', nombre: 'Capitalizador' },
+  ]);
+  poblarSelectCapitalizadores(idSelect);
+
+  el(idTipo).addEventListener('cambio', () => {
+    const tipo = obtenerSeleccion(idTipo);
+    el(idSelectWrap).classList.toggle('oculto', tipo !== 'capitalizador');
   });
-  contenedor.dispatchEvent(new Event('cambio'));
+
+  el(idSelect).addEventListener('change', async () => {
+    const select = el(idSelect);
+    if (select.value !== '__nuevo__') return;
+    const nombre = prompt('Nombre del nuevo capitalizador:');
+    if (!nombre || !nombre.trim()) {
+      select.value = '';
+      return;
+    }
+    try {
+      const nuevo = await crearCapitalizador(nombre.trim());
+      poblarSelectCapitalizadores(idSelect);
+      select.value = nuevo.id;
+    } catch (error) {
+      alert('No se pudo crear el capitalizador: ' + error.message);
+      select.value = '';
+    }
+  });
 }
 
-function limpiarSeleccion(id) {
-  el(id).querySelectorAll('.boton-opcion').forEach((b) => b.classList.remove('seleccionado'));
+function obtenerTitular(prefijo) {
+  const tipo = obtenerSeleccion(`mov-titular-${prefijo}-tipo`);
+  if (!tipo) return '';
+  if (tipo === 'capitalizador') {
+    const valor = el(`mov-titular-${prefijo}-cap`).value;
+    return valor && valor !== '__nuevo__' ? valor : '';
+  }
+  return tipo;
 }
+
+function limpiarTitular(prefijo) {
+  limpiarSeleccion(`mov-titular-${prefijo}-tipo`);
+  el(`mov-titular-${prefijo}-cap-wrap`).classList.add('oculto');
+  el(`mov-titular-${prefijo}-cap`).value = '';
+}
+
+// ─── formulario ───
 
 function poblarGrupos() {
   crearGrupoBotones('mov-tipo', Object.entries(TIPOS_MOVIMIENTO).map(([id, cfg]) => ({ id, nombre: cfg.nombre })));
+  aplicarBloqueoAperturaStock();
   crearGrupoBotones('mov-establecimiento-origen', ESTABLECIMIENTOS);
   crearGrupoBotones('mov-establecimiento-destino', ESTABLECIMIENTOS);
   crearGrupoBotones('mov-categoria-origen', CATEGORIAS);
   crearGrupoBotones('mov-categoria-destino', CATEGORIAS);
+  inicializarTitular('origen');
+  inicializarTitular('destino');
 }
 
 function actualizarCamposVisibles() {
@@ -94,8 +152,11 @@ function leerFormulario() {
     establecimiento_destino: cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null,
     categoria_origen: cfg.campos.includes('categoria_origen') ? obtenerSeleccion('mov-categoria-origen') : null,
     categoria_destino: cfg.campos.includes('categoria_destino') ? obtenerSeleccion('mov-categoria-destino') : null,
+    titular_origen: cfg.campos.includes('titular_origen') ? obtenerTitular('origen') : null,
+    titular_destino: cfg.campos.includes('titular_destino') ? obtenerTitular('destino') : null,
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
+    rodeo: el('mov-rodeo').value.trim() || null,
     observaciones: el('mov-observaciones').value.trim() || null,
   };
 }
@@ -103,6 +164,10 @@ function leerFormulario() {
 function validar(datos) {
   const errores = [];
   const advertencias = [];
+
+  if (datos.cfg.soloOwner && getEstado().perfil?.rol !== 'owner') {
+    errores.push('Solo un owner puede cargar este tipo de movimiento.');
+  }
 
   if (!datos.fecha) errores.push('Falta la fecha.');
   else if (datos.fecha > new Date().toISOString().slice(0, 10)) errores.push('La fecha no puede ser futura.');
@@ -126,6 +191,9 @@ function validar(datos) {
   if (datos.tipo === 'cambio_categoria' && datos.categoria_origen === datos.categoria_destino) {
     errores.push('En un cambio de categoría, la categoría de origen y destino deben ser distintas.');
   }
+  if (datos.tipo === 'cambio_titular' && datos.titular_origen === datos.titular_destino) {
+    errores.push('En un cambio de titularidad, la titularidad de origen y destino deben ser distintas.');
+  }
 
   return { errores, advertencias };
 }
@@ -134,8 +202,10 @@ function armarFila(datos) {
   const { cfg } = datos;
   let categoria_destino = datos.categoria_destino;
   let establecimiento_destino = datos.establecimiento_destino;
+  let titular_destino = datos.titular_destino;
   if (cfg.duplicarCategoriaEnDestino) categoria_destino = datos.categoria_origen;
   if (cfg.duplicarEstablecimientoEnDestino) establecimiento_destino = datos.establecimiento_origen;
+  if (cfg.duplicarTitularEnDestino) titular_destino = datos.titular_origen;
 
   return {
     id: crypto.randomUUID(),
@@ -145,11 +215,19 @@ function armarFila(datos) {
     establecimiento_destino: establecimiento_destino || null,
     categoria_origen: datos.categoria_origen || null,
     categoria_destino: categoria_destino || null,
+    titular_origen: datos.titular_origen || null,
+    titular_destino: titular_destino || null,
     cantidad_cabezas: Number(datos.cantidad_cabezas),
     kilos_promedio: Number(datos.kilos_promedio),
     usuario_id: getEstado().session.user.id,
+    rodeo: datos.rodeo,
     observaciones: datos.observaciones,
   };
+}
+
+function primerTipoPermitido() {
+  const rol = getEstado().perfil?.rol;
+  return Object.entries(TIPOS_MOVIMIENTO).find(([, cfg]) => !cfg.soloOwner || rol === 'owner')[0];
 }
 
 function mostrarMensaje(texto, tipo) {
@@ -161,12 +239,15 @@ function mostrarMensaje(texto, tipo) {
 function resetFormulario() {
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
+  el('mov-rodeo').value = '';
   el('mov-observaciones').value = '';
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('mov-establecimiento-origen');
   limpiarSeleccion('mov-establecimiento-destino');
   limpiarSeleccion('mov-categoria-origen');
-  establecerSeleccion('mov-tipo', Object.keys(TIPOS_MOVIMIENTO)[0]);
+  limpiarTitular('origen');
+  limpiarTitular('destino');
+  establecerSeleccion('mov-tipo', primerTipoPermitido());
 }
 
 async function onSubmit(evento) {
@@ -187,11 +268,12 @@ async function onSubmit(evento) {
   resetFormulario();
 }
 
-export function initMovimientos() {
+export async function initMovimientos() {
+  await cargarTitulares();
   poblarGrupos();
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
-  establecerSeleccion('mov-tipo', Object.keys(TIPOS_MOVIMIENTO)[0]);
+  establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
 }

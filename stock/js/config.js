@@ -1,5 +1,5 @@
 // v.1.x.x: fase definitiva. El tercer número sube con cada modificación.
-export const VERSION = '1.0.0';
+export const VERSION = '1.0.1';
 
 // Completar con los datos del proyecto de Supabase (Project Settings > API).
 // La "anon key" es pública y segura para exponer en el cliente.
@@ -27,49 +27,59 @@ export const CATEGORIAS = [
 
 // Espejo de tipos_movimiento: qué campos pedir por cada tipo.
 // clase: 'entrada' (alta), 'salida' (baja), 'interna' (mueve sin cambiar el total).
+// Apertura de stock va al final (solo la carga un owner, ver movimientos.js).
 export const TIPOS_MOVIMIENTO = {
-  apertura_stock: {
-    nombre: 'Apertura de stock', clase: 'entrada',
-    campos: ['establecimiento_destino', 'categoria_destino'],
-  },
   compra_invernada: {
     nombre: 'Compra de invernada', clase: 'entrada',
-    campos: ['establecimiento_destino', 'categoria_destino'],
+    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
   },
   paricion: {
     nombre: 'Parición', clase: 'entrada',
-    campos: ['establecimiento_destino', 'categoria_destino'],
+    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
     categoriasPermitidas: ['macho', 'hembra'],
   },
   venta_gordo: {
     nombre: 'Venta de gordo', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen'],
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   venta_vaca_prenada: {
     nombre: 'Venta de vaca preñada', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen'],
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   venta_invernada: {
     nombre: 'Venta de invernada', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen'],
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   faena_conserva: {
     nombre: 'Vaca faena / conserva', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen'],
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   mortandad: {
     nombre: 'Mortandad', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen'],
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   traslado: {
     nombre: 'Traslado entre establecimientos', clase: 'interna',
-    campos: ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen'],
+    campos: ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen', 'titular_origen'],
     duplicarCategoriaEnDestino: true,
+    duplicarTitularEnDestino: true,
   },
   cambio_categoria: {
     nombre: 'Cambio de categoría', clase: 'interna',
-    campos: ['establecimiento_origen', 'categoria_origen', 'categoria_destino'],
+    campos: ['establecimiento_origen', 'categoria_origen', 'categoria_destino', 'titular_origen'],
     duplicarEstablecimientoEnDestino: true,
+    duplicarTitularEnDestino: true,
+  },
+  cambio_titular: {
+    nombre: 'Cambio de titularidad', clase: 'interna',
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen', 'titular_destino'],
+    duplicarEstablecimientoEnDestino: true,
+    duplicarCategoriaEnDestino: true,
+  },
+  apertura_stock: {
+    nombre: 'Apertura de stock', clase: 'entrada',
+    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
+    soloOwner: true,
   },
 };
 
