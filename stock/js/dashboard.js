@@ -106,6 +106,12 @@ function renderGlobal(rows) {
     tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td>`;
     tbody.appendChild(tr);
   }
+
+  const totalGeneral = Object.values(totales).reduce((a, b) => a + b, 0);
+  const trTotal = document.createElement('tr');
+  trTotal.classList.add('fila-total');
+  trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td>`;
+  tbody.appendChild(trTotal);
 }
 
 function renderPorEstablecimiento(matriz) {

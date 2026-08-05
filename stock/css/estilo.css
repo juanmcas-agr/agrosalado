@@ -320,6 +320,26 @@ button:active { filter: brightness(0.9); }
 .tabla tr.anulado { color: #999; text-decoration: line-through; }
 .tabla tr.fila-total td { background: #e9ecef; border-top: 2px solid #ccc; }
 
+/* separación entre los botones de vista (Grupo/Agro/Doña/Capitalizadores)
+   y la tabla que les sigue */
+#dash-categoria-vista, #dash-establecimiento-vista { margin-bottom: 10px; }
+
+/* columnas parejas en la matriz por establecimiento: el texto de la
+   categoría envuelve en 2 líneas en vez de forzar columnas angostas.
+   Ancho fijo por columna (no 100%) para que, si no entra, scrollee
+   horizontal en vez de aplastar el texto letra por letra. */
+#dash-establecimientos-tabla { table-layout: fixed; width: 660px; max-width: none; }
+#dash-establecimientos-tabla th,
+#dash-establecimientos-tabla td {
+  width: 80px;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: break-word;
+  text-align: center;
+}
+#dash-establecimientos-tabla th:first-child,
+#dash-establecimientos-tabla td:first-child { width: 100px; text-align: left; }
+
 .filtros {
   display: flex;
   flex-wrap: wrap;

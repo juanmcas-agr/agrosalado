@@ -1,5 +1,5 @@
 // v.1.x.x: fase definitiva. El tercer número sube con cada modificación.
-export const VERSION = '1.0.2';
+export const VERSION = '1.0.3';
 
 // Completar con los datos del proyecto de Supabase (Project Settings > API).
 // La "anon key" es pública y segura para exponer en el cliente.
