@@ -126,11 +126,14 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 .formulario .full { grid-column: 1 / -1; }
 
 .campo-password { position: relative; }
-.campo-password input { padding-right: 64px; }
+.campo-password input { padding-right: 46px; }
 .boton-mostrar-clave {
-  position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-  width: auto; background: transparent; color: #666;
-  border: none; padding: 6px 8px; font-size: 0.8em;
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: #555;
+  border: none; padding: 0; font-size: 1.25em;
+  cursor: pointer;
 }
 
 .campo-grupo { margin: 6px 0; }

@@ -74,7 +74,7 @@ function wireMostrarClave() {
   boton.addEventListener('click', () => {
     const mostrar = input.type === 'password';
     input.type = mostrar ? 'text' : 'password';
-    boton.textContent = mostrar ? 'Ocultar' : 'Mostrar';
+    boton.textContent = mostrar ? '🙈' : '👁️';
   });
 }
 

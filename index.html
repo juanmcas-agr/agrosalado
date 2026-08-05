@@ -32,6 +32,16 @@
                   url('/assets/fondo-login.jpg') center top/cover no-repeat;
     }
 
+    .version-footer {
+      position: fixed;
+      left: 6px;
+      bottom: 58px;
+      font-size: 0.7em;
+      color: #999;
+      z-index: 100;
+      pointer-events: none;
+    }
+
     /* Layout en columna (en vez de position:fixed para la barra inferior,
        poco confiable en iOS Safari/PWA instalada) */
     .app-layout {
@@ -433,11 +443,14 @@
     #gate-overlay button { width: 100%; }
     #gate-mensaje { color: #ad1e19; font-size: 0.85em; min-height: 1.2em; }
     .campo-password { position: relative; }
-    .campo-password input { padding-right: 64px; width: 100%; box-sizing: border-box; }
-    .boton-mostrar-clave {
-      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-      width: auto; background: transparent; color: #666;
-      border: none; padding: 6px 8px; font-size: 0.8em;
+    .campo-password input { padding-right: 46px; width: 100%; box-sizing: border-box; }
+    #gate-overlay button.boton-mostrar-clave {
+      position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+      width: 34px; height: 34px;
+      display: flex; align-items: center; justify-content: center;
+      background: transparent; color: #555;
+      border: none; padding: 0; font-size: 1.25em;
+      cursor: pointer;
     }
 
     /* ── PRINT ── */
@@ -452,6 +465,8 @@
 
   <div class="fondo-fijo"></div>
 
+  <div id="version-footer" class="version-footer"></div>
+
   <div id="gate-overlay">
     <img src="/assets/logo-full.png" alt="AGROSALADO" class="gate-logo">
     <div id="gate-cargando">Verificando acceso…</div>
@@ -459,7 +474,7 @@
       <input id="gate-email" type="email" placeholder="Email" required autocomplete="username">
       <div class="campo-password">
         <input id="gate-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
-        <button type="button" id="gate-mostrar-clave" class="boton-mostrar-clave">Mostrar</button>
+        <button type="button" id="gate-mostrar-clave" class="boton-mostrar-clave">👁️</button>
       </div>
       <button type="submit">Ingresar</button>
       <div id="gate-mensaje"></div>
@@ -494,7 +509,7 @@
       const boton = document.getElementById('gate-mostrar-clave');
       const mostrar = input.type === 'password';
       input.type = mostrar ? 'text' : 'password';
-      boton.textContent = mostrar ? 'Ocultar' : 'Mostrar';
+      boton.textContent = mostrar ? '🙈' : '👁️';
     });
 
     async function verificarAcceso() {
@@ -995,7 +1010,10 @@
       document.getElementById('plazoPagoFecha').style.display = 'none';
     }
 
+    const VERSION = '1.0.0';
+
     window.addEventListener("DOMContentLoaded", () => {
+      document.getElementById('version-footer').textContent = 'v.' + VERSION;
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
 
       document.getElementById('liquidaSaldo').addEventListener('change', function () {
