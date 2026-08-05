@@ -150,7 +150,7 @@ function poblarSelectCapitalizadores(idSelect) {
 
 function inicializarSelectorVista(idGrupo, idCapWrap, idCapSelect, onCambio) {
   crearGrupoBotones(idGrupo, [
-    { id: 'grupo', nombre: 'Grupo' },
+    { id: 'grupo', nombre: 'AS + DJ' },
     { id: 'agro_salado', nombre: 'Agro Salado' },
     { id: 'dona_julia', nombre: 'Doña Julia' },
     { id: 'capitalizadores', nombre: 'Capitalizadores' },

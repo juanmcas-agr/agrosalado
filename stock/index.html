@@ -18,11 +18,8 @@
 
   <div id="version-footer" class="version-footer"></div>
 
-  <nav class="tab-bar-inferior">
-    <button type="button" id="tabbar-granos"><span class="tab-icono">🌾</span> Granos</button>
-    <button type="button" class="activo" disabled><span class="tab-icono">🐄</span> Hacienda</button>
-    <button type="button" id="tabbar-posgranaria"><span class="tab-icono">📈</span> Pos. Granaria</button>
-  </nav>
+  <div class="app-layout">
+  <div class="app-scroll">
 
   <!-- ─── LOGIN ─── -->
   <section id="pantalla-login" class="pantalla-login">
@@ -138,8 +135,8 @@
       <div class="resumen-titularidad">
         <div><span>Agro Salado</span><strong id="dash-total-agro">0</strong></div>
         <div><span>Doña Julia</span><strong id="dash-total-dona">0</strong></div>
-        <div><span>Grupo</span><strong id="dash-total-grupo">0</strong></div>
-        <div><span>Terceros</span><strong id="dash-total-terceros">0</strong></div>
+        <div><span>AS + DJ</span><strong id="dash-total-grupo">0</strong></div>
+        <div><span>Capitalizadores</span><strong id="dash-total-terceros">0</strong></div>
         <div class="destacado"><span>Total general</span><strong id="dash-total-general">0</strong></div>
       </div>
 
@@ -201,6 +198,16 @@
         </table>
       </div>
     </section>
+  </div>
+
+  </div>
+
+  <nav class="tab-bar-inferior">
+    <button type="button" id="tabbar-granos"><span class="tab-icono">🌾</span> Granos</button>
+    <button type="button" class="activo" disabled><span class="tab-icono">🐄</span> Hacienda</button>
+    <button type="button" id="tabbar-posgranaria"><span class="tab-icono">📈</span> Pos. Granaria</button>
+  </nav>
+
   </div>
 
   <script type="module" src="js/app.js"></script>

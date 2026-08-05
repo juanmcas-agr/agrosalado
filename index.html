@@ -14,9 +14,12 @@
   <style>
     * { box-sizing: border-box; }
 
+    html, body {
+      height: 100%;
+      margin: 0;
+    }
+
     body {
-      margin: 0; padding: 12px;
-      padding-bottom: 76px;
       font-family: Arial, sans-serif;
       background-color: #f2f2f2;
       overflow-x: hidden;
@@ -27,6 +30,21 @@
       position: fixed; inset: 0; z-index: -1;
       background: linear-gradient(rgba(242,242,242,0.55), rgba(242,242,242,0.55)),
                   url('/assets/fondo-login.jpg') center top/cover no-repeat;
+    }
+
+    /* Layout en columna (en vez de position:fixed para la barra inferior,
+       poco confiable en iOS Safari/PWA instalada) */
+    .app-layout {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      height: 100dvh;
+    }
+    .app-scroll {
+      flex: 1 1 auto;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+      padding: 12px;
     }
 
     .header-marca {
@@ -43,8 +61,7 @@
 
     /* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria) ── */
     .tab-bar-inferior {
-      position: fixed;
-      left: 0; right: 0; bottom: 0;
+      flex-shrink: 0;
       display: flex;
       background: white;
       box-shadow: 0 -1px 6px rgba(0,0,0,0.12);
@@ -224,7 +241,7 @@
 
     /* ── DESKTOP (768px+) ── */
     @media (min-width: 768px) {
-      body { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
+      .app-scroll { padding: 20px 24px; max-width: 1200px; margin: 0 auto; }
 
       h2 { font-size: 1.6em; margin-bottom: 20px; }
 
@@ -504,6 +521,9 @@
     verificarAcceso();
   </script>
 
+  <div class="app-layout">
+  <div class="app-scroll">
+
   <div class="header-marca">
     <img src="/assets/icon-mark.png" alt="">
     <span>AGRO SALADO</span>
@@ -687,6 +707,8 @@
     </div>
   </div>
 
+  </div>
+
   <nav class="tab-bar-inferior">
     <button type="button" class="activo">
       <span class="tab-icono">🌾</span> Granos
@@ -698,6 +720,8 @@
       <span class="tab-icono">📈</span> Pos. Granaria
     </button>
   </nav>
+
+  </div>
 
   <!-- Modal usar pizarra -->
   <div id="modalPizarra" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">

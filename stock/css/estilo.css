@@ -1,8 +1,11 @@
 * { box-sizing: border-box; }
 
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
 body {
-  margin: 0; padding: 12px;
-  padding-bottom: 76px;
   font-family: Arial, sans-serif;
   background-color: #f2f2f2;
   color: #2c3e50;
@@ -15,10 +18,25 @@ body {
               url('/assets/fondo-login.jpg') center top/cover no-repeat;
 }
 
+/* Layout en columna (en vez de position:fixed, poco confiable en iOS
+   Safari/PWA instalada) para que la barra inferior quede siempre pegada
+   abajo sin que el scroll la tape ni la desplace. */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+.app-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+
 /* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria) ── */
 .tab-bar-inferior {
-  position: fixed;
-  left: 0; right: 0; bottom: 0;
+  flex-shrink: 0;
   display: flex;
   background: white;
   box-shadow: 0 -1px 6px rgba(0,0,0,0.12);
