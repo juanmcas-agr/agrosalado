@@ -2,8 +2,11 @@
 // No cachea llamadas a Supabase — eso lo maneja IndexedDB (ver js/db-local.js
 // y js/sync.js), para no tener dos mecanismos de "offline" compitiendo.
 
-const CACHE_NAME = 'agrosalado-stock-shell-v17';
-const APP_SHELL = [
+const CACHE_NAME = 'agrosalado-stock-shell-v18';
+
+// Local: si falta CUALQUIERA de estos, no hay app-shell offline, así que
+// tienen que cachearse sí o sí (si uno falla, falla toda la instalación).
+const APP_SHELL_LOCAL = [
   './',
   './index.html',
   './manifest.json',
@@ -25,13 +28,29 @@ const APP_SHELL = [
   '/assets/icon-192.png',
   '/assets/logo-full.png',
   '/assets/fondo-login.jpg',
+];
+
+// CDNs externos: mejor esfuerzo. Antes iban en el mismo cache.addAll() que
+// lo local — un solo hipo de red cacheando esm.sh o sheetjs.com (algo común
+// en wifi casera) hacía fallar TODA la instalación, dejando el celular sin
+// ningún respaldo offline (ni siquiera el HTML/CSS/JS propio). Ahora, si
+// estos fallan, la app igual carga offline (exportar a Excel puede no
+// andar sin red, pero el resto sí).
+const APP_SHELL_EXTERNO = [
   'https://esm.sh/@supabase/supabase-js@2',
   'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js',
 ];
 
 self.addEventListener('install', (evento) => {
   evento.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+    caches.open(CACHE_NAME).then(async (cache) => {
+      await cache.addAll(APP_SHELL_LOCAL);
+      await Promise.all(
+        APP_SHELL_EXTERNO.map((url) =>
+          cache.add(url).catch((error) => console.warn('No se pudo precachear (no crítico):', url, error))
+        )
+      );
+    })
   );
   self.skipWaiting();
 });
@@ -71,7 +90,15 @@ self.addEventListener('fetch', (evento) => {
           caches.open(CACHE_NAME).then((cache) => cache.put(evento.request, copia));
           return respuesta;
         })
-        .catch(() => cacheada);
+        .catch(() => {
+          if (cacheada) return cacheada;
+          // Sin red y sin esta URL puntual en cache (ej. llegó con algo
+          // distinto al final, o es la primera vez): si es una navegación,
+          // devolvemos igual el shell de la app en vez de dejar que el
+          // navegador muestre su propio error de "sin conexión".
+          if (evento.request.mode === 'navigate') return caches.match('./index.html');
+          return undefined;
+        });
       return cacheada || red;
     })
   );
