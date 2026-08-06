@@ -57,7 +57,12 @@ exports.handler = async function (event) {
     if (Array.isArray(destinatariosCliente) && destinatariosCliente.length) {
       payload.bcc = destinatariosCliente.filter(Boolean);
     }
-    if (imagenBase64) {
+    // Resend exige dominio verificado para mandar adjuntos, incluso usando
+    // onboarding@resend.dev — sin RESEND_FROM (dominio propio verificado)
+    // el mail con la captura adjunta se rechaza entero. Mientras tanto se
+    // manda sin la imagen (toda la info ya está en el cuerpo); apenas se
+    // configure RESEND_FROM con el dominio verificado, vuelve sola.
+    if (imagenBase64 && process.env.RESEND_FROM) {
       payload.attachments = [{ filename: 'negocio.png', content: imagenBase64 }];
     }
 
