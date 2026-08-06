@@ -372,6 +372,28 @@ language sql security definer as
 
 grant execute on function siguiente_numero_orden() to authenticated;
 
+-- Clientes: nombre + mail opcional, para autocompletar el campo "Cliente"
+-- del formulario y poder mandarles por mail la liquidación cuando se
+-- cierra un negocio a su nombre.
+create table clientes (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  email text,
+  creado_at timestamptz not null default now()
+);
+create unique index clientes_nombre_lower_idx on clientes (lower(nombre));
+
+alter table clientes enable row level security;
+
+create policy clientes_select on clientes for select to authenticated
+  using (rol_actual() = 'owner');
+create policy clientes_insert on clientes for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy clientes_update on clientes for update to authenticated
+  using (rol_actual() = 'owner');
+create policy clientes_delete on clientes for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:

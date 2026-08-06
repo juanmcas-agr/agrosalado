@@ -34,7 +34,7 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { imagenBase64, subject, mensajeHtml } = JSON.parse(event.body);
+    const { imagenBase64, subject, mensajeHtml, destinatariosCliente } = JSON.parse(event.body);
     if (!subject || !mensajeHtml) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Falta el asunto o el cuerpo del mail.' }) };
     }
@@ -50,6 +50,13 @@ exports.handler = async function (event) {
       subject,
       html: mensajeHtml,
     };
+    // El cliente va en bcc (no en to/cc) para que no vea las direcciones
+    // internas del negocio. Nota: mientras el dominio de Resend no esté
+    // verificado, esto igual va a fallar salvo que el bcc sea el mail con
+    // el que te registraste en Resend — misma limitación que ya conocemos.
+    if (Array.isArray(destinatariosCliente) && destinatariosCliente.length) {
+      payload.bcc = destinatariosCliente.filter(Boolean);
+    }
     if (imagenBase64) {
       payload.attachments = [{ filename: 'negocio.png', content: imagenBase64 }];
     }

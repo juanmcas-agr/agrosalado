@@ -170,6 +170,69 @@
     .campo-con-boton input { flex: 1; }
     .campo-con-boton button { width: auto; padding: 0 12px; }
 
+    /* ── Combobox de Cliente ── */
+    .campo-cliente-wrap { position: relative; }
+    .cliente-dropdown {
+      position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+      background: white; border: 1px solid #ccc; border-radius: 8px;
+      max-height: 220px; overflow-y: auto; z-index: 50;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .cliente-item {
+      padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #eee;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      color: #2c3e50; font-size: 0.95em;
+    }
+    .cliente-item:last-child { border-bottom: none; }
+    .cliente-item:hover, .cliente-item:active { background: #f2f2f2; }
+    .cliente-item .cliente-mail-badge { font-size: 0.75em; color: #888; }
+    .cliente-dropdown .cliente-vacio { padding: 10px 12px; color: #888; font-size: 0.9em; }
+
+    /* ── Panel de Configuración ── */
+    #botonConfig {
+      position: fixed; top: 12px; right: 12px; z-index: 500;
+      width: 44px; height: 44px; padding: 0; border-radius: 50%;
+      font-size: 1.3em; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    #panelConfigFondo {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 900;
+      display: none;
+    }
+    #panelConfigFondo.abierto { display: block; }
+    #panelConfig {
+      position: fixed; top: 0; right: 0; height: 100%; width: min(360px, 90vw);
+      background: #f2f2f2; z-index: 901; box-shadow: -4px 0 20px rgba(0,0,0,0.25);
+      transform: translateX(100%); transition: transform 0.25s ease;
+      overflow-y: auto; padding: 16px;
+    }
+    #panelConfig.abierto { transform: translateX(0); }
+    #panelConfig h2 { margin: 0 0 16px; color: #1d5236; font-size: 1.2em; }
+    #panelConfig h3 { margin: 0 0 8px; color: #1d5236; font-size: 1em; }
+    #panelConfig section {
+      background: white; border-radius: 8px; padding: 12px;
+      margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    #panelConfig input, #panelConfig select {
+      font-size: 16px; height: 44px; padding: 8px 10px; border-radius: 6px;
+      border: 1px solid #ccc; width: 100%; margin-bottom: 8px;
+      background: white; -webkit-appearance: none; appearance: none;
+    }
+    #panelConfig select { appearance: auto; -webkit-appearance: auto; }
+    #panelConfig .cerrar-panel { width: auto; padding: 6px 12px; background: #888; }
+    #panelConfig .mensaje-panel { font-size: 0.85em; margin-top: 4px; }
+    #panelConfig .mensaje-panel.ok { color: #1e7e34; }
+    #panelConfig .mensaje-panel.error { color: #ad1e19; }
+    .lista-clientes {
+      display: flex; flex-direction: column; gap: 6px;
+      margin-bottom: 12px; max-height: 200px; overflow-y: auto;
+    }
+    .lista-clientes .fila-cliente {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 6px 8px; border: 1px solid #eee; border-radius: 6px; font-size: 0.9em;
+    }
+    .lista-clientes .fila-cliente button { width: auto; padding: 4px 8px; font-size: 0.8em; background: #ad1e19; }
+
     /* ── BOTONES ── */
     button {
       background-color: #8a5a34; color: white;
@@ -446,7 +509,8 @@
     #gate-mensaje { color: #ad1e19; font-size: 0.85em; min-height: 1.2em; }
     .campo-password { position: relative; }
     .campo-password input { padding-right: 46px; width: 100%; box-sizing: border-box; }
-    #gate-overlay button.boton-mostrar-clave {
+    #gate-overlay button.boton-mostrar-clave,
+    .campo-password button.boton-mostrar-clave {
       position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
       width: 34px; height: 34px;
       display: flex; align-items: center; justify-content: center;
@@ -562,6 +626,8 @@
     <span>AGRO SALADO</span>
   </div>
 
+  <button type="button" id="botonConfig" class="ocultar-al-exportar" onclick="abrirPanelConfig()" title="Configuración">⚙️</button>
+
   <div class="panel-pizarra ocultar-al-exportar">
     <div class="pizarra-header">
       <span class="pizarra-titulo">🌾 Pizarra BCR</span>
@@ -646,7 +712,11 @@
   </div>
 
   <div class="formulario">
-    <input type="text" id="cliente" placeholder="Cliente">
+    <div class="campo-cliente-wrap campo-con-boton">
+      <input type="text" id="cliente" placeholder="Cliente" autocomplete="off">
+      <button type="button" id="clienteToggle" onclick="toggleClienteDropdown()">▾</button>
+      <div id="clienteDropdown" class="cliente-dropdown" style="display:none;"></div>
+    </div>
     <select id="producto">
       <option value="SOJA">SOJA</option>
       <option value="TRIGO">TRIGO</option>
@@ -764,6 +834,51 @@
   </nav>
 
   </div>
+
+  <!-- Panel de Configuración -->
+  <div id="panelConfigFondo" onclick="cerrarPanelConfig()"></div>
+  <aside id="panelConfig">
+    <h2>⚙️ Configuración</h2>
+    <button type="button" class="cerrar-panel" onclick="cerrarPanelConfig()">✕ Cerrar</button>
+    <div style="clear:both;"></div>
+
+    <section>
+      <h3>Nuevo usuario</h3>
+      <input type="text" id="cfgUsuarioNombre" placeholder="Nombre completo">
+      <input type="email" id="cfgUsuarioEmail" placeholder="Email">
+      <div class="campo-password">
+        <input type="password" id="cfgUsuarioPassword" placeholder="Contraseña" autocomplete="new-password">
+        <button type="button" id="cfgUsuarioMostrarClave" class="boton-mostrar-clave">👁️</button>
+      </div>
+      <select id="cfgUsuarioRol">
+        <option value="encargado">Encargado</option>
+        <option value="administrativo">Administrativo</option>
+        <option value="owner">Owner</option>
+      </select>
+      <button type="button" onclick="crearUsuario()">Crear usuario</button>
+      <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
+    </section>
+
+    <section>
+      <h3>Cambiar contraseña</h3>
+      <select id="cfgClaveUsuario"></select>
+      <div class="campo-password">
+        <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva" autocomplete="new-password">
+        <button type="button" id="cfgClaveMostrarClave" class="boton-mostrar-clave">👁️</button>
+      </div>
+      <button type="button" onclick="cambiarClaveUsuario()">Cambiar contraseña</button>
+      <div id="cfgClaveMensaje" class="mensaje-panel"></div>
+    </section>
+
+    <section>
+      <h3>Clientes</h3>
+      <div id="cfgListaClientes" class="lista-clientes"></div>
+      <input type="text" id="cfgClienteNombre" placeholder="Nombre del cliente">
+      <input type="email" id="cfgClienteEmail" placeholder="Email (opcional)">
+      <button type="button" onclick="agregarClienteDesdePanel()">Agregar cliente</button>
+      <div id="cfgClienteMensaje" class="mensaje-panel"></div>
+    </section>
+  </aside>
 
   <!-- Modal usar pizarra -->
   <div id="modalPizarra" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
@@ -1067,6 +1182,250 @@
       document.getElementById('version-footer').textContent = 'v.' + d.version;
     }).catch(() => {});
 
+    // ── Clientes: combobox del campo "Cliente" ──
+    let clientesCache = [];
+
+    async function cargarClientes() {
+      const { data, error } = await window.supabaseClient.from('clientes').select('*').order('nombre');
+      if (!error && data) clientesCache = data;
+      return clientesCache;
+    }
+
+    function buscarClientePorNombre(nombre) {
+      const buscado = (nombre || '').trim().toLowerCase();
+      return clientesCache.find((c) => c.nombre.trim().toLowerCase() === buscado);
+    }
+
+    function renderClienteDropdown(lista) {
+      const dropdown = document.getElementById('clienteDropdown');
+      if (!lista.length) {
+        dropdown.innerHTML = '<div class="cliente-vacio">Sin clientes cargados.</div>';
+      } else {
+        dropdown.innerHTML = '';
+        for (const c of lista) {
+          const item = document.createElement('div');
+          item.className = 'cliente-item';
+          item.innerHTML = `<span>${c.nombre}</span>` + (c.email ? '<span class="cliente-mail-badge">✉️</span>' : '');
+          item.onclick = () => seleccionarCliente(c);
+          dropdown.appendChild(item);
+        }
+      }
+      dropdown.style.display = 'block';
+    }
+
+    function toggleClienteDropdown() {
+      const dropdown = document.getElementById('clienteDropdown');
+      if (dropdown.style.display === 'block') {
+        dropdown.style.display = 'none';
+        return;
+      }
+      renderClienteDropdown(clientesCache);
+    }
+
+    async function seleccionarCliente(cliente) {
+      document.getElementById('cliente').value = cliente.nombre;
+      document.getElementById('clienteDropdown').style.display = 'none';
+      if (!cliente.email && confirm(`"${cliente.nombre}" no tiene mail registrado. ¿Querés cargarlo ahora?`)) {
+        const email = prompt('Email de contacto:');
+        if (email && email.trim()) {
+          const { error } = await window.supabaseClient.from('clientes').update({ email: email.trim() }).eq('id', cliente.id);
+          if (!error) cliente.email = email.trim();
+        }
+      }
+    }
+
+    // Al agregar una alternativa, si el nombre escrito no está en la lista
+    // de clientes, ofrece guardarlo para el autocompletado de la próxima vez.
+    async function asegurarClienteGuardado(nombre) {
+      const limpio = (nombre || '').trim();
+      if (!limpio || buscarClientePorNombre(limpio)) return;
+      if (!confirm(`"${limpio}" no está en la lista de clientes. ¿Guardarlo como cliente nuevo?`)) return;
+      const email = prompt('Email de contacto (opcional, dejalo vacío si no querés cargarlo ahora):');
+      const { data, error } = await window.supabaseClient.from('clientes')
+        .insert({ nombre: limpio, email: email && email.trim() ? email.trim() : null })
+        .select().single();
+      if (!error && data) clientesCache.push(data);
+    }
+
+    document.addEventListener('input', (evento) => {
+      if (evento.target && evento.target.id === 'cliente') {
+        const texto = evento.target.value.trim().toLowerCase();
+        if (!texto) { document.getElementById('clienteDropdown').style.display = 'none'; return; }
+        renderClienteDropdown(clientesCache.filter((c) => c.nombre.toLowerCase().includes(texto)));
+      }
+    });
+
+    document.addEventListener('click', (evento) => {
+      const wrap = document.querySelector('.campo-cliente-wrap');
+      if (wrap && !wrap.contains(evento.target)) {
+        document.getElementById('clienteDropdown').style.display = 'none';
+      }
+    });
+
+    // ── Panel de Configuración ──
+    function abrirPanelConfig() {
+      document.getElementById('panelConfigFondo').classList.add('abierto');
+      document.getElementById('panelConfig').classList.add('abierto');
+      poblarSelectUsuarios();
+      renderListaClientesPanel();
+    }
+
+    function cerrarPanelConfig() {
+      document.getElementById('panelConfigFondo').classList.remove('abierto');
+      document.getElementById('panelConfig').classList.remove('abierto');
+    }
+
+    async function poblarSelectUsuarios() {
+      const select = document.getElementById('cfgClaveUsuario');
+      const { data, error } = await window.supabaseClient.from('perfiles').select('*').order('nombre_completo');
+      select.innerHTML = '';
+      if (error || !data) return;
+      for (const p of data) {
+        const opt = document.createElement('option');
+        opt.value = p.user_id;
+        opt.textContent = `${p.nombre_completo} (${p.rol})`;
+        select.appendChild(opt);
+      }
+    }
+
+    function renderListaClientesPanel() {
+      const cont = document.getElementById('cfgListaClientes');
+      cont.innerHTML = '';
+      if (!clientesCache.length) {
+        cont.innerHTML = '<div style="color:#888;font-size:0.9em;">Todavía no hay clientes cargados.</div>';
+        return;
+      }
+      for (const c of clientesCache) {
+        const fila = document.createElement('div');
+        fila.className = 'fila-cliente';
+        fila.innerHTML = `<span>${c.nombre}${c.email ? ' — ' + c.email : ''}</span>`;
+        const btn = document.createElement('button');
+        btn.textContent = '🗑️';
+        btn.onclick = () => eliminarClientePanel(c);
+        fila.appendChild(btn);
+        cont.appendChild(fila);
+      }
+    }
+
+    async function eliminarClientePanel(cliente) {
+      if (!confirm(`¿Eliminar el cliente "${cliente.nombre}"?`)) return;
+      const { error } = await window.supabaseClient.from('clientes').delete().eq('id', cliente.id);
+      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+      clientesCache = clientesCache.filter((c) => c.id !== cliente.id);
+      renderListaClientesPanel();
+    }
+
+    async function agregarClienteDesdePanel() {
+      const nombre = document.getElementById('cfgClienteNombre').value.trim();
+      const email = document.getElementById('cfgClienteEmail').value.trim();
+      const msj = document.getElementById('cfgClienteMensaje');
+      msj.textContent = '';
+      if (!nombre) { msj.textContent = 'Falta el nombre.'; msj.className = 'mensaje-panel error'; return; }
+
+      const { data, error } = await window.supabaseClient.from('clientes')
+        .insert({ nombre, email: email || null }).select().single();
+      if (error) {
+        msj.textContent = 'No se pudo guardar: ' + error.message;
+        msj.className = 'mensaje-panel error';
+        return;
+      }
+      clientesCache.push(data);
+      clientesCache.sort((a, b) => a.nombre.localeCompare(b.nombre));
+      document.getElementById('cfgClienteNombre').value = '';
+      document.getElementById('cfgClienteEmail').value = '';
+      msj.textContent = 'Cliente guardado.';
+      msj.className = 'mensaje-panel ok';
+      renderListaClientesPanel();
+    }
+
+    // ── Crear usuario / cambiar contraseña (vía funciones admin con service role) ──
+    async function crearUsuario() {
+      const nombre_completo = document.getElementById('cfgUsuarioNombre').value.trim();
+      const email = document.getElementById('cfgUsuarioEmail').value.trim();
+      const password = document.getElementById('cfgUsuarioPassword').value;
+      const rol = document.getElementById('cfgUsuarioRol').value;
+      const msj = document.getElementById('cfgUsuarioMensaje');
+      msj.textContent = '';
+
+      if (!nombre_completo || !email || !password) {
+        msj.textContent = 'Completá nombre, email y contraseña.';
+        msj.className = 'mensaje-panel error';
+        return;
+      }
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
+
+      try {
+        const res = await fetch('/.netlify/functions/admin-crear-usuario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ email, password, nombre_completo, rol }),
+        });
+        const datos = await res.json();
+        if (!res.ok) {
+          msj.textContent = datos.error || 'No se pudo crear el usuario.';
+          msj.className = 'mensaje-panel error';
+          return;
+        }
+        msj.textContent = `Usuario "${nombre_completo}" creado.`;
+        msj.className = 'mensaje-panel ok';
+        document.getElementById('cfgUsuarioNombre').value = '';
+        document.getElementById('cfgUsuarioEmail').value = '';
+        document.getElementById('cfgUsuarioPassword').value = '';
+        poblarSelectUsuarios();
+      } catch (error) {
+        msj.textContent = 'Error de red: ' + error.message;
+        msj.className = 'mensaje-panel error';
+      }
+    }
+
+    async function cambiarClaveUsuario() {
+      const user_id = document.getElementById('cfgClaveUsuario').value;
+      const password = document.getElementById('cfgClaveNueva').value;
+      const msj = document.getElementById('cfgClaveMensaje');
+      msj.textContent = '';
+
+      if (!user_id || !password) {
+        msj.textContent = 'Elegí un usuario y escribí la contraseña nueva.';
+        msj.className = 'mensaje-panel error';
+        return;
+      }
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
+
+      try {
+        const res = await fetch('/.netlify/functions/admin-cambiar-clave', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ user_id, password }),
+        });
+        const datos = await res.json();
+        if (!res.ok) {
+          msj.textContent = datos.error || 'No se pudo cambiar la contraseña.';
+          msj.className = 'mensaje-panel error';
+          return;
+        }
+        msj.textContent = 'Contraseña actualizada.';
+        msj.className = 'mensaje-panel ok';
+        document.getElementById('cfgClaveNueva').value = '';
+      } catch (error) {
+        msj.textContent = 'Error de red: ' + error.message;
+        msj.className = 'mensaje-panel error';
+      }
+    }
+
+    function wireMostrarClave(idInput, idBoton) {
+      const input = document.getElementById(idInput);
+      const boton = document.getElementById(idBoton);
+      boton.addEventListener('click', () => {
+        const mostrar = input.type === 'password';
+        input.type = mostrar ? 'text' : 'password';
+        boton.textContent = mostrar ? '🙈' : '👁️';
+      });
+    }
+
     function toggleLiquidaSaldo(forzar) {
       const btn = document.getElementById('liquidaSaldo');
       const activo = forzar !== undefined ? forzar : !btn.classList.contains('activo');
@@ -1081,6 +1440,9 @@
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
       cargarTC();
       cargarPizarra();
+      cargarClientes();
+      wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
+      wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
 
       // Enter avanza al siguiente campo de texto/número del formulario
       // Saltea desplegables (select) y date
@@ -1334,6 +1696,9 @@
     async function agregarAlternativa(codigoExistente) {
       const codigo           = codigoExistente || await generarCodigoUnico();
       const cliente         = document.getElementById('cliente').value;
+      // Solo se ofrece guardar el cliente cuando es una alternativa nueva
+      // (no al restaurar un guardado/cerrado, para no interrumpir esa carga).
+      if (!codigoExistente) await asegurarClienteGuardado(cliente);
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
       const moneda          = document.getElementById('moneda').value;
@@ -1767,6 +2132,13 @@
 
       const body = { subject, mensajeHtml: cuerpoLineas };
       if (canvas) body.imagenBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+      // Si el cliente tiene mail registrado, se lo manda también (en bcc,
+      // así no ve las direcciones internas de AGROSALADO).
+      const clienteGuardado = cliente && buscarClientePorNombre(cliente);
+      if (clienteGuardado && clienteGuardado.email) {
+        body.destinatariosCliente = [clienteGuardado.email];
+      }
 
       try {
         const res = await fetch('/.netlify/functions/enviar-liquidacion', {
