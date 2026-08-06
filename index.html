@@ -170,6 +170,23 @@
     .campo-con-boton input { flex: 1; }
     .campo-con-boton button { width: auto; padding: 0 12px; }
 
+    /* Selector de fecha "invisible" superpuesto al botón 📅: el toque del
+       usuario cae directo sobre el <input type="date"> real, así el
+       navegador abre su selector nativo siempre a la primera, sin
+       necesitar focus()/showPicker() por JS (poco confiables según
+       navegador/versión). */
+    .boton-fecha-wrap { position: relative; flex: 0 0 44px; height: 44px; }
+    .boton-fecha-wrap button {
+      width: 100%; height: 100%; padding: 0;
+      pointer-events: none;
+    }
+    .boton-fecha-wrap input[type="date"] {
+      position: absolute; inset: 0;
+      width: 100%; height: 100%;
+      opacity: 0; border: none; padding: 0; margin: 0;
+      cursor: pointer;
+    }
+
     /* ── Combobox de Cliente ── */
     .campo-cliente-wrap { position: relative; }
     .cliente-dropdown {
@@ -258,7 +275,22 @@
       display: flex; justify-content: space-between; align-items: center; gap: 8px;
       padding: 6px 8px; border: 1px solid #eee; border-radius: 6px; font-size: 0.9em;
     }
+    .lista-clientes .fila-cliente.seleccionada { border-color: #8a5a34; background: #fbf3ec; }
+    .lista-clientes .fila-cliente > span:first-child { cursor: pointer; flex: 1; }
     .lista-clientes .fila-cliente button { width: auto; padding: 4px 8px; font-size: 0.8em; background: #ad1e19; }
+
+    /* ── Toast flotante (ej. "Mail enviado") ── */
+    .toast {
+      position: fixed; left: 50%; bottom: 90px;
+      transform: translate(-50%, 10px);
+      background: #2c3e50; color: white;
+      padding: 10px 18px; border-radius: 20px;
+      font-size: 0.9em; font-weight: bold;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+      z-index: 950; pointer-events: none;
+      opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
+    }
+    .toast.visible { opacity: 1; transform: translate(-50%, 0); }
 
     /* ── BOTONES ── */
     button {
@@ -780,9 +812,11 @@
     <button type="button" id="liquidaSaldo" class="boton-toggle" onclick="toggleLiquidaSaldo()">Liquida saldo</button>
     <div class="campo-con-boton">
       <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
-      <button type="button" onclick="togglePlazoFecha()">📅</button>
+      <div class="boton-fecha-wrap">
+        <button type="button" tabindex="-1" aria-hidden="true">📅</button>
+        <input type="date" id="plazoPagoFecha" onchange="aplicarPlazoFecha()" aria-label="Elegir fecha de plazo de pago">
+      </div>
     </div>
-    <input type="date" id="plazoPagoFecha" class="full" style="display:none;" onchange="aplicarPlazoFecha()">
     <input type="text" id="observaciones" placeholder="Observaciones" class="full">
   </div>
 
@@ -833,8 +867,9 @@
     <button id="cerrarNegocio" onclick="cerrarNegocio()" class="pendiente">
       🔒 CERRAR NEGOCIO
     </button>
-    <div id="cerrarNegocioMensaje" style="margin-top:8px;font-size:0.9em;font-weight:bold;min-height:1.2em;"></div>
   </div>
+
+  <div id="toast" class="toast"></div>
 
   <!-- Modal recuperar negocio -->
   <div id="modalRecuperar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
@@ -915,7 +950,8 @@
         <div id="cfgListaClientes" class="lista-clientes"></div>
         <input type="text" id="cfgClienteNombre" placeholder="Nombre del cliente">
         <input type="email" id="cfgClienteEmail" placeholder="Email (opcional)">
-        <button type="button" onclick="agregarClienteDesdePanel()">Agregar cliente</button>
+        <button type="button" id="cfgClienteGuardarBtn" onclick="agregarClienteDesdePanel()">Agregar cliente</button>
+        <button type="button" id="cfgClienteCancelarBtn" onclick="cancelarEdicionCliente()" style="display:none;background:#888;">Cancelar edición</button>
         <div id="cfgClienteMensaje" class="mensaje-panel"></div>
       </div>
     </div>
@@ -1199,23 +1235,12 @@
       }
     }
 
-    function togglePlazoFecha() {
-      // Antes intentaba abrir el selector nativo solo (focus()/showPicker()),
-      // pero según versión de navegador eso a veces no lo abre a la primera
-      // (hay que tocarlo dos veces) o directamente no abre nada. Más simple
-      // y confiable: solo mostrar el campo, y que el toque del usuario sobre
-      // el campo ya visible sea lo que abra el selector — eso sí funciona
-      // siempre, en cualquier navegador.
-      const campo = document.getElementById('plazoPagoFecha');
-      const mostrar = campo.style.display === 'none';
-      campo.style.display = mostrar ? 'block' : 'none';
-    }
-
     function aplicarPlazoFecha() {
-      const fecha = document.getElementById('plazoPagoFecha').value;
+      const campo = document.getElementById('plazoPagoFecha');
+      const fecha = campo.value;
       if (!fecha) return;
       document.getElementById('plazoPago').value = formatearFecha(fecha);
-      document.getElementById('plazoPagoFecha').style.display = 'none';
+      campo.value = '';
     }
 
     // Versión única compartida con la app Hacienda: /version.json en la raíz del sitio.
@@ -1247,7 +1272,15 @@
           const item = document.createElement('div');
           item.className = 'cliente-item';
           item.innerHTML = `<span>${c.nombre}</span>` + (c.email ? '<span class="cliente-mail-badge">✉️</span>' : '');
-          item.onclick = () => seleccionarCliente(c);
+          // mousedown (no click) + preventDefault: evita que el input
+          // pierda el foco al tocar el ítem, así el blur del campo Cliente
+          // no llega a dispararse con el texto viejo a medio escribir
+          // (eso hacía que preguntara si guardar "An" como cliente nuevo
+          // justo al elegir "Estancia La Fe" de la lista).
+          item.addEventListener('mousedown', (evento) => {
+            evento.preventDefault();
+            seleccionarCliente(c);
+          });
           dropdown.appendChild(item);
         }
       }
@@ -1392,6 +1425,8 @@
       }
     }
 
+    let clienteEditandoId = null;
+
     function renderListaClientesPanel() {
       const cont = document.getElementById('cfgListaClientes');
       cont.innerHTML = '';
@@ -1401,14 +1436,41 @@
       }
       for (const c of clientesCache) {
         const fila = document.createElement('div');
-        fila.className = 'fila-cliente';
-        fila.innerHTML = `<span>${c.nombre}${c.email ? ' — ' + c.email : ''}</span>`;
+        fila.className = 'fila-cliente' + (c.id === clienteEditandoId ? ' seleccionada' : '');
+
+        const info = document.createElement('span');
+        info.textContent = `${c.nombre}${c.email ? ' — ' + c.email : ''}`;
+        info.onclick = () => seleccionarClienteParaEditar(c);
+        fila.appendChild(info);
+
         const btn = document.createElement('button');
         btn.textContent = '🗑️';
         btn.onclick = () => eliminarClientePanel(c);
         fila.appendChild(btn);
+
         cont.appendChild(fila);
       }
+    }
+
+    // Tocar un cliente de la lista lo carga en el formulario de abajo para
+    // editar su nombre/mail (o solo cargarle el mail si no tenía).
+    function seleccionarClienteParaEditar(cliente) {
+      clienteEditandoId = cliente.id;
+      document.getElementById('cfgClienteNombre').value = cliente.nombre;
+      document.getElementById('cfgClienteEmail').value = cliente.email || '';
+      document.getElementById('cfgClienteGuardarBtn').textContent = 'Guardar cambios';
+      document.getElementById('cfgClienteCancelarBtn').style.display = 'block';
+      document.getElementById('cfgClienteMensaje').textContent = '';
+      renderListaClientesPanel();
+    }
+
+    function cancelarEdicionCliente() {
+      clienteEditandoId = null;
+      document.getElementById('cfgClienteNombre').value = '';
+      document.getElementById('cfgClienteEmail').value = '';
+      document.getElementById('cfgClienteGuardarBtn').textContent = 'Agregar cliente';
+      document.getElementById('cfgClienteCancelarBtn').style.display = 'none';
+      renderListaClientesPanel();
     }
 
     async function eliminarClientePanel(cliente) {
@@ -1416,7 +1478,8 @@
       const { error } = await window.supabaseClient.from('clientes').delete().eq('id', cliente.id);
       if (error) { alert('No se pudo eliminar: ' + error.message); return; }
       clientesCache = clientesCache.filter((c) => c.id !== cliente.id);
-      renderListaClientesPanel();
+      if (clienteEditandoId === cliente.id) cancelarEdicionCliente();
+      else renderListaClientesPanel();
     }
 
     async function agregarClienteDesdePanel() {
@@ -1425,6 +1488,23 @@
       const msj = document.getElementById('cfgClienteMensaje');
       msj.textContent = '';
       if (!nombre) { msj.textContent = 'Falta el nombre.'; msj.className = 'mensaje-panel error'; return; }
+
+      if (clienteEditandoId) {
+        const { data, error } = await window.supabaseClient.from('clientes')
+          .update({ nombre, email: email || null }).eq('id', clienteEditandoId)
+          .select().single();
+        if (error) {
+          msj.textContent = 'No se pudo guardar: ' + error.message;
+          msj.className = 'mensaje-panel error';
+          return;
+        }
+        const idx = clientesCache.findIndex((c) => c.id === clienteEditandoId);
+        if (idx !== -1) clientesCache[idx] = data;
+        msj.textContent = 'Cliente actualizado.';
+        msj.className = 'mensaje-panel ok';
+        cancelarEdicionCliente();
+        return;
+      }
 
       const { data, error } = await window.supabaseClient.from('clientes')
         .insert({ nombre, email: email || null }).select().single();
@@ -1966,6 +2046,10 @@
       boton.classList.remove('confirmado');
       boton.classList.add('pendiente');
       boton.innerHTML = "🔒 CERRAR NEGOCIO";
+      // El cliente se mantiene entre "Agregar Alternativa" (para comparar
+      // varias opciones del mismo cliente), pero acá sí se limpia: es un
+      // reseteo completo, listo para cargar un negocio distinto.
+      document.getElementById('cliente').value = '';
     }
 
     // ── Guardar / Recuperar negocio / Historial ──
@@ -2395,10 +2479,11 @@
     }
 
     function mostrarMensajeCerrarNegocio(texto, duracionMs) {
-      const el = document.getElementById('cerrarNegocioMensaje');
+      const el = document.getElementById('toast');
       el.textContent = texto;
+      el.classList.add('visible');
       clearTimeout(mostrarMensajeCerrarNegocio._timer);
-      mostrarMensajeCerrarNegocio._timer = setTimeout(() => { el.textContent = ''; }, duracionMs || 4000);
+      mostrarMensajeCerrarNegocio._timer = setTimeout(() => { el.classList.remove('visible'); }, duracionMs || 3000);
     }
 
     async function cerrarNegocio() {
