@@ -954,7 +954,8 @@
         <span>CLIENTES</span><span class="panel-menu-flecha">›</span>
       </button>
       <div id="seccionClientes" class="panel-seccion">
-        <div id="cfgListaClientes" class="lista-clientes"></div>
+        <select id="cfgListaClientes" onchange="onSeleccionClienteLista()"></select>
+        <button type="button" onclick="eliminarClienteSeleccionado()" style="background:#ad1e19;margin-bottom:8px;">🗑️ Eliminar seleccionado</button>
         <input type="text" id="cfgClienteNombre" placeholder="Nombre del cliente">
         <input type="email" id="cfgClienteEmail" placeholder="Email (opcional)">
         <button type="button" id="cfgClienteGuardarBtn" onclick="agregarClienteDesdePanel()">Agregar cliente</button>
@@ -967,7 +968,8 @@
       </button>
       <div id="seccionDestinatarios" class="panel-seccion">
         <p style="font-size:0.85em;color:#666;margin-top:0;">Tildá qué avisos recibe cada uno.</p>
-        <div id="cfgListaDestinatarios" class="lista-clientes"></div>
+        <select id="cfgListaDestinatarios" onchange="onSeleccionDestinatarioLista()"></select>
+        <button type="button" onclick="eliminarDestinatarioSeleccionado()" style="background:#ad1e19;margin-bottom:8px;">🗑️ Eliminar seleccionado</button>
         <input type="text" id="cfgDestinatarioNombre" placeholder="Nombre (opcional)">
         <input type="email" id="cfgDestinatarioEmail" placeholder="Email">
         <label class="check-inline">
@@ -1457,32 +1459,26 @@
     let clienteEditandoId = null;
 
     function renderListaClientesPanel() {
-      const cont = document.getElementById('cfgListaClientes');
-      cont.innerHTML = '';
-      if (!clientesCache.length) {
-        cont.innerHTML = '<div style="color:#888;font-size:0.9em;">Todavía no hay clientes cargados.</div>';
-        return;
-      }
+      const select = document.getElementById('cfgListaClientes');
+      select.innerHTML = '<option value="">— Elegir cliente para editar/eliminar —</option>';
       for (const c of clientesCache) {
-        const fila = document.createElement('div');
-        fila.className = 'fila-cliente' + (c.id === clienteEditandoId ? ' seleccionada' : '');
-
-        const info = document.createElement('span');
-        info.textContent = `${c.nombre}${c.email ? ' — ' + c.email : ''}`;
-        info.onclick = () => seleccionarClienteParaEditar(c);
-        fila.appendChild(info);
-
-        const btn = document.createElement('button');
-        btn.textContent = '🗑️';
-        btn.onclick = () => eliminarClientePanel(c);
-        fila.appendChild(btn);
-
-        cont.appendChild(fila);
+        const opt = document.createElement('option');
+        opt.value = c.id;
+        opt.textContent = `${c.nombre}${c.email ? ' — ' + c.email : ''}`;
+        select.appendChild(opt);
       }
+      select.value = clienteEditandoId || '';
     }
 
-    // Tocar un cliente de la lista lo carga en el formulario de abajo para
-    // editar su nombre/mail (o solo cargarle el mail si no tenía).
+    // Elegir un cliente del desplegable lo carga en el formulario de abajo
+    // para editar su nombre/mail (o solo cargarle el mail si no tenía).
+    function onSeleccionClienteLista() {
+      const id = document.getElementById('cfgListaClientes').value;
+      if (!id) { cancelarEdicionCliente(); return; }
+      const cliente = clientesCache.find((c) => c.id === id);
+      if (cliente) seleccionarClienteParaEditar(cliente);
+    }
+
     function seleccionarClienteParaEditar(cliente) {
       clienteEditandoId = cliente.id;
       document.getElementById('cfgClienteNombre').value = cliente.nombre;
@@ -1500,6 +1496,13 @@
       document.getElementById('cfgClienteGuardarBtn').textContent = 'Agregar cliente';
       document.getElementById('cfgClienteCancelarBtn').style.display = 'none';
       renderListaClientesPanel();
+    }
+
+    function eliminarClienteSeleccionado() {
+      const id = document.getElementById('cfgListaClientes').value;
+      const cliente = clientesCache.find((c) => c.id === id);
+      if (!cliente) { alert('Elegí un cliente de la lista primero.'); return; }
+      eliminarClientePanel(cliente);
     }
 
     async function eliminarClientePanel(cliente) {
@@ -1569,28 +1572,29 @@
     }
 
     function renderListaDestinatariosPanel() {
-      const cont = document.getElementById('cfgListaDestinatarios');
-      cont.innerHTML = '';
-      if (!destinatariosNegocioCache.length) {
-        cont.innerHTML = '<div style="color:#888;font-size:0.9em;">No hay destinatarios cargados — se va a usar la lista de respaldo interna.</div>';
-        return;
-      }
+      const select = document.getElementById('cfgListaDestinatarios');
+      select.innerHTML = '<option value="">— Elegir destinatario para editar/eliminar —</option>';
       for (const d of destinatariosNegocioCache) {
-        const fila = document.createElement('div');
-        fila.className = 'fila-cliente' + (d.id === destinatarioEditandoId ? ' seleccionada' : '');
-
-        const info = document.createElement('span');
-        info.textContent = (d.nombre ? `${d.nombre} — ${d.email}` : d.email) + etiquetasDestinatario(d);
-        info.onclick = () => seleccionarDestinatarioParaEditar(d);
-        fila.appendChild(info);
-
-        const btn = document.createElement('button');
-        btn.textContent = '🗑️';
-        btn.onclick = () => eliminarDestinatarioPanel(d);
-        fila.appendChild(btn);
-
-        cont.appendChild(fila);
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = (d.nombre ? `${d.nombre} — ${d.email}` : d.email) + etiquetasDestinatario(d);
+        select.appendChild(opt);
       }
+      select.value = destinatarioEditandoId || '';
+    }
+
+    function onSeleccionDestinatarioLista() {
+      const id = document.getElementById('cfgListaDestinatarios').value;
+      if (!id) { cancelarEdicionDestinatario(); return; }
+      const destinatario = destinatariosNegocioCache.find((d) => d.id === id);
+      if (destinatario) seleccionarDestinatarioParaEditar(destinatario);
+    }
+
+    function eliminarDestinatarioSeleccionado() {
+      const id = document.getElementById('cfgListaDestinatarios').value;
+      const destinatario = destinatariosNegocioCache.find((d) => d.id === id);
+      if (!destinatario) { alert('Elegí un destinatario de la lista primero.'); return; }
+      eliminarDestinatarioPanel(destinatario);
     }
 
     function seleccionarDestinatarioParaEditar(destinatario) {
