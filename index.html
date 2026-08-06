@@ -954,6 +954,19 @@
         <button type="button" id="cfgClienteCancelarBtn" onclick="cancelarEdicionCliente()" style="display:none;background:#888;">Cancelar edición</button>
         <div id="cfgClienteMensaje" class="mensaje-panel"></div>
       </div>
+
+      <button type="button" class="panel-menu-item" data-seccion="destinatarios" onclick="toggleSeccionConfig('destinatarios')">
+        <span>DESTINATARIOS DE AVISOS</span><span class="panel-menu-flecha">›</span>
+      </button>
+      <div id="seccionDestinatarios" class="panel-seccion">
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Reciben el mail de cada NUEVA ORDEN o ANULACION de negocio.</p>
+        <div id="cfgListaDestinatarios" class="lista-clientes"></div>
+        <input type="text" id="cfgDestinatarioNombre" placeholder="Nombre (opcional)">
+        <input type="email" id="cfgDestinatarioEmail" placeholder="Email">
+        <button type="button" id="cfgDestinatarioGuardarBtn" onclick="agregarDestinatarioDesdePanel()">Agregar destinatario</button>
+        <button type="button" id="cfgDestinatarioCancelarBtn" onclick="cancelarEdicionDestinatario()" style="display:none;background:#888;">Cancelar edición</button>
+        <div id="cfgDestinatarioMensaje" class="mensaje-panel"></div>
+      </div>
     </div>
 
     <div class="panel-footer">
@@ -1361,6 +1374,7 @@
         document.getElementById('version-footer-panel').textContent = 'v.' + d.version;
       }).catch(() => {});
       renderListaClientesPanel();
+      renderListaDestinatariosPanel();
     }
 
     function cerrarPanelConfig() {
@@ -1371,7 +1385,7 @@
     // Menú de opciones tipo acordeón: un click abre esa sección y cierra
     // las demás; un segundo click sobre la misma la cierra.
     function toggleSeccionConfig(nombre) {
-      const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', clientes: 'seccionClientes' };
+      const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', clientes: 'seccionClientes', destinatarios: 'seccionDestinatarios' };
       const yaAbierta = document.getElementById(secciones[nombre]).classList.contains('abierta');
       for (const [clave, id] of Object.entries(secciones)) {
         document.getElementById(id).classList.remove('abierta');
@@ -1522,6 +1536,108 @@
       renderListaClientesPanel();
     }
 
+    // ── Destinatarios de avisos (NUEVA ORDEN / ANULACION) ──
+    let destinatariosNegocioCache = [];
+    let destinatarioEditandoId = null;
+
+    async function cargarDestinatariosNegocio() {
+      const { data, error } = await window.supabaseClient.from('destinatarios_negocio').select('*').order('nombre');
+      if (!error && data) destinatariosNegocioCache = data;
+      return destinatariosNegocioCache;
+    }
+
+    function renderListaDestinatariosPanel() {
+      const cont = document.getElementById('cfgListaDestinatarios');
+      cont.innerHTML = '';
+      if (!destinatariosNegocioCache.length) {
+        cont.innerHTML = '<div style="color:#888;font-size:0.9em;">No hay destinatarios cargados — se va a usar la lista de respaldo interna.</div>';
+        return;
+      }
+      for (const d of destinatariosNegocioCache) {
+        const fila = document.createElement('div');
+        fila.className = 'fila-cliente' + (d.id === destinatarioEditandoId ? ' seleccionada' : '');
+
+        const info = document.createElement('span');
+        info.textContent = d.nombre ? `${d.nombre} — ${d.email}` : d.email;
+        info.onclick = () => seleccionarDestinatarioParaEditar(d);
+        fila.appendChild(info);
+
+        const btn = document.createElement('button');
+        btn.textContent = '🗑️';
+        btn.onclick = () => eliminarDestinatarioPanel(d);
+        fila.appendChild(btn);
+
+        cont.appendChild(fila);
+      }
+    }
+
+    function seleccionarDestinatarioParaEditar(destinatario) {
+      destinatarioEditandoId = destinatario.id;
+      document.getElementById('cfgDestinatarioNombre').value = destinatario.nombre || '';
+      document.getElementById('cfgDestinatarioEmail').value = destinatario.email;
+      document.getElementById('cfgDestinatarioGuardarBtn').textContent = 'Guardar cambios';
+      document.getElementById('cfgDestinatarioCancelarBtn').style.display = 'block';
+      document.getElementById('cfgDestinatarioMensaje').textContent = '';
+      renderListaDestinatariosPanel();
+    }
+
+    function cancelarEdicionDestinatario() {
+      destinatarioEditandoId = null;
+      document.getElementById('cfgDestinatarioNombre').value = '';
+      document.getElementById('cfgDestinatarioEmail').value = '';
+      document.getElementById('cfgDestinatarioGuardarBtn').textContent = 'Agregar destinatario';
+      document.getElementById('cfgDestinatarioCancelarBtn').style.display = 'none';
+      renderListaDestinatariosPanel();
+    }
+
+    async function eliminarDestinatarioPanel(destinatario) {
+      if (!confirm(`¿Eliminar a "${destinatario.nombre || destinatario.email}" de los avisos de negocio?`)) return;
+      const { error } = await window.supabaseClient.from('destinatarios_negocio').delete().eq('id', destinatario.id);
+      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+      destinatariosNegocioCache = destinatariosNegocioCache.filter((d) => d.id !== destinatario.id);
+      if (destinatarioEditandoId === destinatario.id) cancelarEdicionDestinatario();
+      else renderListaDestinatariosPanel();
+    }
+
+    async function agregarDestinatarioDesdePanel() {
+      const nombre = document.getElementById('cfgDestinatarioNombre').value.trim();
+      const email = document.getElementById('cfgDestinatarioEmail').value.trim();
+      const msj = document.getElementById('cfgDestinatarioMensaje');
+      msj.textContent = '';
+      if (!email) { msj.textContent = 'Falta el email.'; msj.className = 'mensaje-panel error'; return; }
+
+      if (destinatarioEditandoId) {
+        const { data, error } = await window.supabaseClient.from('destinatarios_negocio')
+          .update({ nombre: nombre || null, email }).eq('id', destinatarioEditandoId)
+          .select().single();
+        if (error) {
+          msj.textContent = 'No se pudo guardar: ' + error.message;
+          msj.className = 'mensaje-panel error';
+          return;
+        }
+        const idx = destinatariosNegocioCache.findIndex((d) => d.id === destinatarioEditandoId);
+        if (idx !== -1) destinatariosNegocioCache[idx] = data;
+        msj.textContent = 'Destinatario actualizado.';
+        msj.className = 'mensaje-panel ok';
+        cancelarEdicionDestinatario();
+        return;
+      }
+
+      const { data, error } = await window.supabaseClient.from('destinatarios_negocio')
+        .insert({ nombre: nombre || null, email }).select().single();
+      if (error) {
+        msj.textContent = 'No se pudo guardar: ' + error.message;
+        msj.className = 'mensaje-panel error';
+        return;
+      }
+      destinatariosNegocioCache.push(data);
+      document.getElementById('cfgDestinatarioNombre').value = '';
+      document.getElementById('cfgDestinatarioEmail').value = '';
+      msj.textContent = 'Destinatario guardado.';
+      msj.className = 'mensaje-panel ok';
+      renderListaDestinatariosPanel();
+    }
+
     // ── Crear usuario / cambiar contraseña (vía funciones admin con service role) ──
     async function crearUsuario() {
       const nombre_completo = document.getElementById('cfgUsuarioNombre').value.trim();
@@ -1633,6 +1749,7 @@
       cargarTC();
       cargarPizarra();
       cargarClientes();
+      cargarDestinatariosNegocio();
       wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
       wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
 
@@ -2328,6 +2445,13 @@
 
       const body = { subject, mensajeHtml: cuerpoLineas };
       if (canvas) body.imagenBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+      // Destinatarios internos administrados desde Configuración; si no
+      // hay ninguno cargado (cache vacío), la función igual tiene una
+      // lista de respaldo fija.
+      if (destinatariosNegocioCache.length) {
+        body.destinatarios = destinatariosNegocioCache.map((d) => d.email);
+      }
 
       // Si el cliente tiene mail registrado, se lo manda también (en bcc,
       // así no ve las direcciones internas de AGROSALADO).

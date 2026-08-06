@@ -394,6 +394,34 @@ create policy clientes_update on clientes for update to authenticated
 create policy clientes_delete on clientes for delete to authenticated
   using (rol_actual() = 'owner');
 
+-- Destinatarios internos que reciben los avisos de negocio (NUEVA ORDEN /
+-- ANULACION). Antes era una lista fija en el código; ahora se administra
+-- desde Configuración > Destinatarios de avisos.
+create table destinatarios_negocio (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  nombre text,
+  creado_at timestamptz not null default now()
+);
+create unique index destinatarios_negocio_email_lower_idx on destinatarios_negocio (lower(email));
+
+alter table destinatarios_negocio enable row level security;
+
+create policy destinatarios_negocio_select on destinatarios_negocio for select to authenticated
+  using (rol_actual() = 'owner');
+create policy destinatarios_negocio_insert on destinatarios_negocio for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy destinatarios_negocio_update on destinatarios_negocio for update to authenticated
+  using (rol_actual() = 'owner');
+create policy destinatarios_negocio_delete on destinatarios_negocio for delete to authenticated
+  using (rol_actual() = 'owner');
+
+insert into destinatarios_negocio (email, nombre) values
+  ('braian.papastabru@agrosalado.com', 'Braian'),
+  ('facturacion@agrosalado.com', 'Facturación'),
+  ('juan.uranga@agrosalado.com', 'Juan Uranga')
+on conflict do nothing;
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:

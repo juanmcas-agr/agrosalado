@@ -34,15 +34,18 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { imagenBase64, subject, mensajeHtml, destinatariosCliente } = JSON.parse(event.body);
+    const { imagenBase64, subject, mensajeHtml, destinatariosCliente, destinatarios: destinatariosNegocio } = JSON.parse(event.body);
     if (!subject || !mensajeHtml) {
       return { statusCode: 400, body: JSON.stringify({ error: 'Falta el asunto o el cuerpo del mail.' }) };
     }
 
     const remitente = process.env.RESEND_FROM || 'AGROSALADO <onboarding@resend.dev>';
+    // Prioridad: RESEND_TO (override de prueba) > lista cargada desde
+    // Configuración > Destinatarios (la manda el cliente) > lista fija de
+    // respaldo, por si la de Configuración vino vacía o falló al cargar.
     const destinatarios = process.env.RESEND_TO
       ? process.env.RESEND_TO.split(',').map((m) => m.trim()).filter(Boolean)
-      : DESTINATARIOS_DEFAULT;
+      : (Array.isArray(destinatariosNegocio) && destinatariosNegocio.length ? destinatariosNegocio.filter(Boolean) : DESTINATARIOS_DEFAULT);
 
     const payload = {
       from: remitente,
