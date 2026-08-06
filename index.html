@@ -1263,20 +1263,25 @@
       renderClienteDropdown(clientesCache);
     }
 
-    async function seleccionarCliente(cliente) {
+    function seleccionarCliente(cliente) {
       document.getElementById('cliente').value = cliente.nombre;
       document.getElementById('clienteDropdown').style.display = 'none';
-      if (!cliente.email && confirm(`"${cliente.nombre}" no tiene mail registrado. ¿Querés cargarlo ahora?`)) {
-        const email = prompt('Email de contacto:');
-        if (email && email.trim()) {
-          const { error } = await window.supabaseClient.from('clientes').update({ email: email.trim() }).eq('id', cliente.id);
-          if (!error) cliente.email = email.trim();
-        }
-      }
+      // El chequeo de "sin mail" / "cliente nuevo" queda para cuando se
+      // sale del campo (blur), no acá — así no interrumpe justo al elegir.
     }
 
-    // Al agregar una alternativa, si el nombre escrito no está en la lista
-    // de clientes, ofrece guardarlo para el autocompletado de la próxima vez.
+    async function ofrecerCargarMailSiFalta(cliente) {
+      if (cliente.email) return;
+      if (!confirm(`"${cliente.nombre}" no tiene mail registrado. ¿Querés cargarlo ahora?`)) return;
+      const email = prompt('Email de contacto:');
+      if (!email || !email.trim()) return;
+      const { error } = await window.supabaseClient.from('clientes').update({ email: email.trim() }).eq('id', cliente.id);
+      if (error) { alert('No se pudo guardar el mail: ' + error.message); return; }
+      cliente.email = email.trim();
+    }
+
+    // Si el nombre escrito no está en la lista de clientes, ofrece
+    // guardarlo para el autocompletado de la próxima vez.
     async function asegurarClienteGuardado(nombre) {
       const limpio = (nombre || '').trim();
       if (!limpio || buscarClientePorNombre(limpio)) return;
@@ -1285,8 +1290,20 @@
       const { data, error } = await window.supabaseClient.from('clientes')
         .insert({ nombre: limpio, email: email && email.trim() ? email.trim() : null })
         .select().single();
-      if (!error && data) clientesCache.push(data);
+      if (error) { alert('No se pudo guardar el cliente: ' + error.message); return; }
+      if (data) clientesCache.push(data);
     }
+
+    // Único disparador de los avisos de "cliente nuevo" / "sin mail": al
+    // salir del campo (blur), no en cada tecla ni en cada alternativa
+    // agregada, para que no interrumpa todo el tiempo.
+    document.getElementById('cliente').addEventListener('blur', async () => {
+      const nombre = document.getElementById('cliente').value.trim();
+      if (!nombre) return;
+      const existente = buscarClientePorNombre(nombre);
+      if (existente) await ofrecerCargarMailSiFalta(existente);
+      else await asegurarClienteGuardado(nombre);
+    });
 
     document.addEventListener('input', (evento) => {
       if (evento.target && evento.target.id === 'cliente') {
@@ -1791,9 +1808,9 @@
     async function agregarAlternativa(codigoExistente) {
       const codigo           = codigoExistente || await generarCodigoUnico();
       const cliente         = document.getElementById('cliente').value;
-      // Solo se ofrece guardar el cliente cuando es una alternativa nueva
-      // (no al restaurar un guardado/cerrado, para no interrumpir esa carga).
-      if (!codigoExistente) await asegurarClienteGuardado(cliente);
+      // El guardado/aviso del cliente pasa por el blur del campo (ver
+      // listener más arriba), no acá — así no interrumpe cada vez que se
+      // agrega una alternativa nueva para el mismo cliente.
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
       const moneda          = document.getElementById('moneda').value;
@@ -2251,8 +2268,10 @@
     function enviarMailLiquidacionConCaptura(datos) {
       // Si falla la captura de la tabla, el mail se manda igual, sin la
       // imagen adjunta — antes una falla acá dejaba todo colgado en
-      // silencio y el mail nunca llegaba a mandarse.
-      ocultarYCapturar(
+      // silencio y el mail nunca llegaba a mandarse. Devuelve la promesa
+      // para que quien llama pueda esperar a que termine antes de, por
+      // ejemplo, borrar la tabla que se acaba de capturar.
+      return ocultarYCapturar(
         (canvas) => enviarMailLiquidacion({ ...datos, canvas }),
         () => enviarMailLiquidacion(datos)
       );
@@ -2271,18 +2290,18 @@
         stickyEls.forEach(el => el.style.position = '');
       };
 
-      html2canvas(tabla, {
+      return html2canvas(tabla, {
         scrollX: 0, scrollY: -window.scrollY,
         width: tabla.offsetWidth, windowWidth: tabla.offsetWidth,
         useCORS: true
       }).then(canvas => {
         restaurar();
-        callback(canvas);
+        return callback(canvas);
       }).catch(error => {
         restaurar();
         console.error('No se pudo generar la captura de la tabla:', error);
-        if (onError) onError(error);
-        else alert('⚠️ No se pudo generar la imagen: ' + error.message);
+        if (onError) return onError(error);
+        alert('⚠️ No se pudo generar la imagen: ' + error.message);
       });
     }
 
@@ -2413,7 +2432,10 @@
         }
       }
 
-      enviarMailLiquidacionConCaptura({
+      // Se espera a que termine de mandarse el mail (con la captura de ESTA
+      // tabla) antes de vaciarla — si no, la limpieza podría pisar la
+      // captura o dejar el negocio a medio guardar.
+      await enviarMailLiquidacionConCaptura({
         subject: `NUEVA ORDEN DE LIQUIDACION N° ${numeroOrden}`,
         tituloAviso: 'ATENCIÓN: NO DUPLICAR LIQUIDACIÓN',
         cliente,
@@ -2421,10 +2443,7 @@
         lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
       });
 
-      const btn = document.getElementById('cerrarNegocio');
-      btn.innerHTML = "✅ CERRADO";
-      btn.classList.remove("pendiente");
-      btn.classList.add("confirmado");
+      borrarTodo();
     }
   </script>
 </body>
