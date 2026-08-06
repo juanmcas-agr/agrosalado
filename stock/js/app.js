@@ -73,7 +73,8 @@ function mostrarApp(perfil) {
 
 function wireTabBar() {
   el('tabbar-granos').addEventListener('click', () => {
-    if (getEstado().perfil?.rol !== 'owner') {
+    const perfil = getEstado().perfil;
+    if (perfil?.rol !== 'owner' && !perfil?.acceso_granos) {
       alert('No tenés permisos para acceder a Granos.');
       return;
     }
@@ -132,6 +133,13 @@ function wireAuth() {
     }
     if (!estado.perfil) {
       mostrarLogin('Tu usuario no tiene un perfil asignado en el sistema. Contactá al administrador.');
+      return;
+    }
+    // Un owner siempre tiene acceso total; para el resto hace falta el
+    // tilde explícito de "Acceso a Hacienda" (Configuración > Administrar
+    // usuarios, en Granos).
+    if (estado.perfil.rol !== 'owner' && estado.perfil.acceso_hacienda === false) {
+      mostrarLogin('No tenés acceso a Hacienda. Contactá al administrador.');
       return;
     }
     mostrarApp(estado.perfil);

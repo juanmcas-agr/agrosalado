@@ -658,11 +658,14 @@
       }
       const { data: perfil } = await supabase
         .from('perfiles')
-        .select('rol')
+        .select('rol, acceso_granos')
         .eq('user_id', session.user.id)
         .single();
 
-      if (!perfil || perfil.rol !== 'owner') {
+      // Un owner siempre tiene acceso total; para el resto hace falta el
+      // tilde explícito de "Acceso a Granos" (Configuración > Administrar
+      // usuarios).
+      if (!perfil || (perfil.rol !== 'owner' && !perfil.acceso_granos)) {
         window.location.replace('/stock/');
         return;
       }
@@ -934,6 +937,10 @@
           <option value="administrativo">Administrativo</option>
           <option value="owner">Owner</option>
         </select>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoHacienda" checked> Acceso a Hacienda</label>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoGranos"> Acceso a Granos</label>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeHacienda"> Recibe resumen diario de Hacienda</label>
         <button type="button" onclick="crearUsuario()">Crear usuario</button>
         <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
       </div>
@@ -942,14 +949,26 @@
         <span>ADMINISTRAR USUARIOS</span><span class="panel-menu-flecha">›</span>
       </button>
       <div id="seccionAdministrar" class="panel-seccion">
-        <div id="cfgListaUsuarios" class="lista-clientes"></div>
-        <select id="cfgClaveUsuario"></select>
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Elegí un usuario para editar su rol, accesos y avisos, o cambiarle la contraseña.</p>
+        <select id="cfgListaUsuarios" onchange="onSeleccionUsuarioLista()"></select>
+        <input type="text" id="cfgUsuarioEditNombre" placeholder="Nombre completo">
+        <input type="email" id="cfgUsuarioEditEmail" placeholder="Email">
+        <select id="cfgUsuarioEditRol">
+          <option value="encargado">Encargado</option>
+          <option value="administrativo">Administrativo</option>
+          <option value="owner">Owner</option>
+        </select>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoHacienda"> Acceso a Hacienda</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoGranos"> Acceso a Granos</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq"> Recibe liquidaciones / anulaciones</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeHacienda"> Recibe resumen diario de Hacienda</label>
+        <button type="button" onclick="guardarCambiosUsuario()">Guardar cambios</button>
         <div class="campo-password">
-          <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva" autocomplete="new-password">
+          <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva (usuario elegido arriba)" autocomplete="new-password">
           <button type="button" id="cfgClaveMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
         </div>
         <button type="button" onclick="cambiarClaveUsuario()">Cambiar contraseña</button>
-        <div id="cfgClaveMensaje" class="mensaje-panel"></div>
+        <div id="cfgUsuarioEditMensaje" class="mensaje-panel"></div>
       </div>
 
       <button type="button" class="panel-menu-item" data-seccion="clientes" onclick="toggleSeccionConfig('clientes')">
@@ -965,27 +984,6 @@
         <div id="cfgClienteMensaje" class="mensaje-panel"></div>
       </div>
 
-      <button type="button" class="panel-menu-item" data-seccion="destinatarios" onclick="toggleSeccionConfig('destinatarios')">
-        <span>DESTINATARIOS DE AVISOS</span><span class="panel-menu-flecha">›</span>
-      </button>
-      <div id="seccionDestinatarios" class="panel-seccion">
-        <p style="font-size:0.85em;color:#666;margin-top:0;">Tildá qué avisos recibe cada uno.</p>
-        <select id="cfgListaDestinatarios" onchange="onSeleccionDestinatarioLista()"></select>
-        <input type="text" id="cfgDestinatarioNombre" placeholder="Nombre (opcional)">
-        <input type="email" id="cfgDestinatarioEmail" placeholder="Email">
-        <label class="check-inline">
-          <input type="checkbox" id="cfgDestinatarioLiq" checked>
-          Órdenes de liquidación / anulación (Granos)
-        </label>
-        <label class="check-inline">
-          <input type="checkbox" id="cfgDestinatarioHacienda">
-          Resumen diario de Hacienda
-        </label>
-        <button type="button" id="cfgDestinatarioGuardarBtn" onclick="agregarDestinatarioDesdePanel()">Agregar destinatario</button>
-        <button type="button" onclick="eliminarDestinatarioSeleccionado()" style="background:#ad1e19;">Eliminar registro</button>
-        <button type="button" id="cfgDestinatarioCancelarBtn" onclick="cancelarEdicionDestinatario()" style="display:none;background:#888;">Cancelar edición</button>
-        <div id="cfgDestinatarioMensaje" class="mensaje-panel"></div>
-      </div>
     </div>
 
     <div class="panel-footer">
@@ -1393,7 +1391,6 @@
         document.getElementById('version-footer-panel').textContent = 'v.' + d.version;
       }).catch(() => {});
       renderListaClientesPanel();
-      renderListaDestinatariosPanel();
     }
 
     function cerrarPanelConfig() {
@@ -1404,7 +1401,7 @@
     // Menú de opciones tipo acordeón: un click abre esa sección y cierra
     // las demás; un segundo click sobre la misma la cierra.
     function toggleSeccionConfig(nombre) {
-      const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', clientes: 'seccionClientes', destinatarios: 'seccionDestinatarios' };
+      const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', clientes: 'seccionClientes' };
       const yaAbierta = document.getElementById(secciones[nombre]).classList.contains('abierta');
       for (const [clave, id] of Object.entries(secciones)) {
         document.getElementById(id).classList.remove('abierta');
@@ -1428,33 +1425,91 @@
     async function cargarUsuariosPanel() {
       const { data, error } = await window.supabaseClient.from('perfiles').select('*').order('nombre_completo');
       if (!error && data) usuariosCache = data;
+      await cargarDestinatariosNegocio();
       renderListaUsuariosPanel();
-      poblarSelectUsuarios();
     }
 
     function renderListaUsuariosPanel() {
-      const cont = document.getElementById('cfgListaUsuarios');
-      cont.innerHTML = '';
-      if (!usuariosCache.length) {
-        cont.innerHTML = '<div style="color:#888;font-size:0.9em;">No hay usuarios cargados.</div>';
-        return;
-      }
+      const select = document.getElementById('cfgListaUsuarios');
+      const seleccionPrevia = select.value;
+      select.innerHTML = '<option value="">— Elegir usuario para editar —</option>';
       for (const u of usuariosCache) {
-        const fila = document.createElement('div');
-        fila.className = 'fila-cliente';
-        fila.innerHTML = `<span>${u.nombre_completo} <span style="color:#888;">(${u.rol})</span></span>`;
-        cont.appendChild(fila);
+        const opt = document.createElement('option');
+        opt.value = u.user_id;
+        opt.textContent = `${u.nombre_completo} (${u.rol})`;
+        select.appendChild(opt);
       }
+      select.value = seleccionPrevia;
     }
 
-    function poblarSelectUsuarios() {
-      const select = document.getElementById('cfgClaveUsuario');
-      select.innerHTML = '';
-      for (const p of usuariosCache) {
-        const opt = document.createElement('option');
-        opt.value = p.user_id;
-        opt.textContent = `${p.nombre_completo} (${p.rol})`;
-        select.appendChild(opt);
+    function onSeleccionUsuarioLista() {
+      const userId = document.getElementById('cfgListaUsuarios').value;
+      const msj = document.getElementById('cfgUsuarioEditMensaje');
+      msj.textContent = '';
+      if (!userId) {
+        document.getElementById('cfgUsuarioEditNombre').value = '';
+        document.getElementById('cfgUsuarioEditEmail').value = '';
+        document.getElementById('cfgUsuarioAccesoHacienda').checked = false;
+        document.getElementById('cfgUsuarioAccesoGranos').checked = false;
+        document.getElementById('cfgUsuarioRecibeLiq').checked = false;
+        document.getElementById('cfgUsuarioRecibeHacienda').checked = false;
+        return;
+      }
+      const usuario = usuariosCache.find((u) => u.user_id === userId);
+      if (!usuario) return;
+      const destinatario = buscarDestinatarioPorEmail(usuario.email);
+
+      document.getElementById('cfgUsuarioEditNombre').value = usuario.nombre_completo || '';
+      document.getElementById('cfgUsuarioEditEmail').value = usuario.email || '';
+      document.getElementById('cfgUsuarioEditRol').value = usuario.rol;
+      // Un owner siempre tiene acceso total, más allá de lo que digan las
+      // casillas — se muestran tildadas y bloqueadas para reflejar eso.
+      const esOwner = usuario.rol === 'owner';
+      document.getElementById('cfgUsuarioAccesoHacienda').checked = esOwner || !!usuario.acceso_hacienda;
+      document.getElementById('cfgUsuarioAccesoHacienda').disabled = esOwner;
+      document.getElementById('cfgUsuarioAccesoGranos').checked = esOwner || !!usuario.acceso_granos;
+      document.getElementById('cfgUsuarioAccesoGranos').disabled = esOwner;
+      document.getElementById('cfgUsuarioRecibeLiq').checked = !!(destinatario && destinatario.recibe_liquidaciones);
+      document.getElementById('cfgUsuarioRecibeHacienda').checked = !!(destinatario && destinatario.recibe_hacienda);
+    }
+
+    async function guardarCambiosUsuario() {
+      const user_id = document.getElementById('cfgListaUsuarios').value;
+      const msj = document.getElementById('cfgUsuarioEditMensaje');
+      msj.textContent = '';
+      if (!user_id) { msj.textContent = 'Elegí un usuario de la lista primero.'; msj.className = 'mensaje-panel error'; return; }
+
+      const nombre_completo = document.getElementById('cfgUsuarioEditNombre').value.trim();
+      const email = document.getElementById('cfgUsuarioEditEmail').value.trim();
+      const rol = document.getElementById('cfgUsuarioEditRol').value;
+      const acceso_hacienda = document.getElementById('cfgUsuarioAccesoHacienda').checked;
+      const acceso_granos = document.getElementById('cfgUsuarioAccesoGranos').checked;
+      const recibe_liquidaciones = document.getElementById('cfgUsuarioRecibeLiq').checked;
+      const recibe_hacienda = document.getElementById('cfgUsuarioRecibeHacienda').checked;
+      if (!nombre_completo || !email) { msj.textContent = 'Faltan nombre y email.'; msj.className = 'mensaje-panel error'; return; }
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
+
+      try {
+        const res = await fetch('/.netlify/functions/admin-actualizar-usuario', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+          body: JSON.stringify({ user_id, nombre_completo, email, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda }),
+        });
+        const datos = await res.json();
+        if (!res.ok) {
+          msj.textContent = datos.error || 'No se pudo guardar.';
+          msj.className = 'mensaje-panel error';
+          return;
+        }
+        msj.textContent = 'Usuario actualizado.';
+        msj.className = 'mensaje-panel ok';
+        await cargarUsuariosPanel();
+        document.getElementById('cfgListaUsuarios').value = user_id;
+      } catch (error) {
+        msj.textContent = 'Error de red: ' + error.message;
+        msj.className = 'mensaje-panel error';
       }
     }
 
@@ -1556,9 +1611,11 @@
       renderListaClientesPanel();
     }
 
-    // ── Destinatarios de avisos (NUEVA ORDEN / ANULACION) ──
+    // ── Destinatarios de avisos (NUEVA ORDEN / ANULACION / resumen Hacienda) ──
+    // Ya no tiene UI propia: se administra desde "Administrar usuarios",
+    // vinculado por mail a cada perfil. Se sigue cargando en cache porque
+    // enviarMailLiquidacion() la usa para armar los destinatarios reales.
     let destinatariosNegocioCache = [];
-    let destinatarioEditandoId = null;
 
     async function cargarDestinatariosNegocio() {
       const { data, error } = await window.supabaseClient.from('destinatarios_negocio').select('*').order('nombre');
@@ -1566,120 +1623,22 @@
       return destinatariosNegocioCache;
     }
 
-    function etiquetasDestinatario(d) {
-      const tags = [];
-      if (d.recibe_liquidaciones) tags.push('Liq/Anul');
-      if (d.recibe_hacienda) tags.push('Hacienda');
-      return tags.length ? ` (${tags.join(', ')})` : ' (sin avisos activos)';
+    function buscarDestinatarioPorEmail(email) {
+      const buscado = (email || '').trim().toLowerCase();
+      if (!buscado) return null;
+      return destinatariosNegocioCache.find((d) => d.email.trim().toLowerCase() === buscado) || null;
     }
 
-    function renderListaDestinatariosPanel() {
-      const select = document.getElementById('cfgListaDestinatarios');
-      select.innerHTML = '<option value="">— Elegir destinatario para editar/eliminar —</option>';
-      for (const d of destinatariosNegocioCache) {
-        const opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = (d.nombre ? `${d.nombre} — ${d.email}` : d.email) + etiquetasDestinatario(d);
-        select.appendChild(opt);
-      }
-      select.value = destinatarioEditandoId || '';
-    }
-
-    function onSeleccionDestinatarioLista() {
-      const id = document.getElementById('cfgListaDestinatarios').value;
-      if (!id) { cancelarEdicionDestinatario(); return; }
-      const destinatario = destinatariosNegocioCache.find((d) => d.id === id);
-      if (destinatario) seleccionarDestinatarioParaEditar(destinatario);
-    }
-
-    function eliminarDestinatarioSeleccionado() {
-      const id = document.getElementById('cfgListaDestinatarios').value;
-      const destinatario = destinatariosNegocioCache.find((d) => d.id === id);
-      if (!destinatario) { alert('Elegí un destinatario de la lista primero.'); return; }
-      eliminarDestinatarioPanel(destinatario);
-    }
-
-    function seleccionarDestinatarioParaEditar(destinatario) {
-      destinatarioEditandoId = destinatario.id;
-      document.getElementById('cfgDestinatarioNombre').value = destinatario.nombre || '';
-      document.getElementById('cfgDestinatarioEmail').value = destinatario.email;
-      document.getElementById('cfgDestinatarioLiq').checked = !!destinatario.recibe_liquidaciones;
-      document.getElementById('cfgDestinatarioHacienda').checked = !!destinatario.recibe_hacienda;
-      document.getElementById('cfgDestinatarioGuardarBtn').textContent = 'Guardar cambios';
-      document.getElementById('cfgDestinatarioCancelarBtn').style.display = 'block';
-      document.getElementById('cfgDestinatarioMensaje').textContent = '';
-      renderListaDestinatariosPanel();
-    }
-
-    function cancelarEdicionDestinatario() {
-      destinatarioEditandoId = null;
-      document.getElementById('cfgDestinatarioNombre').value = '';
-      document.getElementById('cfgDestinatarioEmail').value = '';
-      document.getElementById('cfgDestinatarioLiq').checked = true;
-      document.getElementById('cfgDestinatarioHacienda').checked = false;
-      document.getElementById('cfgDestinatarioGuardarBtn').textContent = 'Agregar destinatario';
-      document.getElementById('cfgDestinatarioCancelarBtn').style.display = 'none';
-      renderListaDestinatariosPanel();
-    }
-
-    async function eliminarDestinatarioPanel(destinatario) {
-      if (!confirm(`¿Eliminar a "${destinatario.nombre || destinatario.email}" de los avisos de negocio?`)) return;
-      const { error } = await window.supabaseClient.from('destinatarios_negocio').delete().eq('id', destinatario.id);
-      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
-      destinatariosNegocioCache = destinatariosNegocioCache.filter((d) => d.id !== destinatario.id);
-      if (destinatarioEditandoId === destinatario.id) cancelarEdicionDestinatario();
-      else renderListaDestinatariosPanel();
-    }
-
-    async function agregarDestinatarioDesdePanel() {
-      const nombre = document.getElementById('cfgDestinatarioNombre').value.trim();
-      const email = document.getElementById('cfgDestinatarioEmail').value.trim();
-      const recibe_liquidaciones = document.getElementById('cfgDestinatarioLiq').checked;
-      const recibe_hacienda = document.getElementById('cfgDestinatarioHacienda').checked;
-      const msj = document.getElementById('cfgDestinatarioMensaje');
-      msj.textContent = '';
-      if (!email) { msj.textContent = 'Falta el email.'; msj.className = 'mensaje-panel error'; return; }
-
-      if (destinatarioEditandoId) {
-        const { data, error } = await window.supabaseClient.from('destinatarios_negocio')
-          .update({ nombre: nombre || null, email, recibe_liquidaciones, recibe_hacienda }).eq('id', destinatarioEditandoId)
-          .select().single();
-        if (error) {
-          msj.textContent = 'No se pudo guardar: ' + error.message;
-          msj.className = 'mensaje-panel error';
-          return;
-        }
-        const idx = destinatariosNegocioCache.findIndex((d) => d.id === destinatarioEditandoId);
-        if (idx !== -1) destinatariosNegocioCache[idx] = data;
-        msj.textContent = 'Destinatario actualizado.';
-        msj.className = 'mensaje-panel ok';
-        cancelarEdicionDestinatario();
-        return;
-      }
-
-      const { data, error } = await window.supabaseClient.from('destinatarios_negocio')
-        .insert({ nombre: nombre || null, email, recibe_liquidaciones, recibe_hacienda }).select().single();
-      if (error) {
-        msj.textContent = 'No se pudo guardar: ' + error.message;
-        msj.className = 'mensaje-panel error';
-        return;
-      }
-      destinatariosNegocioCache.push(data);
-      document.getElementById('cfgDestinatarioNombre').value = '';
-      document.getElementById('cfgDestinatarioEmail').value = '';
-      document.getElementById('cfgDestinatarioLiq').checked = true;
-      document.getElementById('cfgDestinatarioHacienda').checked = false;
-      msj.textContent = 'Destinatario guardado.';
-      msj.className = 'mensaje-panel ok';
-      renderListaDestinatariosPanel();
-    }
-
-    // ── Crear usuario / cambiar contraseña (vía funciones admin con service role) ──
+    // ── Crear usuario / administrar usuarios (vía funciones admin con service role) ──
     async function crearUsuario() {
       const nombre_completo = document.getElementById('cfgUsuarioNombre').value.trim();
       const email = document.getElementById('cfgUsuarioEmail').value.trim();
       const password = document.getElementById('cfgUsuarioPassword').value;
       const rol = document.getElementById('cfgUsuarioRol').value;
+      const acceso_hacienda = document.getElementById('cfgNuevoAccesoHacienda').checked;
+      const acceso_granos = document.getElementById('cfgNuevoAccesoGranos').checked;
+      const recibe_liquidaciones = document.getElementById('cfgNuevoRecibeLiq').checked;
+      const recibe_hacienda = document.getElementById('cfgNuevoRecibeHacienda').checked;
       const msj = document.getElementById('cfgUsuarioMensaje');
       msj.textContent = '';
 
@@ -1696,7 +1655,7 @@
         const res = await fetch('/.netlify/functions/admin-crear-usuario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ email, password, nombre_completo, rol }),
+          body: JSON.stringify({ email, password, nombre_completo, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda }),
         });
         const datos = await res.json();
         if (!res.ok) {
@@ -1709,6 +1668,10 @@
         document.getElementById('cfgUsuarioNombre').value = '';
         document.getElementById('cfgUsuarioEmail').value = '';
         document.getElementById('cfgUsuarioPassword').value = '';
+        document.getElementById('cfgNuevoAccesoHacienda').checked = true;
+        document.getElementById('cfgNuevoAccesoGranos').checked = false;
+        document.getElementById('cfgNuevoRecibeLiq').checked = true;
+        document.getElementById('cfgNuevoRecibeHacienda').checked = false;
         cargarUsuariosPanel();
       } catch (error) {
         msj.textContent = 'Error de red: ' + error.message;
@@ -1717,13 +1680,13 @@
     }
 
     async function cambiarClaveUsuario() {
-      const user_id = document.getElementById('cfgClaveUsuario').value;
+      const user_id = document.getElementById('cfgListaUsuarios').value;
       const password = document.getElementById('cfgClaveNueva').value;
-      const msj = document.getElementById('cfgClaveMensaje');
+      const msj = document.getElementById('cfgUsuarioEditMensaje');
       msj.textContent = '';
 
       if (!user_id || !password) {
-        msj.textContent = 'Elegí un usuario y escribí la contraseña nueva.';
+        msj.textContent = 'Elegí un usuario de la lista y escribí la contraseña nueva.';
         msj.className = 'mensaje-panel error';
         return;
       }

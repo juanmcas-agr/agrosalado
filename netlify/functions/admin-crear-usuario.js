@@ -61,7 +61,10 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { email, password, nombre_completo, rol } = JSON.parse(event.body);
+    const {
+      email, password, nombre_completo, rol,
+      acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda,
+    } = JSON.parse(event.body);
     if (!email || !password || !nombre_completo || !rol) {
       return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: email, contraseña, nombre y rol son obligatorios.' }) };
     }
@@ -95,7 +98,14 @@ exports.handler = async function (event) {
         'Content-Type': 'application/json',
         Prefer: 'return=minimal',
       },
-      body: JSON.stringify({ user_id: datosCrear.id, nombre_completo, rol }),
+      body: JSON.stringify({
+        user_id: datosCrear.id,
+        nombre_completo,
+        email,
+        rol,
+        acceso_hacienda: !!acceso_hacienda,
+        acceso_granos: !!acceso_granos,
+      }),
     });
     if (!resPerfil.ok) {
       const detalle = await resPerfil.text();
@@ -104,6 +114,27 @@ exports.handler = async function (event) {
         headers: headersJson(),
         body: JSON.stringify({ error: `El usuario se creó pero no se pudo guardar su perfil: ${detalle}` }),
       };
+    }
+
+    // Lo suma también a destinatarios_negocio si tildaron algún aviso,
+    // para que enviar-liquidacion.js / resumen-diario-hacienda.js ya lo
+    // tengan en cuenta sin pasos extra.
+    if (recibe_liquidaciones || recibe_hacienda) {
+      await fetch(`${SUPABASE_URL}/rest/v1/destinatarios_negocio`, {
+        method: 'POST',
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': 'application/json',
+          Prefer: 'return=minimal',
+        },
+        body: JSON.stringify({
+          email,
+          nombre: nombre_completo,
+          recibe_liquidaciones: !!recibe_liquidaciones,
+          recibe_hacienda: !!recibe_hacienda,
+        }),
+      });
     }
 
     return { statusCode: 200, headers: headersJson(), body: JSON.stringify({ ok: true, user_id: datosCrear.id }) };

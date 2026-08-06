@@ -77,7 +77,12 @@ insert into tipos_movimiento
 create table perfiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   nombre_completo text not null,
+  email text,
   rol text not null check (rol in ('encargado', 'administrativo', 'owner')),
+  -- Un owner siempre tiene acceso total (ver el gate de cada app); estas
+  -- casillas solo importan para encargado/administrativo.
+  acceso_hacienda boolean not null default true,
+  acceso_granos boolean not null default false,
   activo boolean not null default true,
   created_at timestamptz not null default now()
 );
