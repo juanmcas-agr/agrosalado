@@ -1199,20 +1199,15 @@
     }
 
     function togglePlazoFecha() {
+      // Antes intentaba abrir el selector nativo solo (focus()/showPicker()),
+      // pero según versión de navegador eso a veces no lo abre a la primera
+      // (hay que tocarlo dos veces) o directamente no abre nada. Más simple
+      // y confiable: solo mostrar el campo, y que el toque del usuario sobre
+      // el campo ya visible sea lo que abra el selector — eso sí funciona
+      // siempre, en cualquier navegador.
       const campo = document.getElementById('plazoPagoFecha');
       const mostrar = campo.style.display === 'none';
       campo.style.display = mostrar ? 'block' : 'none';
-      if (mostrar) {
-        // Forzar el reflow ANTES de enfocar (leer offsetHeight obliga al
-        // navegador a aplicar el display:block ya) para que el campo esté
-        // realmente listo. Tiene que ser síncrono, en el mismo gesto de
-        // click, si no el navegador no deja abrir el selector nativo solo.
-        void campo.offsetHeight;
-        campo.focus();
-        if (typeof campo.showPicker === 'function') {
-          try { campo.showPicker(); } catch (e) { /* no soportado en este navegador, focus() alcanza */ }
-        }
-      }
     }
 
     function aplicarPlazoFecha() {
@@ -2252,24 +2247,40 @@
     }
 
     function enviarMailLiquidacionConCaptura(datos) {
-      ocultarYCapturar((canvas) => enviarMailLiquidacion({ ...datos, canvas }));
+      // Si falla la captura de la tabla, el mail se manda igual, sin la
+      // imagen adjunta — antes una falla acá dejaba todo colgado en
+      // silencio y el mail nunca llegaba a mandarse.
+      ocultarYCapturar(
+        (canvas) => enviarMailLiquidacion({ ...datos, canvas }),
+        () => enviarMailLiquidacion(datos)
+      );
     }
 
-    function ocultarYCapturar(callback) {
+    function ocultarYCapturar(callback, onError) {
       const tabla = document.getElementById('tablaNegocios');
       const ocultar = document.querySelectorAll('.ocultar-al-exportar');
       // Temporalmente quitar sticky de primera columna para que html2canvas la capture bien
       const stickyEls = tabla.querySelectorAll('td:first-child, th:first-child');
       stickyEls.forEach(el => el.style.position = 'relative');
       ocultar.forEach(el => el.style.display = 'none');
+
+      const restaurar = () => {
+        ocultar.forEach(el => el.style.display = '');
+        stickyEls.forEach(el => el.style.position = '');
+      };
+
       html2canvas(tabla, {
         scrollX: 0, scrollY: -window.scrollY,
         width: tabla.offsetWidth, windowWidth: tabla.offsetWidth,
         useCORS: true
       }).then(canvas => {
-        ocultar.forEach(el => el.style.display = '');
-        stickyEls.forEach(el => el.style.position = '');
+        restaurar();
         callback(canvas);
+      }).catch(error => {
+        restaurar();
+        console.error('No se pudo generar la captura de la tabla:', error);
+        if (onError) onError(error);
+        else alert('⚠️ No se pudo generar la imagen: ' + error.message);
       });
     }
 
