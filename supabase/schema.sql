@@ -401,6 +401,10 @@ create table destinatarios_negocio (
   id uuid primary key default gen_random_uuid(),
   email text not null,
   nombre text,
+  -- Qué tipo de avisos recibe cada uno: liquidaciones/anulaciones (Granos)
+  -- y/o el resumen diario de movimientos de Hacienda, independientes.
+  recibe_liquidaciones boolean not null default true,
+  recibe_hacienda boolean not null default false,
   creado_at timestamptz not null default now()
 );
 create unique index destinatarios_negocio_email_lower_idx on destinatarios_negocio (lower(email));
@@ -416,10 +420,11 @@ create policy destinatarios_negocio_update on destinatarios_negocio for update t
 create policy destinatarios_negocio_delete on destinatarios_negocio for delete to authenticated
   using (rol_actual() = 'owner');
 
-insert into destinatarios_negocio (email, nombre) values
-  ('braian.papastabru@agrosalado.com', 'Braian'),
-  ('facturacion@agrosalado.com', 'Facturación'),
-  ('juan.uranga@agrosalado.com', 'Juan Uranga')
+insert into destinatarios_negocio (email, nombre, recibe_liquidaciones, recibe_hacienda) values
+  ('braian.papastabru@agrosalado.com', 'Braian', true, false),
+  ('facturacion@agrosalado.com', 'Facturación', true, false),
+  ('juan.uranga@agrosalado.com', 'Juan Uranga', true, false),
+  ('juanmanueluranga@gmail.com', 'Juan Manuel (personal)', false, true)
 on conflict do nothing;
 
 -- ─── Después de correr este script ──────────────────────────────────────

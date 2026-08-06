@@ -258,6 +258,13 @@
       background: white; -webkit-appearance: none; appearance: none;
     }
     #panelConfig select { appearance: auto; -webkit-appearance: auto; }
+    #panelConfig .check-inline {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 0.9em; margin-bottom: 8px; color: #2c3e50;
+    }
+    #panelConfig .check-inline input[type="checkbox"] {
+      width: auto; height: auto; margin: 0; -webkit-appearance: checkbox; appearance: checkbox;
+    }
     #panelConfig .mensaje-panel { font-size: 0.85em; margin-top: 4px; }
     #panelConfig .mensaje-panel.ok { color: #1e7e34; }
     #panelConfig .mensaje-panel.error { color: #ad1e19; }
@@ -959,10 +966,18 @@
         <span>DESTINATARIOS DE AVISOS</span><span class="panel-menu-flecha">›</span>
       </button>
       <div id="seccionDestinatarios" class="panel-seccion">
-        <p style="font-size:0.85em;color:#666;margin-top:0;">Reciben el mail de cada NUEVA ORDEN o ANULACION de negocio.</p>
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Tildá qué avisos recibe cada uno.</p>
         <div id="cfgListaDestinatarios" class="lista-clientes"></div>
         <input type="text" id="cfgDestinatarioNombre" placeholder="Nombre (opcional)">
         <input type="email" id="cfgDestinatarioEmail" placeholder="Email">
+        <label class="check-inline">
+          <input type="checkbox" id="cfgDestinatarioLiq" checked>
+          Órdenes de liquidación / anulación (Granos)
+        </label>
+        <label class="check-inline">
+          <input type="checkbox" id="cfgDestinatarioHacienda">
+          Resumen diario de Hacienda
+        </label>
         <button type="button" id="cfgDestinatarioGuardarBtn" onclick="agregarDestinatarioDesdePanel()">Agregar destinatario</button>
         <button type="button" id="cfgDestinatarioCancelarBtn" onclick="cancelarEdicionDestinatario()" style="display:none;background:#888;">Cancelar edición</button>
         <div id="cfgDestinatarioMensaje" class="mensaje-panel"></div>
@@ -1546,6 +1561,13 @@
       return destinatariosNegocioCache;
     }
 
+    function etiquetasDestinatario(d) {
+      const tags = [];
+      if (d.recibe_liquidaciones) tags.push('Liq/Anul');
+      if (d.recibe_hacienda) tags.push('Hacienda');
+      return tags.length ? ` (${tags.join(', ')})` : ' (sin avisos activos)';
+    }
+
     function renderListaDestinatariosPanel() {
       const cont = document.getElementById('cfgListaDestinatarios');
       cont.innerHTML = '';
@@ -1558,7 +1580,7 @@
         fila.className = 'fila-cliente' + (d.id === destinatarioEditandoId ? ' seleccionada' : '');
 
         const info = document.createElement('span');
-        info.textContent = d.nombre ? `${d.nombre} — ${d.email}` : d.email;
+        info.textContent = (d.nombre ? `${d.nombre} — ${d.email}` : d.email) + etiquetasDestinatario(d);
         info.onclick = () => seleccionarDestinatarioParaEditar(d);
         fila.appendChild(info);
 
@@ -1575,6 +1597,8 @@
       destinatarioEditandoId = destinatario.id;
       document.getElementById('cfgDestinatarioNombre').value = destinatario.nombre || '';
       document.getElementById('cfgDestinatarioEmail').value = destinatario.email;
+      document.getElementById('cfgDestinatarioLiq').checked = !!destinatario.recibe_liquidaciones;
+      document.getElementById('cfgDestinatarioHacienda').checked = !!destinatario.recibe_hacienda;
       document.getElementById('cfgDestinatarioGuardarBtn').textContent = 'Guardar cambios';
       document.getElementById('cfgDestinatarioCancelarBtn').style.display = 'block';
       document.getElementById('cfgDestinatarioMensaje').textContent = '';
@@ -1585,6 +1609,8 @@
       destinatarioEditandoId = null;
       document.getElementById('cfgDestinatarioNombre').value = '';
       document.getElementById('cfgDestinatarioEmail').value = '';
+      document.getElementById('cfgDestinatarioLiq').checked = true;
+      document.getElementById('cfgDestinatarioHacienda').checked = false;
       document.getElementById('cfgDestinatarioGuardarBtn').textContent = 'Agregar destinatario';
       document.getElementById('cfgDestinatarioCancelarBtn').style.display = 'none';
       renderListaDestinatariosPanel();
@@ -1602,13 +1628,15 @@
     async function agregarDestinatarioDesdePanel() {
       const nombre = document.getElementById('cfgDestinatarioNombre').value.trim();
       const email = document.getElementById('cfgDestinatarioEmail').value.trim();
+      const recibe_liquidaciones = document.getElementById('cfgDestinatarioLiq').checked;
+      const recibe_hacienda = document.getElementById('cfgDestinatarioHacienda').checked;
       const msj = document.getElementById('cfgDestinatarioMensaje');
       msj.textContent = '';
       if (!email) { msj.textContent = 'Falta el email.'; msj.className = 'mensaje-panel error'; return; }
 
       if (destinatarioEditandoId) {
         const { data, error } = await window.supabaseClient.from('destinatarios_negocio')
-          .update({ nombre: nombre || null, email }).eq('id', destinatarioEditandoId)
+          .update({ nombre: nombre || null, email, recibe_liquidaciones, recibe_hacienda }).eq('id', destinatarioEditandoId)
           .select().single();
         if (error) {
           msj.textContent = 'No se pudo guardar: ' + error.message;
@@ -1624,7 +1652,7 @@
       }
 
       const { data, error } = await window.supabaseClient.from('destinatarios_negocio')
-        .insert({ nombre: nombre || null, email }).select().single();
+        .insert({ nombre: nombre || null, email, recibe_liquidaciones, recibe_hacienda }).select().single();
       if (error) {
         msj.textContent = 'No se pudo guardar: ' + error.message;
         msj.className = 'mensaje-panel error';
@@ -1633,6 +1661,8 @@
       destinatariosNegocioCache.push(data);
       document.getElementById('cfgDestinatarioNombre').value = '';
       document.getElementById('cfgDestinatarioEmail').value = '';
+      document.getElementById('cfgDestinatarioLiq').checked = true;
+      document.getElementById('cfgDestinatarioHacienda').checked = false;
       msj.textContent = 'Destinatario guardado.';
       msj.className = 'mensaje-panel ok';
       renderListaDestinatariosPanel();
@@ -2446,11 +2476,12 @@
       const body = { subject, mensajeHtml: cuerpoLineas };
       if (canvas) body.imagenBase64 = canvas.toDataURL('image/png').split(',')[1];
 
-      // Destinatarios internos administrados desde Configuración; si no
-      // hay ninguno cargado (cache vacío), la función igual tiene una
-      // lista de respaldo fija.
-      if (destinatariosNegocioCache.length) {
-        body.destinatarios = destinatariosNegocioCache.map((d) => d.email);
+      // Destinatarios internos administrados desde Configuración (solo los
+      // que tienen tildado "Liq/Anul"); si no queda ninguno, la función
+      // igual tiene una lista de respaldo fija.
+      const destinatariosLiq = destinatariosNegocioCache.filter((d) => d.recibe_liquidaciones).map((d) => d.email);
+      if (destinatariosLiq.length) {
+        body.destinatarios = destinatariosLiq;
       }
 
       // Si el cliente tiene mail registrado, se lo manda también (en bcc,

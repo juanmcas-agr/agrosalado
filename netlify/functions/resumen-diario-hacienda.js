@@ -12,14 +12,31 @@
 //                                usuario logueado, es un job de servidor).
 // Opcional:
 //   RESEND_FROM        — remitente; por defecto onboarding@resend.dev
-//   RESEND_TO_HACIENDA — destinatarios separados por coma; por defecto
-//                        juanmanueluranga@gmail.com
+//   RESEND_TO_HACIENDA — override manual, separados por coma, para pruebas;
+//                        si no está seteada, los destinatarios salen de
+//                        destinatarios_negocio (tabla compartida con Granos,
+//                        administrada desde Configuración > Destinatarios
+//                        de avisos > tildar "Movimientos de Hacienda").
 
 // Pública (la misma que stock/js/config.js): no es un secreto, es la URL
 // del proyecto de Supabase, no la clave.
 const SUPABASE_URL = 'https://uiummeoayxwayxntjjsv.supabase.co';
 
 const DESTINATARIOS_DEFAULT = ['juanmanueluranga@gmail.com'];
+
+async function obtenerDestinatarios() {
+  if (process.env.RESEND_TO_HACIENDA) {
+    return process.env.RESEND_TO_HACIENDA.split(',').map((m) => m.trim()).filter(Boolean);
+  }
+  try {
+    const filas = await consultarSupabase('destinatarios_negocio?recibe_hacienda=eq.true&select=email');
+    const emails = filas.map((f) => f.email).filter(Boolean);
+    if (emails.length) return emails;
+  } catch (error) {
+    console.error('No se pudo leer destinatarios_negocio, uso la lista de respaldo:', error);
+  }
+  return DESTINATARIOS_DEFAULT;
+}
 
 function rangoDeHoyArt() {
   // Corre ~23:30 ART = ~02:30 UTC del día siguiente; restamos 3hs para
@@ -114,9 +131,7 @@ exports.handler = async function () {
   }
 
   const remitente = process.env.RESEND_FROM || 'AGROSALADO <onboarding@resend.dev>';
-  const destinatarios = process.env.RESEND_TO_HACIENDA
-    ? process.env.RESEND_TO_HACIENDA.split(',').map((m) => m.trim()).filter(Boolean)
-    : DESTINATARIOS_DEFAULT;
+  const destinatarios = await obtenerDestinatarios();
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
