@@ -833,6 +833,7 @@
     <button id="cerrarNegocio" onclick="cerrarNegocio()" class="pendiente">
       🔒 CERRAR NEGOCIO
     </button>
+    <div id="cerrarNegocioMensaje" style="margin-top:8px;font-size:0.9em;font-weight:bold;min-height:1.2em;"></div>
   </div>
 
   <!-- Modal recuperar negocio -->
@@ -2241,6 +2242,7 @@
           body: JSON.stringify(body),
         });
         if (!res.ok) throw new Error(await res.text());
+        mostrarMensajeCerrarNegocio('✅ Mail enviado');
       } catch (error) {
         alert('⚠️ No se pudo mandar el mail: ' + error.message);
       }
@@ -2371,6 +2373,13 @@
         renderEncabezadoAlternativa(header.cells[i], n++);
       }
       contador = n;
+    }
+
+    function mostrarMensajeCerrarNegocio(texto, duracionMs) {
+      const el = document.getElementById('cerrarNegocioMensaje');
+      el.textContent = texto;
+      clearTimeout(mostrarMensajeCerrarNegocio._timer);
+      mostrarMensajeCerrarNegocio._timer = setTimeout(() => { el.textContent = ''; }, duracionMs || 4000);
     }
 
     async function cerrarNegocio() {
