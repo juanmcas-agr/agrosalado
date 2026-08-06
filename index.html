@@ -955,10 +955,10 @@
       </button>
       <div id="seccionClientes" class="panel-seccion">
         <select id="cfgListaClientes" onchange="onSeleccionClienteLista()"></select>
-        <button type="button" onclick="eliminarClienteSeleccionado()" style="background:#ad1e19;margin-bottom:8px;">🗑️ Eliminar seleccionado</button>
         <input type="text" id="cfgClienteNombre" placeholder="Nombre del cliente">
         <input type="email" id="cfgClienteEmail" placeholder="Email (opcional)">
         <button type="button" id="cfgClienteGuardarBtn" onclick="agregarClienteDesdePanel()">Agregar cliente</button>
+        <button type="button" onclick="eliminarClienteSeleccionado()" style="background:#ad1e19;">Eliminar registro</button>
         <button type="button" id="cfgClienteCancelarBtn" onclick="cancelarEdicionCliente()" style="display:none;background:#888;">Cancelar edición</button>
         <div id="cfgClienteMensaje" class="mensaje-panel"></div>
       </div>
@@ -969,7 +969,6 @@
       <div id="seccionDestinatarios" class="panel-seccion">
         <p style="font-size:0.85em;color:#666;margin-top:0;">Tildá qué avisos recibe cada uno.</p>
         <select id="cfgListaDestinatarios" onchange="onSeleccionDestinatarioLista()"></select>
-        <button type="button" onclick="eliminarDestinatarioSeleccionado()" style="background:#ad1e19;margin-bottom:8px;">🗑️ Eliminar seleccionado</button>
         <input type="text" id="cfgDestinatarioNombre" placeholder="Nombre (opcional)">
         <input type="email" id="cfgDestinatarioEmail" placeholder="Email">
         <label class="check-inline">
@@ -981,6 +980,7 @@
           Resumen diario de Hacienda
         </label>
         <button type="button" id="cfgDestinatarioGuardarBtn" onclick="agregarDestinatarioDesdePanel()">Agregar destinatario</button>
+        <button type="button" onclick="eliminarDestinatarioSeleccionado()" style="background:#ad1e19;">Eliminar registro</button>
         <button type="button" id="cfgDestinatarioCancelarBtn" onclick="cancelarEdicionDestinatario()" style="display:none;background:#888;">Cancelar edición</button>
         <div id="cfgDestinatarioMensaje" class="mensaje-panel"></div>
       </div>
