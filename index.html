@@ -932,7 +932,12 @@
         <table id="repTabla" class="rep-tabla">
           <thead>
             <tr>
-              <th>Fecha</th><th>Cliente</th><th>Producto</th><th>N° orden</th><th>Toneladas</th>
+              <th rowspan="2">Fecha</th><th rowspan="2">Cliente</th><th rowspan="2">Producto</th><th rowspan="2">N° orden</th><th rowspan="2">Toneladas</th>
+              <th colspan="5" style="text-align:center;">Por tonelada</th>
+              <th colspan="5" style="text-align:center;">Total del negocio</th>
+            </tr>
+            <tr>
+              <th>Precio bruto</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th><th>A productor</th>
               <th>Precio bruto</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th><th>A productor</th>
             </tr>
           </thead>
@@ -2549,7 +2554,7 @@
           fleteLargo: porTonelada.fleteLargo * toneladas,
           productor: porTonelada.productor * toneladas,
         };
-        filas.push({ registro, alt, toneladas, esLiquidaSaldo, totales });
+        filas.push({ registro, alt, toneladas, esLiquidaSaldo, porTonelada, totales });
       }
 
       ultimoReporteFilas = filas;
@@ -2564,13 +2569,18 @@
       for (const f of filas) {
         const tr = document.createElement('tr');
         const toneladasTexto = f.esLiquidaSaldo ? 'COMPLETAR TONS (vendió saldo)' : f.toneladas.toLocaleString('es-AR');
-        const celda = (valor) => f.totales ? formatoNumero(valor) : '—';
+        const celda = (valor) => valor != null ? formatoNumero(valor) : '—';
         tr.innerHTML = `
           <td>${formatearFecha(f.registro.fecha_cierre)}</td>
           <td>${f.registro.cliente || '-'}</td>
           <td>${f.alt.producto || '-'}</td>
           <td>${f.registro.numero_orden || '-'}</td>
           <td>${toneladasTexto}</td>
+          <td>${celda(f.porTonelada.precioBruto)}</td>
+          <td>${celda(f.porTonelada.comision)}</td>
+          <td>${celda(f.porTonelada.fleteCorto)}</td>
+          <td>${celda(f.porTonelada.fleteLargo)}</td>
+          <td>${celda(f.porTonelada.productor)}</td>
           <td>${celda(f.totales && f.totales.precioBruto)}</td>
           <td>${celda(f.totales && f.totales.comision)}</td>
           <td>${celda(f.totales && f.totales.fleteCorto)}</td>
@@ -2589,11 +2599,16 @@
         Producto: f.alt.producto || '',
         'N° orden': f.registro.numero_orden || '',
         Toneladas: f.esLiquidaSaldo ? 'COMPLETAR TONS (vendió saldo)' : f.toneladas,
-        'Precio bruto': f.totales ? +f.totales.precioBruto.toFixed(2) : '',
-        'Comisión': f.totales ? +f.totales.comision.toFixed(2) : '',
-        'Flete corto': f.totales ? +f.totales.fleteCorto.toFixed(2) : '',
-        'Flete largo': f.totales ? +f.totales.fleteLargo.toFixed(2) : '',
-        'A productor': f.totales ? +f.totales.productor.toFixed(2) : '',
+        'Precio bruto x tn': +f.porTonelada.precioBruto.toFixed(2),
+        'Comisión x tn': +f.porTonelada.comision.toFixed(2),
+        'Flete corto x tn': +f.porTonelada.fleteCorto.toFixed(2),
+        'Flete largo x tn': +f.porTonelada.fleteLargo.toFixed(2),
+        'A productor x tn': +f.porTonelada.productor.toFixed(2),
+        'Precio bruto total': f.totales ? +f.totales.precioBruto.toFixed(2) : '',
+        'Comisión total': f.totales ? +f.totales.comision.toFixed(2) : '',
+        'Flete corto total': f.totales ? +f.totales.fleteCorto.toFixed(2) : '',
+        'Flete largo total': f.totales ? +f.totales.fleteLargo.toFixed(2) : '',
+        'A productor total': f.totales ? +f.totales.productor.toFixed(2) : '',
       }));
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(filasExcel);
