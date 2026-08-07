@@ -2473,19 +2473,24 @@
       }
     }
 
-    function enviarMailLiquidacionConCaptura(datos) {
+    function enviarMailLiquidacionConCaptura(datos, soloColumna) {
       // Si falla la captura de la tabla, el mail se manda igual, sin la
       // imagen adjunta — antes una falla acá dejaba todo colgado en
       // silencio y el mail nunca llegaba a mandarse. Devuelve la promesa
       // para que quien llama pueda esperar a que termine antes de, por
       // ejemplo, borrar la tabla que se acaba de capturar.
+      //
+      // soloColumna (índice de columna, 1-based): si viene, la captura
+      // solo muestra esa alternativa — al cerrar un negocio no tiene
+      // sentido mandar por mail las comparativas descartadas.
       return ocultarYCapturar(
         (canvas) => enviarMailLiquidacion({ ...datos, canvas }),
-        () => enviarMailLiquidacion(datos)
+        () => enviarMailLiquidacion(datos),
+        soloColumna
       );
     }
 
-    function ocultarYCapturar(callback, onError) {
+    function ocultarYCapturar(callback, onError, soloColumna) {
       const tabla = document.getElementById('tablaNegocios');
       const ocultar = document.querySelectorAll('.ocultar-al-exportar');
       // Temporalmente quitar sticky de primera columna para que html2canvas la capture bien
@@ -2493,9 +2498,24 @@
       stickyEls.forEach(el => el.style.position = 'relative');
       ocultar.forEach(el => el.style.display = 'none');
 
+      // Oculta todas las columnas de alternativa salvo la elegida (la
+      // primera columna, con las etiquetas de cada fila, siempre queda).
+      const celdasOcultas = [];
+      if (soloColumna != null) {
+        for (const fila of tabla.rows) {
+          for (let i = 1; i < fila.cells.length; i++) {
+            if (i !== soloColumna) {
+              fila.cells[i].style.display = 'none';
+              celdasOcultas.push(fila.cells[i]);
+            }
+          }
+        }
+      }
+
       const restaurar = () => {
         ocultar.forEach(el => el.style.display = '');
         stickyEls.forEach(el => el.style.position = '');
+        celdasOcultas.forEach(el => el.style.display = '');
       };
 
       return html2canvas(tabla, {
@@ -2650,7 +2670,7 @@
         cliente,
         numeroOrden,
         lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
-      });
+      }, sel);
 
       borrarTodo();
     }
