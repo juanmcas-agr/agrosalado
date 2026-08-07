@@ -935,6 +935,7 @@
               <th rowspan="2">Fecha</th><th rowspan="2">Cliente</th><th rowspan="2">Producto</th><th rowspan="2">N° orden</th><th rowspan="2">Toneladas</th>
               <th colspan="5" style="text-align:center;">Por tonelada</th>
               <th colspan="5" style="text-align:center;">Total del negocio</th>
+              <th rowspan="2">Observaciones</th>
             </tr>
             <tr>
               <th>Precio bruto</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th><th>A productor</th>
@@ -1306,6 +1307,27 @@
       return formatearCodigoDesdeContador(n);
     }
 
+    // Numeración de negocios "tipo 2" (internos, sin mail — se disparan
+    // escribiendo "2" en el campo Cliente). Formato xx0001aa: xx fijo,
+    // 4 dígitos (0001-9999) que al completar la vuelta hacen avanzar las
+    // 2 letras (aa -> ab -> ac...), arrancando siempre en 0001/aa.
+    function formatearCodigoTipo2DesdeContador(n) {
+      const nnnn = String((n % 9999) + 1).padStart(4, '0');
+      let li = Math.floor(n / 9999) % 676; // 26^2 combinaciones de letras
+      let ll = '';
+      for (let i = 0; i < 2; i++) {
+        ll = String.fromCharCode(97 + (li % 26)) + ll;
+        li = Math.floor(li / 26);
+      }
+      return `xx${nnnn}${ll}`;
+    }
+
+    async function generarCodigoTipo2() {
+      const { data, error } = await window.supabaseClient.rpc('siguiente_numero_orden_tipo2');
+      const n = (!error && data != null) ? Number(data) - 1 : Date.now();
+      return formatearCodigoTipo2DesdeContador(n);
+    }
+
     function renderEncabezadoAlternativa(th, numero) {
       const codigo = th.dataset.codigo || '';
       th.textContent = `Alternativa ${numero}`;
@@ -1414,7 +1436,7 @@
     // agregada, para que no interrumpa todo el tiempo.
     document.getElementById('cliente').addEventListener('blur', async () => {
       const nombre = document.getElementById('cliente').value.trim();
-      if (!nombre) return;
+      if (!nombre || nombre === '2') return;
       const existente = buscarClientePorNombre(nombre);
       if (existente) await ofrecerCargarMailSiFalta(existente);
       else await asegurarClienteGuardado(nombre);
@@ -2586,6 +2608,7 @@
           <td>${celda(f.totales && f.totales.fleteCorto)}</td>
           <td>${celda(f.totales && f.totales.fleteLargo)}</td>
           <td>${celda(f.totales && f.totales.productor)}</td>
+          <td style="text-align:left;white-space:normal;">${f.alt.observaciones || '-'}</td>
         `;
         tbody.appendChild(tr);
       }
@@ -2609,6 +2632,7 @@
         'Flete corto total': f.totales ? +f.totales.fleteCorto.toFixed(2) : '',
         'Flete largo total': f.totales ? +f.totales.fleteLargo.toFixed(2) : '',
         'A productor total': f.totales ? +f.totales.productor.toFixed(2) : '',
+        Observaciones: f.alt.observaciones || '',
       }));
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(filasExcel);
@@ -2832,7 +2856,11 @@
       // Solo se guarda la alternativa elegida, no las comparativas descartadas.
       const elegida = leerAlternativaDesdeColumna(sel);
       const cliente = elegida.cliente;
-      const numeroOrden = elegida.codigo || '-';
+      // Negocio "tipo 2": se carga escribiendo "2" (y solo "2") en Cliente.
+      // Son negocios internos que no mandan ningún mail, pero sí quedan
+      // en el historial/Reportes con su propia numeración (xx0001aa...).
+      const esTipo2 = cliente.trim() === '2';
+      const numeroOrden = esTipo2 ? await generarCodigoTipo2() : (elegida.codigo || '-');
 
       let nombreUsuario = '';
       if (cliente) {
@@ -2850,16 +2878,20 @@
         }
       }
 
-      // Se espera a que termine de mandarse el mail (con la captura de ESTA
-      // tabla) antes de vaciarla — si no, la limpieza podría pisar la
-      // captura o dejar el negocio a medio guardar.
-      await enviarMailLiquidacionConCaptura({
-        subject: `NUEVA ORDEN DE LIQUIDACION N° ${numeroOrden}`,
-        tituloAviso: 'ATENCIÓN: NO DUPLICAR LIQUIDACIÓN',
-        cliente,
-        numeroOrden,
-        lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
-      }, sel);
+      if (esTipo2) {
+        mostrarMensajeCerrarNegocio(`✅ Negocio N° ${numeroOrden} guardado (sin mail)`);
+      } else {
+        // Se espera a que termine de mandarse el mail (con la captura de
+        // ESTA tabla) antes de vaciarla — si no, la limpieza podría pisar
+        // la captura o dejar el negocio a medio guardar.
+        await enviarMailLiquidacionConCaptura({
+          subject: `NUEVA ORDEN DE LIQUIDACION N° ${numeroOrden}`,
+          tituloAviso: 'ATENCIÓN: NO DUPLICAR LIQUIDACIÓN',
+          cliente,
+          numeroOrden,
+          lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
+        }, sel);
+      }
 
       borrarTodo();
     }

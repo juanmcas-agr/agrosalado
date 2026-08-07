@@ -377,6 +377,19 @@ language sql security definer as
 
 grant execute on function siguiente_numero_orden() to authenticated;
 
+-- Contador aparte para los negocios "tipo 2" (internos, sin mail — ver
+-- generarCodigoTipo2() en index.html). Formato xxNNNNLL: NNNN es este
+-- contador de 4 dígitos (0001-9999) y LL son 2 letras que avanzan una
+-- combinación cada vez que NNNN completa la vuelta.
+create sequence if not exists orden_secuencia_tipo2_seq;
+grant usage on sequence orden_secuencia_tipo2_seq to authenticated;
+
+create or replace function siguiente_numero_orden_tipo2() returns bigint
+language sql security definer as
+  $$ select nextval('orden_secuencia_tipo2_seq') $$;
+
+grant execute on function siguiente_numero_orden_tipo2() to authenticated;
+
 -- Clientes: nombre + mail opcional, para autocompletar el campo "Cliente"
 -- del formulario y poder mandarles por mail la liquidación cuando se
 -- cierra un negocio a su nombre.
