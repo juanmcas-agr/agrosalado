@@ -236,6 +236,15 @@ function mostrarMensaje(texto, tipo) {
   contenedor.className = tipo; // 'error' | 'ok' | 'advertencia'
 }
 
+let toastTimer = null;
+function mostrarToast(texto, duracionMs) {
+  const toast = el('toast');
+  toast.textContent = texto;
+  toast.classList.add('visible');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('visible'), duracionMs || 3000);
+}
+
 function resetFormulario() {
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
@@ -263,8 +272,12 @@ async function onSubmit(evento) {
   const fila = armarFila(datos);
   await encolarMovimiento(fila);
 
-  const avisoExtra = advertencias.length ? ` (${advertencias.join(' ')})` : '';
-  mostrarMensaje(`Movimiento guardado.${avisoExtra} Se sincroniza automáticamente.`, advertencias.length ? 'advertencia' : 'ok');
+  mostrarToast('✅ MOVIMIENTO REGISTRADO');
+  if (advertencias.length) {
+    mostrarMensaje(`Se sincroniza automáticamente. (${advertencias.join(' ')})`, 'advertencia');
+  } else {
+    mostrarMensaje('', 'ok');
+  }
   resetFormulario();
 }
 

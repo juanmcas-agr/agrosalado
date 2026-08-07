@@ -2240,6 +2240,7 @@
       // varias opciones del mismo cliente), pero acá sí se limpia: es un
       // reseteo completo, listo para cargar un negocio distinto.
       document.getElementById('cliente').value = '';
+      guardadoIdActual = null;
     }
 
     // ── Guardar / Recuperar negocio / Historial ──
@@ -2360,6 +2361,10 @@
 
     let cacheGuardados = [];
     let cacheCerrados = [];
+    // Si el negocio cargado en la tabla vino de "Traer" un guardado, acá
+    // queda su id — así, al cerrar el negocio, ese guardado se borra solo
+    // (ya no tiene sentido que siga en la lista de guardados).
+    let guardadoIdActual = null;
 
     function formatearFechaHora(iso) {
       const d = new Date(iso);
@@ -2419,7 +2424,11 @@
         const btnTraer = document.createElement('button');
         btnTraer.textContent = 'Traer';
         btnTraer.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;';
-        btnTraer.onclick = () => { cargarNegocioEnTabla(registro.datos); cerrarModalRecuperar(); };
+        btnTraer.onclick = () => {
+          guardadoIdActual = tab === 'guardados' ? registro.id : null;
+          cargarNegocioEnTabla(registro.datos);
+          cerrarModalRecuperar();
+        };
         acciones.appendChild(btnTraer);
 
         if (tab === 'cerrados') {
@@ -2450,10 +2459,12 @@
       cambiarTabRecuperar('guardados');
     }
 
-    // Anula (borra) un negocio cerrado y manda el mail de anulación.
+    // Anula (borra) un negocio cerrado y manda el mail de anulación —
+    // salvo que sea un negocio "tipo 2" (cliente === "2"), que nunca manda mail.
     // Devuelve true si se pudo anular, para que quien llama decida qué hacer después.
     async function anularNegocioCerrado(registro) {
       const numero = registro.numero_orden || '-';
+      const esTipo2 = (registro.cliente || '').trim() === '2';
 
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       const [nombreQuienAnula, nombreQuienCreo] = await Promise.all([
@@ -2466,22 +2477,26 @@
 
       cacheCerrados = cacheCerrados.filter((r) => r.id !== registro.id);
 
-      await enviarMailLiquidacion({
-        subject: `ANULACION ORDEN DE LIQUIDACION N° ${numero}`,
-        tituloAviso: '¡ANULACION! NEGOCIO ANULADO',
-        cliente: registro.cliente,
-        numeroOrden: numero,
-        lineasExtra: [
-          `Cargado originalmente por: ${nombreQuienCreo || '-'}`,
-          `Anulado por: ${nombreQuienAnula || '-'}`,
-        ],
-      });
+      if (!esTipo2) {
+        await enviarMailLiquidacion({
+          subject: `ANULACION ORDEN DE LIQUIDACION N° ${numero}`,
+          tituloAviso: '¡ANULACION! NEGOCIO ANULADO',
+          cliente: registro.cliente,
+          numeroOrden: numero,
+          lineasExtra: [
+            `Cargado originalmente por: ${nombreQuienCreo || '-'}`,
+            `Anulado por: ${nombreQuienAnula || '-'}`,
+          ],
+        });
+      }
       return true;
     }
 
     async function eliminarCerrado(registro) {
       const numero = registro.numero_orden || '-';
-      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero})?\n\nSe va a mandar un mail avisando la anulación.`)) return;
+      const esTipo2 = (registro.cliente || '').trim() === '2';
+      const avisoMail = esTipo2 ? '' : '\n\nSe va a mandar un mail avisando la anulación.';
+      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero})?${avisoMail}`)) return;
       const ok = await anularNegocioCerrado(registro);
       if (ok) cambiarTabRecuperar('cerrados');
     }
@@ -2490,7 +2505,9 @@
     // tabla, listo para corregir y cerrar de nuevo con un N° de orden nuevo.
     async function rectificarCerrado(registro) {
       const numero = registro.numero_orden || '-';
-      if (!confirm(`🛠️ Vas a ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero}) y cargarlo en la tabla para corregirlo.\n\nSe manda el mail de anulación y después lo editás y lo volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
+      const esTipo2 = (registro.cliente || '').trim() === '2';
+      const avisoMail = esTipo2 ? 'No se manda ningún mail (negocio tipo 2).' : 'Se manda el mail de anulación.';
+      if (!confirm(`🛠️ Vas a ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero}) y cargarlo en la tabla para corregirlo.\n\n${avisoMail} Después lo editás y lo volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
       const ok = await anularNegocioCerrado(registro);
       if (!ok) return;
       cerrarModalRecuperar();
@@ -2891,6 +2908,13 @@
           numeroOrden,
           lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
         }, sel);
+      }
+
+      // Si este negocio venía de un "guardado" (Traer), ya cerró: no tiene
+      // sentido que siga apareciendo en la lista de guardados.
+      if (guardadoIdActual) {
+        const { error } = await window.supabaseClient.from('negocios_guardados').delete().eq('id', guardadoIdActual);
+        if (error) console.error('No se pudo borrar el guardado tras cerrar el negocio:', error);
       }
 
       borrarTodo();

@@ -60,6 +60,18 @@ body {
 }
 .tab-bar-inferior button .tab-icono { font-size: 1.3em; }
 .tab-bar-inferior button.activo { color: #8a5a34; font-weight: bold; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 90px;
+  transform: translate(-50%, 10px);
+  background: #2c3e50; color: white;
+  padding: 10px 18px; border-radius: 20px;
+  font-size: 0.9em; font-weight: bold;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  z-index: 950; pointer-events: none;
+  opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast.visible { opacity: 1; transform: translate(-50%, 0); }
 .tab-bar-inferior button:disabled { cursor: default; }
 
 h1, h2, h3 { color: #2c3e50; }
