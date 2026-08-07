@@ -10,6 +10,7 @@
   <link rel="apple-touch-icon" href="/assets/icon-512.png">
   <link rel="icon" href="/assets/icon-64.png">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
   <script src="tarifas.js"></script>
   <style>
     * { box-sizing: border-box; }
@@ -923,6 +924,7 @@
         <label style="font-size:0.85em;">Desde<br><input type="date" id="repDesde" style="width:auto;"></label>
         <label style="font-size:0.85em;">Hasta<br><input type="date" id="repHasta" style="width:auto;"></label>
         <button onclick="cargarReporte()" style="width:auto;padding:10px 16px;">Filtrar</button>
+        <button onclick="exportarReporteExcel()" style="width:auto;padding:10px 16px;background:#1e7e34;">📥 Exportar Excel</button>
       </div>
       <div id="repMensaje" class="mensaje-panel"></div>
       <div id="repResumen" class="rep-resumen-grid"></div>
@@ -930,7 +932,7 @@
         <table id="repTabla" class="rep-tabla">
           <thead>
             <tr>
-              <th>Fecha</th><th>Cliente</th><th>Producto</th><th>N° orden</th>
+              <th>Fecha</th><th>Cliente</th><th>Producto</th><th>N° orden</th><th>Toneladas</th>
               <th>Precio bruto</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th><th>A productor</th>
             </tr>
           </thead>
@@ -2477,6 +2479,8 @@
     // crudos guardados (precioInput, comisionPct, km, descuentos) con las
     // mismas fórmulas que arma la tabla al agregar una alternativa —
     // negocios_historial no guarda los montos ya calculados.
+    let ultimoReporteFilas = [];
+
     function calcularDerivadosNegocio(alt) {
       const precioInput = parseFloat(alt.precioInput) || 0;
       const tipoCambio = parseFloat(alt.tipoCambio) || 1;
@@ -2528,49 +2532,73 @@
       }
 
       const filas = [];
-      let totalBruto = 0, totalComision = 0, totalFleteCorto = 0, totalFleteLargo = 0, totalToneladas = 0;
       for (const registro of (data || [])) {
         const alt = registro.datos && registro.datos.alternativas && registro.datos.alternativas[0];
         if (!alt) continue;
-        const d = calcularDerivadosNegocio(alt);
+        const porTonelada = calcularDerivadosNegocio(alt);
         const toneladas = parseFloat(alt.toneladas) || 0;
-        totalBruto += d.precioBruto;
-        totalComision += d.comision;
-        totalFleteCorto += d.fleteCorto;
-        totalFleteLargo += d.fleteLargo;
-        totalToneladas += toneladas;
-        filas.push({ registro, alt, ...d });
+        const esLiquidaSaldo = !!alt.liquidaSaldo;
+        // Precio, comisión y fletes se cotizan por tonelada; el total real
+        // del negocio es esa tarifa x las toneladas de ESE negocio. Si
+        // "liquida saldo", las toneladas se completan después y todavía
+        // no hay un total real para mostrar.
+        const totales = esLiquidaSaldo ? null : {
+          precioBruto: porTonelada.precioBruto * toneladas,
+          comision: porTonelada.comision * toneladas,
+          fleteCorto: porTonelada.fleteCorto * toneladas,
+          fleteLargo: porTonelada.fleteLargo * toneladas,
+          productor: porTonelada.productor * toneladas,
+        };
+        filas.push({ registro, alt, toneladas, esLiquidaSaldo, totales });
       }
 
+      ultimoReporteFilas = filas;
       msj.textContent = filas.length ? '' : 'No hay negocios cerrados en ese rango de fechas.';
 
-      const n = filas.length;
       document.getElementById('repResumen').innerHTML = `
-        <div class="rep-item"><div class="rep-label">Negocios cerrados</div><div class="rep-valor">${n}</div></div>
-        <div class="rep-item"><div class="rep-label">Precio bruto promedio</div><div class="rep-valor">${formatoNumero(n ? totalBruto / n : 0)}</div></div>
-        <div class="rep-item"><div class="rep-label">Comisión ganada</div><div class="rep-valor">${formatoNumero(totalComision)}</div></div>
-        <div class="rep-item"><div class="rep-label">Flete corto ganado</div><div class="rep-valor">${formatoNumero(totalFleteCorto)}</div></div>
-        <div class="rep-item"><div class="rep-label">Flete largo ganado</div><div class="rep-valor">${formatoNumero(totalFleteLargo)}</div></div>
-        <div class="rep-item"><div class="rep-label">Toneladas totales</div><div class="rep-valor">${totalToneladas.toLocaleString('es-AR')}</div></div>
+        <div class="rep-item"><div class="rep-label">Negocios cerrados</div><div class="rep-valor">${filas.length}</div></div>
       `;
 
       const tbody = document.querySelector('#repTabla tbody');
       tbody.innerHTML = '';
       for (const f of filas) {
         const tr = document.createElement('tr');
+        const toneladasTexto = f.esLiquidaSaldo ? 'COMPLETAR TONS (vendió saldo)' : f.toneladas.toLocaleString('es-AR');
+        const celda = (valor) => f.totales ? formatoNumero(valor) : '—';
         tr.innerHTML = `
           <td>${formatearFecha(f.registro.fecha_cierre)}</td>
           <td>${f.registro.cliente || '-'}</td>
           <td>${f.alt.producto || '-'}</td>
           <td>${f.registro.numero_orden || '-'}</td>
-          <td>${formatoNumero(f.precioBruto)}</td>
-          <td>${formatoNumero(f.comision)}</td>
-          <td>${formatoNumero(f.fleteCorto)}</td>
-          <td>${formatoNumero(f.fleteLargo)}</td>
-          <td>${formatoNumero(f.productor)}</td>
+          <td>${toneladasTexto}</td>
+          <td>${celda(f.totales && f.totales.precioBruto)}</td>
+          <td>${celda(f.totales && f.totales.comision)}</td>
+          <td>${celda(f.totales && f.totales.fleteCorto)}</td>
+          <td>${celda(f.totales && f.totales.fleteLargo)}</td>
+          <td>${celda(f.totales && f.totales.productor)}</td>
         `;
         tbody.appendChild(tr);
       }
+    }
+
+    function exportarReporteExcel() {
+      if (!ultimoReporteFilas.length) { alert('No hay datos para exportar — filtrá primero.'); return; }
+      const filasExcel = ultimoReporteFilas.map((f) => ({
+        Fecha: formatearFecha(f.registro.fecha_cierre),
+        Cliente: f.registro.cliente || '',
+        Producto: f.alt.producto || '',
+        'N° orden': f.registro.numero_orden || '',
+        Toneladas: f.esLiquidaSaldo ? 'COMPLETAR TONS (vendió saldo)' : f.toneladas,
+        'Precio bruto': f.totales ? +f.totales.precioBruto.toFixed(2) : '',
+        'Comisión': f.totales ? +f.totales.comision.toFixed(2) : '',
+        'Flete corto': f.totales ? +f.totales.fleteCorto.toFixed(2) : '',
+        'Flete largo': f.totales ? +f.totales.fleteLargo.toFixed(2) : '',
+        'A productor': f.totales ? +f.totales.productor.toFixed(2) : '',
+      }));
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(filasExcel);
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte negocios');
+      XLSX.writeFile(wb, `reporte_negocios_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
     async function obtenerNombreUsuario(userId) {
