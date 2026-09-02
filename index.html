@@ -841,9 +841,10 @@
     <input type="date" id="fijacion" class="full">
     <input type="number" id="toneladas" placeholder="Toneladas">
     <button type="button" id="liquidaSaldo" class="boton-toggle" onclick="toggleLiquidaSaldo()">Liquida saldo</button>
+    <button type="button" id="fwdToggle" class="boton-toggle" onclick="toggleFwd()">FWD</button>
     <div class="campo-con-boton">
       <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
-      <div class="boton-fecha-wrap">
+      <div class="boton-fecha-wrap" id="plazoFechaWrap">
         <button type="button" tabindex="-1" aria-hidden="true">📅</button>
         <input type="date" id="plazoPagoFecha" onchange="aplicarPlazoFecha()" aria-label="Elegir fecha de plazo de pago">
       </div>
@@ -936,6 +937,7 @@
               <th colspan="5" style="text-align:center;">Por tonelada</th>
               <th colspan="5" style="text-align:center;">Total del negocio</th>
               <th rowspan="2">Observaciones</th>
+              <th rowspan="2">FWD</th>
             </tr>
             <tr>
               <th>Precio bruto</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th><th>A productor</th>
@@ -1817,6 +1819,31 @@
       if (activo) ton.value = '';
     }
 
+    // Negocio FWD (forward): no tiene fecha de pago fija, sino un período
+    // de entrega a futuro (texto libre, ej. "Marzo 2027"). Reutiliza el
+    // campo "Plazo de Pago" para no duplicar UI — se codifica en la propia
+    // celda con el prefijo PREFIJO_FWD, mismo criterio que "Liquida saldo"
+    // en la celda de Toneladas.
+    // Sin espacio final en el prefijo a propósito: la celda pasa por
+    // .trim() al leerla, y un "FWD: " con período vacío perdería el
+    // espacio y dejaría de matchear el prefijo.
+    const PREFIJO_FWD = 'FWD:';
+    function parsePlazoCelda(texto) {
+      if (texto.startsWith(PREFIJO_FWD)) return { esFwd: true, plazo: texto.slice(PREFIJO_FWD.length).trim() };
+      return { esFwd: false, plazo: texto };
+    }
+
+    function toggleFwd(forzar) {
+      const btn = document.getElementById('fwdToggle');
+      const activo = forzar !== undefined ? forzar : !btn.classList.contains('activo');
+      btn.classList.toggle('activo', activo);
+      btn.textContent = activo ? '✓ FWD' : 'FWD';
+      const campoPlazo = document.getElementById('plazoPago');
+      campoPlazo.placeholder = activo ? 'Período de entrega (ej: Marzo 2027)' : 'Plazo de Pago (días o texto)';
+      document.getElementById('plazoFechaWrap').style.display = activo ? 'none' : '';
+      campoPlazo.value = '';
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
       cargarTC();
@@ -1939,14 +1966,14 @@
       const precioInput = parseFloat(tdPrecio.dataset.precioInput) || 0;
       const toneladasTexto = textoDe(FILA.toneladas);
       const liquidaSaldo = toneladasTexto === 'Liquida saldo';
-      const plazo = textoDe(FILA.plazo);
+      const { esFwd, plazo } = parsePlazoCelda(textoDe(FILA.plazo));
 
       const camposFaltantes = [];
       if (!cliente) camposFaltantes.push('Cliente');
       if (!producto) camposFaltantes.push('Producto');
       if (!precioInput) camposFaltantes.push('Precio Bruto');
       if (!toneladasTexto && !liquidaSaldo) camposFaltantes.push('Toneladas (o tildar "Liquida saldo")');
-      if (!plazo) camposFaltantes.push('Plazo de Pago');
+      if (!plazo) camposFaltantes.push(esFwd ? 'Período de entrega' : 'Plazo de Pago');
 
       checkbox.disabled = camposFaltantes.length > 0;
       if (checkbox.disabled && checkbox.checked) checkbox.checked = false;
@@ -2093,7 +2120,9 @@
       const liquidaSaldo    = document.getElementById('liquidaSaldo').classList.contains('activo');
       const toneladas       = document.getElementById('toneladas').value;
       const toneladasTexto  = liquidaSaldo ? 'Liquida saldo' : toneladas;
+      const esFwd           = document.getElementById('fwdToggle').classList.contains('activo');
       const plazo           = document.getElementById('plazoPago').value;
+      const plazoTexto      = esFwd ? (PREFIJO_FWD + (plazo ? ' ' + plazo : '')) : plazo;
       const descCorto       = parseFloat(document.getElementById('descCorto').value) || 0;
       const descLargo       = parseFloat(document.getElementById('descLargo').value) || 0;
       const comisionPct     = parseFloat(document.getElementById('comision').value ?? 3);
@@ -2127,7 +2156,7 @@
         `<strong>${formatoNumero(productor)}</strong>`,
         fijacion,
         toneladasTexto || "-",
-        plazo || "-",
+        plazoTexto || "-",
         observaciones
       ];
 
@@ -2285,7 +2314,7 @@
         fijacionIso: fechaMostradaAIso(textoDe(FILA.fijacion)),
         toneladas: textoDe(FILA.toneladas) === 'Liquida saldo' ? '' : textoDe(FILA.toneladas),
         liquidaSaldo: textoDe(FILA.toneladas) === 'Liquida saldo',
-        plazo: textoDe(FILA.plazo),
+        ...parsePlazoCelda(textoDe(FILA.plazo)),
         observaciones: textoDe(FILA.observaciones),
       };
     }
@@ -2315,6 +2344,7 @@
       document.getElementById('fijacion').value = v.fijacionIso || '';
       toggleLiquidaSaldo(!!v.liquidaSaldo);
       document.getElementById('toneladas').value = v.liquidaSaldo ? '' : (v.toneladas || '');
+      toggleFwd(!!v.esFwd);
       document.getElementById('plazoPago').value = v.plazo || '';
       document.getElementById('observaciones').value = v.observaciones || '';
       await agregarAlternativa(v.codigo || undefined);
@@ -2626,6 +2656,7 @@
           <td>${celda(f.totales && f.totales.fleteLargo)}</td>
           <td>${celda(f.totales && f.totales.productor)}</td>
           <td style="text-align:left;white-space:normal;">${f.alt.observaciones || '-'}</td>
+          <td style="text-align:left;white-space:normal;">${f.alt.esFwd ? (f.alt.plazo || '-') : '-'}</td>
         `;
         tbody.appendChild(tr);
       }
@@ -2650,6 +2681,7 @@
         'Flete largo total': f.totales ? +f.totales.fleteLargo.toFixed(2) : '',
         'A productor total': f.totales ? +f.totales.productor.toFixed(2) : '',
         Observaciones: f.alt.observaciones || '',
+        FWD: f.alt.esFwd ? (f.alt.plazo || '') : '',
       }));
       const wb = XLSX.utils.book_new();
       const ws = XLSX.utils.json_to_sheet(filasExcel);
@@ -2664,9 +2696,12 @@
       return data ? data.nombre_completo : '';
     }
 
-    async function enviarMailLiquidacion({ subject, tituloAviso, cliente, numeroOrden, lineasExtra, canvas }) {
+    async function enviarMailLiquidacion({ subject, tituloAviso, cliente, numeroOrden, lineasExtra, legendaDestacada, canvas }) {
       const cuerpoLineas = [
         `<p><strong>${tituloAviso}</strong></p>`,
+        legendaDestacada
+          ? `<p style="background:#fff176;color:#c62828;font-weight:bold;padding:6px 10px;border-radius:4px;">${legendaDestacada}</p>`
+          : '',
         cliente ? `<p>Cliente: ${cliente}</p>` : '',
         numeroOrden ? `<p>N° de orden: ${numeroOrden}</p>` : '',
         ...(lineasExtra || []).map((l) => `<p>${l}</p>`),
@@ -2898,15 +2933,25 @@
       if (esTipo2) {
         mostrarMensajeCerrarNegocio(`✅ Negocio N° ${numeroOrden} guardado (sin mail)`);
       } else {
+        // Negocio FWD (forward): se avisa el negocio nuevo, pero no es una
+        // orden de liquidación (esa se liquida más adelante, contra
+        // descarga en destino, a la tarifa vigente en ese momento).
+        const esFwd = !!elegida.esFwd;
+        const lineasExtra = [`Cargado por: ${nombreUsuario || '-'}`];
+        if (esFwd && elegida.plazo) lineasExtra.push(`Período de entrega: ${elegida.plazo}`);
+
         // Se espera a que termine de mandarse el mail (con la captura de
         // ESTA tabla) antes de vaciarla — si no, la limpieza podría pisar
         // la captura o dejar el negocio a medio guardar.
         await enviarMailLiquidacionConCaptura({
-          subject: `NUEVA ORDEN DE LIQUIDACION N° ${numeroOrden}`,
-          tituloAviso: 'ATENCIÓN: NO DUPLICAR LIQUIDACIÓN',
+          subject: esFwd ? `NUEVO NEGOCIO FORWARD N° ${numeroOrden}` : `NUEVA ORDEN DE LIQUIDACION N° ${numeroOrden}`,
+          tituloAviso: esFwd ? 'NUEVO NEGOCIO FORWARD' : 'ATENCIÓN: NO DUPLICAR LIQUIDACIÓN',
           cliente,
           numeroOrden,
-          lineasExtra: [`Cargado por: ${nombreUsuario || '-'}`],
+          lineasExtra,
+          legendaDestacada: esFwd
+            ? 'NEGOCIO A LIQUIDAR EN EL FUTURO, CONTRA DESCARGA DE MERCADERÍA EN DESTINO. Se tomará la tarifa vigente al momento de la entrega; los kilómetros podrán sufrir modificaciones y se tomarán los efectivamente realizados.'
+            : '',
         }, sel);
       }
 
