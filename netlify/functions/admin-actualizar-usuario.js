@@ -69,8 +69,8 @@ exports.handler = async function (event) {
 
   try {
     const {
-      user_id, nombre_completo, email, rol,
-      acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda,
+      user_id, nombre_completo, email, telefono, rol,
+      acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp,
     } = JSON.parse(event.body);
 
     if (!user_id || !nombre_completo || !email || !rol) {
@@ -115,19 +115,23 @@ exports.handler = async function (event) {
         headers: headersSupabase(),
         body: JSON.stringify({
           nombre: nombre_completo,
+          telefono: telefono || null,
           recibe_liquidaciones: !!recibe_liquidaciones,
           recibe_hacienda: !!recibe_hacienda,
+          recibe_whatsapp: !!recibe_whatsapp,
         }),
       });
-    } else if (recibe_liquidaciones || recibe_hacienda) {
+    } else if (recibe_liquidaciones || recibe_hacienda || recibe_whatsapp) {
       await fetch(`${SUPABASE_URL}/rest/v1/destinatarios_negocio`, {
         method: 'POST',
         headers: headersSupabase(),
         body: JSON.stringify({
           email,
           nombre: nombre_completo,
+          telefono: telefono || null,
           recibe_liquidaciones: !!recibe_liquidaciones,
           recibe_hacienda: !!recibe_hacienda,
+          recibe_whatsapp: !!recibe_whatsapp,
         }),
       });
     }

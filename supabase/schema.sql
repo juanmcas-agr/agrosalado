@@ -419,10 +419,13 @@ create table destinatarios_negocio (
   id uuid primary key default gen_random_uuid(),
   email text not null,
   nombre text,
-  -- Qué tipo de avisos recibe cada uno: liquidaciones/anulaciones (Granos)
-  -- y/o el resumen diario de movimientos de Hacienda, independientes.
+  -- Qué tipo de avisos recibe cada uno: liquidaciones/anulaciones (Granos),
+  -- resumen diario de movimientos de Hacienda, y/o WhatsApp del negocio
+  -- cerrado — todos independientes entre sí.
   recibe_liquidaciones boolean not null default true,
   recibe_hacienda boolean not null default false,
+  telefono text,
+  recibe_whatsapp boolean not null default false,
   creado_at timestamptz not null default now()
 );
 create unique index destinatarios_negocio_email_lower_idx on destinatarios_negocio (lower(email));
@@ -444,6 +447,11 @@ insert into destinatarios_negocio (email, nombre, recibe_liquidaciones, recibe_h
   ('juan.uranga@agrosalado.com', 'Juan Uranga', true, false),
   ('juanmanueluranga@gmail.com', 'Juan Manuel (personal)', false, true)
 on conflict do nothing;
+
+-- Incremental para instalaciones ya existentes (correr solo si la tabla
+-- destinatarios_negocio ya existía antes de agregar WhatsApp):
+--   alter table destinatarios_negocio add column if not exists telefono text;
+--   alter table destinatarios_negocio add column if not exists recibe_whatsapp boolean not null default false;
 
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).

@@ -983,6 +983,7 @@
       <div id="seccionCrear" class="panel-seccion">
         <input type="text" id="cfgUsuarioNombre" placeholder="Nombre completo">
         <input type="email" id="cfgUsuarioEmail" placeholder="Email">
+        <input type="tel" id="cfgUsuarioTelefono" placeholder="Teléfono WhatsApp (ej: +5493571234567)">
         <div class="campo-password">
           <input type="password" id="cfgUsuarioPassword" placeholder="Contraseña" autocomplete="new-password">
           <button type="button" id="cfgUsuarioMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
@@ -996,6 +997,7 @@
         <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoGranos"> Acceso a Granos</label>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeHacienda"> Recibe resumen diario de Hacienda</label>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
         <button type="button" onclick="crearUsuario()">Crear usuario</button>
         <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
       </div>
@@ -1008,6 +1010,7 @@
         <select id="cfgListaUsuarios" onchange="onSeleccionUsuarioLista()"></select>
         <input type="text" id="cfgUsuarioEditNombre" placeholder="Nombre completo">
         <input type="email" id="cfgUsuarioEditEmail" placeholder="Email">
+        <input type="tel" id="cfgUsuarioEditTelefono" placeholder="Teléfono WhatsApp (ej: +5493571234567)">
         <select id="cfgUsuarioEditRol">
           <option value="encargado">Encargado</option>
           <option value="administrativo">Administrativo</option>
@@ -1017,6 +1020,7 @@
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoGranos"> Acceso a Granos</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq"> Recibe liquidaciones / anulaciones</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeHacienda"> Recibe resumen diario de Hacienda</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
         <button type="button" onclick="guardarCambiosUsuario()">Guardar cambios</button>
         <div class="campo-password">
           <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva (usuario elegido arriba)" autocomplete="new-password">
@@ -1525,10 +1529,12 @@
       if (!userId) {
         document.getElementById('cfgUsuarioEditNombre').value = '';
         document.getElementById('cfgUsuarioEditEmail').value = '';
+        document.getElementById('cfgUsuarioEditTelefono').value = '';
         document.getElementById('cfgUsuarioAccesoHacienda').checked = false;
         document.getElementById('cfgUsuarioAccesoGranos').checked = false;
         document.getElementById('cfgUsuarioRecibeLiq').checked = false;
         document.getElementById('cfgUsuarioRecibeHacienda').checked = false;
+        document.getElementById('cfgUsuarioRecibeWhatsapp').checked = false;
         return;
       }
       const usuario = usuariosCache.find((u) => u.user_id === userId);
@@ -1547,6 +1553,8 @@
       document.getElementById('cfgUsuarioAccesoGranos').disabled = esOwner;
       document.getElementById('cfgUsuarioRecibeLiq').checked = !!(destinatario && destinatario.recibe_liquidaciones);
       document.getElementById('cfgUsuarioRecibeHacienda').checked = !!(destinatario && destinatario.recibe_hacienda);
+      document.getElementById('cfgUsuarioEditTelefono').value = (destinatario && destinatario.telefono) || '';
+      document.getElementById('cfgUsuarioRecibeWhatsapp').checked = !!(destinatario && destinatario.recibe_whatsapp);
     }
 
     async function guardarCambiosUsuario() {
@@ -1557,12 +1565,15 @@
 
       const nombre_completo = document.getElementById('cfgUsuarioEditNombre').value.trim();
       const email = document.getElementById('cfgUsuarioEditEmail').value.trim();
+      const telefono = document.getElementById('cfgUsuarioEditTelefono').value.trim();
       const rol = document.getElementById('cfgUsuarioEditRol').value;
       const acceso_hacienda = document.getElementById('cfgUsuarioAccesoHacienda').checked;
       const acceso_granos = document.getElementById('cfgUsuarioAccesoGranos').checked;
       const recibe_liquidaciones = document.getElementById('cfgUsuarioRecibeLiq').checked;
       const recibe_hacienda = document.getElementById('cfgUsuarioRecibeHacienda').checked;
+      const recibe_whatsapp = document.getElementById('cfgUsuarioRecibeWhatsapp').checked;
       if (!nombre_completo || !email) { msj.textContent = 'Faltan nombre y email.'; msj.className = 'mensaje-panel error'; return; }
+      if (recibe_whatsapp && !telefono) { msj.textContent = 'Para recibir WhatsApp hace falta cargar el teléfono.'; msj.className = 'mensaje-panel error'; return; }
 
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
@@ -1571,7 +1582,7 @@
         const res = await fetch('/.netlify/functions/admin-actualizar-usuario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ user_id, nombre_completo, email, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda }),
+          body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp }),
         });
         const datos = await res.json();
         if (!res.ok) {
@@ -1709,17 +1720,24 @@
     async function crearUsuario() {
       const nombre_completo = document.getElementById('cfgUsuarioNombre').value.trim();
       const email = document.getElementById('cfgUsuarioEmail').value.trim();
+      const telefono = document.getElementById('cfgUsuarioTelefono').value.trim();
       const password = document.getElementById('cfgUsuarioPassword').value;
       const rol = document.getElementById('cfgUsuarioRol').value;
       const acceso_hacienda = document.getElementById('cfgNuevoAccesoHacienda').checked;
       const acceso_granos = document.getElementById('cfgNuevoAccesoGranos').checked;
       const recibe_liquidaciones = document.getElementById('cfgNuevoRecibeLiq').checked;
       const recibe_hacienda = document.getElementById('cfgNuevoRecibeHacienda').checked;
+      const recibe_whatsapp = document.getElementById('cfgNuevoRecibeWhatsapp').checked;
       const msj = document.getElementById('cfgUsuarioMensaje');
       msj.textContent = '';
 
       if (!nombre_completo || !email || !password) {
         msj.textContent = 'Completá nombre, email y contraseña.';
+        msj.className = 'mensaje-panel error';
+        return;
+      }
+      if (recibe_whatsapp && !telefono) {
+        msj.textContent = 'Para recibir WhatsApp hace falta cargar el teléfono.';
         msj.className = 'mensaje-panel error';
         return;
       }
@@ -1731,7 +1749,7 @@
         const res = await fetch('/.netlify/functions/admin-crear-usuario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ email, password, nombre_completo, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda }),
+          body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp }),
         });
         const datos = await res.json();
         if (!res.ok) {
@@ -1743,11 +1761,13 @@
         msj.className = 'mensaje-panel ok';
         document.getElementById('cfgUsuarioNombre').value = '';
         document.getElementById('cfgUsuarioEmail').value = '';
+        document.getElementById('cfgUsuarioTelefono').value = '';
         document.getElementById('cfgUsuarioPassword').value = '';
         document.getElementById('cfgNuevoAccesoHacienda').checked = true;
         document.getElementById('cfgNuevoAccesoGranos').checked = false;
         document.getElementById('cfgNuevoRecibeLiq').checked = true;
         document.getElementById('cfgNuevoRecibeHacienda').checked = false;
+        document.getElementById('cfgNuevoRecibeWhatsapp').checked = false;
         cargarUsuariosPanel();
       } catch (error) {
         msj.textContent = 'Error de red: ' + error.message;
@@ -2738,6 +2758,51 @@
       }
     }
 
+    // Arma el texto del aviso de WhatsApp con la alternativa cerrada,
+    // mismos totales (tarifa x toneladas) que se muestran en Reportes.
+    function construirMensajeWhatsapp({ elegida, numeroOrden, esFwd }) {
+      const porTon = calcularDerivadosNegocio(elegida);
+      const toneladas = parseFloat(elegida.toneladas) || 0;
+      const tieneTotales = !elegida.liquidaSaldo;
+      const totalTxt = (valor) => tieneTotales ? formatoNumero(valor * toneladas) : '—';
+
+      const lineas = [
+        esFwd ? '*NUEVO NEGOCIO FORWARD*' : '*NEGOCIO CERRADO*',
+        `Cliente: ${elegida.cliente || '-'}`,
+        `N° de orden: ${numeroOrden}`,
+        `Producto: ${elegida.producto || '-'}`,
+        `Toneladas: ${elegida.liquidaSaldo ? 'COMPLETAR TONS (vendió saldo)' : (toneladas || '-')}`,
+        `Precio bruto: ${totalTxt(porTon.precioBruto)}`,
+        `Comisión: ${totalTxt(porTon.comision)}`,
+        `Flete corto: ${totalTxt(porTon.fleteCorto)}`,
+        `Flete largo: ${totalTxt(porTon.fleteLargo)}`,
+        `A productor: ${totalTxt(porTon.productor)}`,
+      ];
+      if (esFwd && elegida.plazo) lineas.push(`Período de entrega: ${elegida.plazo}`);
+      if (esFwd) lineas.push('_Se liquida en el futuro contra descarga en destino, a la tarifa vigente al momento de la entrega._');
+      return lineas.join('\n');
+    }
+
+    // A diferencia del mail, una falla acá no interrumpe ni avisa con
+    // alert() — es un aviso secundario, el negocio ya quedó guardado y el
+    // mail (si correspondía) ya se mandó antes de llamar a esto.
+    async function enviarWhatsappNegocio(mensaje) {
+      const destinatarios = destinatariosNegocioCache
+        .filter((d) => d.recibe_whatsapp && d.telefono)
+        .map((d) => d.telefono);
+      if (!destinatarios.length) return;
+      try {
+        const res = await fetch('/.netlify/functions/enviar-whatsapp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mensaje, destinatarios }),
+        });
+        if (!res.ok) console.error('No se pudo mandar el WhatsApp:', await res.text());
+      } catch (error) {
+        console.error('No se pudo mandar el WhatsApp:', error);
+      }
+    }
+
     function enviarMailLiquidacionConCaptura(datos, soloColumna) {
       // Si falla la captura de la tabla, el mail se manda igual, sin la
       // imagen adjunta — antes una falla acá dejaba todo colgado en
@@ -2953,6 +3018,8 @@
             ? 'NEGOCIO A LIQUIDAR EN EL FUTURO, CONTRA DESCARGA DE MERCADERÍA EN DESTINO. Se tomará la tarifa vigente al momento de la entrega; los kilómetros podrán sufrir modificaciones y se tomarán los efectivamente realizados.'
             : '',
         }, sel);
+
+        await enviarWhatsappNegocio(construirMensajeWhatsapp({ elegida, numeroOrden, esFwd }));
       }
 
       // Si este negocio venía de un "guardado" (Traer), ya cerró: no tiene
