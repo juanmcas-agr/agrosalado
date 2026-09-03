@@ -819,7 +819,10 @@
       <option value="CEBADA">CEBADA</option>
       <option value="OTROS">OTROS</option>
     </select>
-    <input type="text" id="destino" placeholder="Destino">
+    <select id="destino" onchange="onCambioDestino()">
+      <option value="">Destino...</option>
+    </select>
+    <button type="button" id="chkCobraFleteCorto" class="boton-toggle activo full" onclick="toggleCobraFleteCorto()">✓ Cobra flete corto</button>
     <input type="number" id="precioBruto" placeholder="Precio Bruto">
     <select id="moneda" onchange="toggleTipoCambio()">
       <option value="ARS">$</option>
@@ -1358,6 +1361,129 @@
       document.getElementById('version-footer').textContent = 'v.' + d.version;
     }).catch(() => {});
 
+    // ── Destinos: desplegable del campo "Destino", con km fijos (planta de
+    // acopio → destino) para autocompletar "Flete Largo (KM)" ──
+    const DESTINOS_BASE = [
+      { nombre: 'QUEQUEN', km: 320 },
+      { nombre: 'ROSARIO NORTE', km: 525 },
+      { nombre: 'ROSARIO SUR', km: 480 },
+      { nombre: 'BRANDSEN', km: null },
+      { nombre: 'CAÑUELAS', km: null },
+      { nombre: 'DEL GUAZU', km: 320 },
+      { nombre: 'LIMA', km: 320 },
+      { nombre: 'BURZACO', km: 190 },
+      { nombre: 'AVELLANEDA', km: 185 },
+    ];
+    let destinosCache = [...DESTINOS_BASE];
+
+    async function cargarDestinos() {
+      // Se pinta primero con la lista base (sin esperar la red), así el
+      // desplegable no queda vacío mientras se cargan los destinos guardados.
+      renderSelectDestino();
+      const { data, error } = await window.supabaseClient.from('destinos_km').select('*').order('nombre');
+      const custom = (!error && data) ? data : [];
+      const nombresBase = new Set(DESTINOS_BASE.map((d) => d.nombre.toLowerCase()));
+      destinosCache = [...DESTINOS_BASE, ...custom.filter((c) => !nombresBase.has((c.nombre || '').toLowerCase()))]
+        .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+      renderSelectDestino();
+    }
+
+    function renderSelectDestino(seleccionar) {
+      const select = document.getElementById('destino');
+      const valorPrevio = seleccionar !== undefined ? seleccionar : select.value;
+      select.innerHTML = '<option value="">Destino...</option>';
+      for (const d of destinosCache) {
+        const opt = document.createElement('option');
+        opt.value = d.nombre;
+        opt.textContent = d.nombre;
+        select.appendChild(opt);
+      }
+      const optOtros = document.createElement('option');
+      optOtros.value = 'OTROS';
+      optOtros.textContent = 'OTROS (escribir cuál)';
+      select.appendChild(optOtros);
+      if (valorPrevio) select.value = valorPrevio;
+    }
+
+    // Por si se restaura un negocio guardado/cerrado con un destino que no
+    // está en la lista actual (ej. un "OTROS" que en su momento no se
+    // guardó) — así el <select> igual puede mostrarlo seleccionado.
+    function asegurarOpcionDestino(nombre) {
+      const select = document.getElementById('destino');
+      if (!nombre) { select.value = ''; return; }
+      const existe = Array.from(select.options).some((o) => o.value === nombre);
+      if (!existe) {
+        const opt = document.createElement('option');
+        opt.value = nombre;
+        opt.textContent = nombre;
+        select.insertBefore(opt, select.querySelector('option[value="OTROS"]'));
+      }
+      select.value = nombre;
+    }
+
+    function aplicarKmLargoDelDestinoSeleccionado() {
+      const valor = document.getElementById('destino').value;
+      const destino = destinosCache.find((d) => d.nombre === valor);
+      if (destino && destino.km) document.getElementById('kmLargo').value = destino.km;
+    }
+
+    function cobraFleteCortoActivo() {
+      return document.getElementById('chkCobraFleteCorto').classList.contains('activo');
+    }
+
+    async function onCambioDestino() {
+      const select = document.getElementById('destino');
+      if (select.value !== 'OTROS') {
+        if (cobraFleteCortoActivo()) aplicarKmLargoDelDestinoSeleccionado();
+        return;
+      }
+
+      const nombre = (prompt('Nombre del destino:') || '').trim().toUpperCase();
+      if (!nombre) { select.value = ''; return; }
+      // Ya cargado (base o guardado antes): lo selecciona y listo, sin
+      // volver a preguntar por los km.
+      const existente = destinosCache.find((d) => d.nombre === nombre);
+      if (existente) {
+        renderSelectDestino(nombre);
+        if (cobraFleteCortoActivo()) aplicarKmLargoDelDestinoSeleccionado();
+        return;
+      }
+
+      asegurarOpcionDestino(nombre);
+
+      if (confirm(`¿Guardar los km hasta "${nombre}" para que se autocompleten la próxima vez?`)) {
+        const km = parseInt(prompt('Kilómetros desde planta de acopio hasta este destino:'));
+        if (km) {
+          const { data, error } = await window.supabaseClient.from('destinos_km')
+            .insert({ nombre, km }).select().single();
+          if (error) {
+            alert('No se pudo guardar el destino: ' + error.message);
+          } else if (data) {
+            destinosCache.push(data);
+            destinosCache.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
+            renderSelectDestino(nombre);
+            if (cobraFleteCortoActivo()) aplicarKmLargoDelDestinoSeleccionado();
+          }
+        }
+      }
+    }
+
+    function toggleCobraFleteCorto(forzar) {
+      const btn = document.getElementById('chkCobraFleteCorto');
+      const activo = forzar !== undefined ? forzar : !btn.classList.contains('activo');
+      btn.classList.toggle('activo', activo);
+      btn.textContent = activo ? '✓ Cobra flete corto' : 'Cobra flete corto';
+      const kmCortoInput = document.getElementById('kmCorto');
+      kmCortoInput.disabled = !activo;
+      kmCortoInput.value = activo ? '' : '0';
+      if (activo) {
+        aplicarKmLargoDelDestinoSeleccionado();
+      } else {
+        // Km directo campo→destino: varía caso a caso, no se autocompleta.
+        document.getElementById('kmLargo').value = '';
+      }
+    }
+
     // ── Clientes: combobox del campo "Cliente" ──
     let clientesCache = [];
 
@@ -1869,6 +1995,7 @@
       cargarTC();
       cargarPizarra();
       cargarClientes();
+      cargarDestinos();
       cargarDestinatariosNegocio();
       wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
       wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
@@ -1876,7 +2003,7 @@
       // Enter avanza al siguiente campo de texto/número del formulario
       // Saltea desplegables (select) y date
       const camposFormulario = [
-        'cliente', 'destino', 'precioBruto', 'tipoCambio',
+        'cliente', 'precioBruto', 'tipoCambio',
         'kmCorto', 'descCorto', 'kmLargo', 'descLargo',
         'toneladas', 'plazoPago', 'observaciones'
       ];
@@ -2130,6 +2257,7 @@
       // agrega una alternativa nueva para el mismo cliente.
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
+      const cobraFleteCorto = cobraFleteCortoActivo();
       const moneda          = document.getElementById('moneda').value;
       const tipoCambio      = parseFloat(document.getElementById('tipoCambio').value) || 1;
       const precioInput     = parseFloat(document.getElementById('precioBruto').value) || 0;
@@ -2236,6 +2364,8 @@
       tdFL.dataset.desc = descLargo;
       marcarEditable(tdFL, 'fleteLargo', ci);
 
+      filas[FILA.destino].cells[ci].dataset.cobraFleteCorto = cobraFleteCorto ? '1' : '0';
+
       // Texto simple
       [FILA.cliente, FILA.producto, FILA.destino, FILA.fijacion,
        FILA.toneladas, FILA.plazo, FILA.observaciones].forEach(idx => {
@@ -2323,6 +2453,7 @@
         cliente: textoDe(FILA.cliente),
         producto: textoDe(FILA.producto),
         destino: textoDe(FILA.destino),
+        cobraFleteCorto: filas[FILA.destino].cells[ci].dataset.cobraFleteCorto !== '0',
         moneda: tdPrecio.dataset.moneda || 'ARS',
         tipoCambio: tdPrecio.dataset.tc || '',
         precioInput: tdPrecio.dataset.precioInput || '',
@@ -2351,7 +2482,8 @@
     async function restaurarAlternativa(v) {
       document.getElementById('cliente').value = v.cliente || '';
       document.getElementById('producto').value = v.producto || 'SOJA';
-      document.getElementById('destino').value = v.destino || '';
+      asegurarOpcionDestino(v.destino || '');
+      toggleCobraFleteCorto(v.cobraFleteCorto !== false);
       document.getElementById('moneda').value = v.moneda || 'ARS';
       toggleTipoCambio();
       document.getElementById('tipoCambio').value = v.tipoCambio || '';
@@ -2463,10 +2595,12 @@
           ? formatearFechaHora(registro.created_at)
           : formatearFechaHora(registro.creado_at);
         const numeroOrden = tab === 'cerrados' && registro.numero_orden ? ` · N° ${registro.numero_orden}` : '';
+        const alternativas = (registro.datos && registro.datos.alternativas) || [];
+        const productos = [...new Set(alternativas.map((a) => a.producto).filter(Boolean))].join(' / ') || '-';
 
         const div = document.createElement('div');
         div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:8px;gap:8px;';
-        div.innerHTML = `<div><strong>${registro.cliente}</strong><br><small>${fecha}${numeroOrden}</small></div>`;
+        div.innerHTML = `<div><strong>${registro.cliente}</strong> <span style="color:#888;font-weight:normal;">(${productos})</span><br><small>${fecha}${numeroOrden}</small></div>`;
 
         const acciones = document.createElement('div');
         acciones.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';

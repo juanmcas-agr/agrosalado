@@ -412,6 +412,30 @@ create policy clientes_update on clientes for update to authenticated
 create policy clientes_delete on clientes for delete to authenticated
   using (rol_actual() = 'owner');
 
+-- Destinos "OTROS" que se van cargando desde el desplegable de Destino,
+-- con sus km fijos (planta de acopio → destino) para autocompletar Flete
+-- Largo. La lista base (Quequén, Rosario Norte/Sur, etc.) vive en
+-- DESTINOS_BASE en index.html, no acá — esta tabla solo guarda los que
+-- el usuario decide persistir al elegir "OTROS".
+create table destinos_km (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  km integer not null,
+  creado_at timestamptz not null default now()
+);
+create unique index destinos_km_nombre_lower_idx on destinos_km (lower(nombre));
+
+alter table destinos_km enable row level security;
+
+create policy destinos_km_select on destinos_km for select to authenticated
+  using (rol_actual() = 'owner');
+create policy destinos_km_insert on destinos_km for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy destinos_km_update on destinos_km for update to authenticated
+  using (rol_actual() = 'owner');
+create policy destinos_km_delete on destinos_km for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- Destinatarios internos que reciben los avisos de negocio (NUEVA ORDEN /
 -- ANULACION). Antes era una lista fija en el código; ahora se administra
 -- desde Configuración > Destinatarios de avisos.
