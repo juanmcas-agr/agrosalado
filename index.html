@@ -215,6 +215,17 @@
     .venta-tabla th:nth-child(4), .venta-tabla td:nth-child(4) { text-align: left; }
     .venta-tabla thead th { background: #cfd8dc; }
 
+    /* Casillero sin texto para marcar un negocio "tipo 2" (interno, sin
+       mail) — deliberadamente sin ninguna etiqueta visible. */
+    .chk-tipo2 {
+      display: flex; align-items: center; justify-content: center;
+      background: white; border: 1px solid #ccc; border-radius: 8px;
+      cursor: pointer;
+    }
+    .chk-tipo2 input[type="checkbox"] {
+      width: 22px; height: 22px; margin: 0; cursor: pointer;
+    }
+
     /* ── Combobox de Cliente ── */
     .campo-cliente-wrap { position: relative; }
     .cliente-dropdown {
@@ -846,6 +857,7 @@
       <button type="button" id="clienteToggle" onclick="toggleClienteDropdown()">▾</button>
       <div id="clienteDropdown" class="cliente-dropdown" style="display:none;"></div>
     </div>
+    <label class="chk-tipo2" title="Negocio interno: no manda mail"><input type="checkbox" id="chkTipo2"></label>
     <select id="producto">
       <option value="SOJA">SOJA</option>
       <option value="TRIGO">TRIGO</option>
@@ -951,6 +963,7 @@
       <select id="ventaComprador" onchange="onCambioComprador()">
         <option value="">Comprador...</option>
       </select>
+      <label class="chk-tipo2" title="Negocio interno: no manda mail"><input type="checkbox" id="ventaChkTipo2"></label>
       <input type="text" id="ventaCorredor" placeholder="Corredor">
       <div class="campo-con-boton">
         <select id="ventaComisionSel" onchange="onCambioComisionVenta()" style="flex:1;">
@@ -1722,7 +1735,7 @@
     // agregada, para que no interrumpa todo el tiempo.
     document.getElementById('cliente').addEventListener('blur', async () => {
       const nombre = document.getElementById('cliente').value.trim();
-      if (!nombre || nombre === '2') return;
+      if (!nombre) return;
       const existente = buscarClientePorNombre(nombre);
       if (existente) await ofrecerCargarMailSiFalta(existente);
       else await asegurarClienteGuardado(nombre);
@@ -2419,6 +2432,7 @@
       // El guardado/aviso del cliente pasa por el blur del campo (ver
       // listener más arriba), no acá — así no interrumpe cada vez que se
       // agrega una alternativa nueva para el mismo cliente.
+      const esTipo2         = document.getElementById('chkTipo2').checked;
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
       const cobraFleteCorto = cobraFleteCortoActivo('chkCobraFleteCorto');
@@ -2529,6 +2543,7 @@
       marcarEditable(tdFL, 'fleteLargo', ci);
 
       filas[FILA.destino].cells[ci].dataset.cobraFleteCorto = cobraFleteCorto ? '1' : '0';
+      filas[FILA.cliente].cells[ci].dataset.tipo2 = esTipo2 ? '1' : '0';
 
       // Texto simple
       [FILA.cliente, FILA.producto, FILA.destino, FILA.fijacion,
@@ -2583,6 +2598,7 @@
       // varias opciones del mismo cliente), pero acá sí se limpia: es un
       // reseteo completo, listo para cargar un negocio distinto.
       document.getElementById('cliente').value = '';
+      document.getElementById('chkTipo2').checked = false;
       guardadoIdActual = null;
     }
 
@@ -2615,6 +2631,7 @@
       return {
         codigo,
         cliente: textoDe(FILA.cliente),
+        esTipo2: filas[FILA.cliente].cells[ci].dataset.tipo2 === '1',
         producto: textoDe(FILA.producto),
         destino: textoDe(FILA.destino),
         cobraFleteCorto: filas[FILA.destino].cells[ci].dataset.cobraFleteCorto !== '0',
@@ -2645,6 +2662,7 @@
 
     async function restaurarAlternativa(v) {
       document.getElementById('cliente').value = v.cliente || '';
+      document.getElementById('chkTipo2').checked = !!v.esTipo2;
       document.getElementById('producto').value = v.producto || 'SOJA';
       asegurarOpcionDestino('destino', v.destino || '');
       toggleCobraFleteCorto('chkCobraFleteCorto', 'kmCorto', 'destino', 'kmLargo', v.cobraFleteCorto !== false);
@@ -2807,12 +2825,20 @@
       cambiarTabRecuperar('guardados');
     }
 
+    // Un negocio "tipo 2" (casillero al lado de Cliente, ver toggleTipo2)
+    // se guarda con su propio código xx0001aa y nunca manda mail — el
+    // flag queda persistido en la alternativa guardada, no en el nombre
+    // del cliente (que ahora siempre es el real).
+    function esRegistroTipo2(registro) {
+      return !!(registro.datos && registro.datos.alternativas && registro.datos.alternativas[0] && registro.datos.alternativas[0].esTipo2);
+    }
+
     // Anula (borra) un negocio cerrado y manda el mail de anulación —
-    // salvo que sea un negocio "tipo 2" (cliente === "2"), que nunca manda mail.
+    // salvo que sea un negocio "tipo 2", que nunca manda mail.
     // Devuelve true si se pudo anular, para que quien llama decida qué hacer después.
     async function anularNegocioCerrado(registro) {
       const numero = registro.numero_orden || '-';
-      const esTipo2 = (registro.cliente || '').trim() === '2';
+      const esTipo2 = esRegistroTipo2(registro);
 
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       const [nombreQuienAnula, nombreQuienCreo] = await Promise.all([
@@ -2842,7 +2868,7 @@
 
     async function eliminarCerrado(registro) {
       const numero = registro.numero_orden || '-';
-      const esTipo2 = (registro.cliente || '').trim() === '2';
+      const esTipo2 = esRegistroTipo2(registro);
       const avisoMail = esTipo2 ? '' : '\n\nSe va a mandar un mail avisando la anulación.';
       if (!confirm(`⚠️ ¿Seguro que querés ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero})?${avisoMail}`)) return;
       const ok = await anularNegocioCerrado(registro);
@@ -2853,7 +2879,7 @@
     // tabla, listo para corregir y cerrar de nuevo con un N° de orden nuevo.
     async function rectificarCerrado(registro) {
       const numero = registro.numero_orden || '-';
-      const esTipo2 = (registro.cliente || '').trim() === '2';
+      const esTipo2 = esRegistroTipo2(registro);
       const avisoMail = esTipo2 ? 'No se manda ningún mail (negocio tipo 2).' : 'Se manda el mail de anulación.';
       if (!confirm(`🛠️ Vas a ANULAR el negocio cerrado de "${registro.cliente}" (N° ${numero}) y cargarlo en la tabla para corregirlo.\n\n${avisoMail} Después lo editás y lo volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
       const ok = await anularNegocioCerrado(registro);
@@ -3394,10 +3420,11 @@
       // Solo se guarda la alternativa elegida, no las comparativas descartadas.
       const elegida = leerAlternativaDesdeColumna(sel);
       const cliente = elegida.cliente;
-      // Negocio "tipo 2": se carga escribiendo "2" (y solo "2") en Cliente.
-      // Son negocios internos que no mandan ningún mail, pero sí quedan
-      // en el historial/Reportes con su propia numeración (xx0001aa...).
-      const esTipo2 = cliente.trim() === '2';
+      // Negocio "tipo 2": casillero sin texto al lado de Cliente (ver
+      // #chkTipo2). Son negocios internos que no mandan ningún mail, pero
+      // sí quedan en el historial/Reportes con su propia numeración
+      // (xx0001aa...) — el Cliente sigue siendo el real.
+      const esTipo2 = !!elegida.esTipo2;
       const numeroOrden = esTipo2 ? await generarCodigoTipo2() : (elegida.codigo || '-');
 
       let nombreUsuario = '';
@@ -3455,9 +3482,9 @@
       // Un negocio de compra puede dar lugar a 0, 1 o varios contratos de
       // venta — se ofrece cargar uno ahora con los datos que ya se saben
       // (cliente, N° de orden, producto), a completar en la pestaña VENTA.
-      // Los "tipo 2" son internos, sin ningún aviso: no tiene sentido
-      // ofrecerles cascada a venta.
-      if (!esTipo2 && confirm('¿Cargar este negocio como base de un contrato de venta?')) {
+      // Se ofrece también para los "tipo 2": el cliente ahí es real, así
+      // que puede perfectamente terminar en un contrato de venta.
+      if (confirm('¿Cargar este negocio como base de un contrato de venta?')) {
         precargarBorradorVentaDesdeCompra(elegida, numeroOrden);
       }
     }
@@ -3588,6 +3615,7 @@
         contratoCompra: document.getElementById('ventaContratoCompra').value.trim(),
         clienteVendedor: document.getElementById('ventaCliente').value.trim(),
         comprador: document.getElementById('ventaComprador').value,
+        esTipo2: document.getElementById('ventaChkTipo2').checked,
         corredor: document.getElementById('ventaCorredor').value.trim(),
         comisionPct,
         producto: document.getElementById('ventaProducto').value,
@@ -3660,6 +3688,11 @@
       // Origen (para cargar varias ventas seguidas del mismo contexto);
       // el resto se limpia porque es propio de cada contrato de venta.
       document.getElementById('ventaComprador').value = '';
+      // A diferencia de Cliente vendedor/Contrato/Producto/Origen (que se
+      // mantienen), "tipo 2" se resetea a propósito en cada borrador: es
+      // más seguro que haya que tildarlo de nuevo a que quede pegado y
+      // silencie el mail de una venta real sin que nadie lo note.
+      document.getElementById('ventaChkTipo2').checked = false;
       document.getElementById('ventaCorredor').value = '';
       document.getElementById('ventaComisionSel').value = '0.5';
       onCambioComisionVenta();
@@ -3740,7 +3773,10 @@
 
       const filasParaMail = [];
       for (const b of borradoresVentaPendientes) {
-        const numeroOrden = await generarCodigoVenta();
+        // "Tipo 2" reusa exactamente la numeración/código de compra
+        // (xx0001aa...) y nunca entra en el mail — mismo criterio que en
+        // COMPRA, solo que acá se decide por fila, no por todo el cierre.
+        const numeroOrden = b.esTipo2 ? await generarCodigoTipo2() : await generarCodigoVenta();
         const { error } = await window.supabaseClient.from('negocios_venta_historial').insert({
           usuario_id: session.user.id,
           cliente_vendedor: b.clienteVendedor,
@@ -3749,10 +3785,22 @@
           datos: { borrador: b },
         });
         if (error) console.error('No se pudo guardar la venta en el historial:', error);
-        filasParaMail.push({ ...b, numeroOrden });
+        if (!b.esTipo2) filasParaMail.push({ ...b, numeroOrden });
       }
 
-      await enviarMailVentaConCaptura(filasParaMail);
+      if (filasParaMail.length) {
+        // La captura de #tablaVenta muestra TODAS las filas tal cual están
+        // en pantalla — si hay una mezcla de tipo2 y normales, hay que
+        // ocultar las tipo2 antes de capturar, si no quedarían visibles en
+        // la imagen adjunta aunque el cuerpo del mail no las mencione.
+        const filasDom = document.querySelectorAll('#tablaVenta tbody tr');
+        borradoresVentaPendientes.forEach((b, idx) => {
+          if (b.esTipo2 && filasDom[idx]) filasDom[idx].style.display = 'none';
+        });
+        await enviarMailVentaConCaptura(filasParaMail);
+      } else {
+        mostrarMensajeCerrarNegocio('✅ Ventas guardadas (sin mail)');
+      }
 
       borradoresVentaPendientes = [];
       renderTablaVentaPendientes();
