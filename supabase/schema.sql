@@ -390,6 +390,64 @@ language sql security definer as
 
 grant execute on function siguiente_numero_orden_tipo2() to authenticated;
 
+-- Negocios de VENTA (pestaña VENTA de Granos): un registro por cada
+-- contrato de venta cerrado. A diferencia de negocios_historial (compra,
+-- una alternativa elegida por negocio), acá un mismo "cierre" puede
+-- insertar varias filas de una vez (uno por cada borrador confirmado),
+-- porque un contrato de compra puede repartirse en 0, 1 o varios
+-- contratos de venta.
+create table negocios_venta_historial (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
+  cliente_vendedor text not null,
+  numero_orden text,
+  fecha_cierre date not null default current_date,
+  datos jsonb not null,
+  created_at timestamptz not null default now()
+);
+
+alter table negocios_venta_historial enable row level security;
+
+create policy negocios_venta_historial_select on negocios_venta_historial for select to authenticated
+  using (rol_actual() = 'owner');
+create policy negocios_venta_historial_insert on negocios_venta_historial for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy negocios_venta_historial_delete on negocios_venta_historial for delete to authenticated
+  using (rol_actual() = 'owner');
+
+-- Contador aparte para el N° de orden de VENTA (mismo esquema DDD+LLL+
+-- AAHHMM que orden_secuencia_seq, pero independiente para que compra y
+-- venta no compartan numeración — ver formatearCodigoVentaDesdeContador
+-- en index.html, que además le agrega el prefijo "V").
+create sequence if not exists orden_secuencia_venta_seq;
+grant usage on sequence orden_secuencia_venta_seq to authenticated;
+
+create or replace function siguiente_numero_orden_venta() returns bigint
+language sql security definer as
+  $$ select nextval('orden_secuencia_venta_seq') $$;
+
+grant execute on function siguiente_numero_orden_venta() to authenticated;
+
+-- Compradores: lista editable del desplegable "Comprador" en VENTA,
+-- mismo patrón que "clientes" (solo nombre, sin mail).
+create table compradores (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  creado_at timestamptz not null default now()
+);
+create unique index compradores_nombre_lower_idx on compradores (lower(nombre));
+
+alter table compradores enable row level security;
+
+create policy compradores_select on compradores for select to authenticated
+  using (rol_actual() = 'owner');
+create policy compradores_insert on compradores for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy compradores_update on compradores for update to authenticated
+  using (rol_actual() = 'owner');
+create policy compradores_delete on compradores for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- Clientes: nombre + mail opcional, para autocompletar el campo "Cliente"
 -- del formulario y poder mandarles por mail la liquidación cuando se
 -- cierra un negocio a su nombre.

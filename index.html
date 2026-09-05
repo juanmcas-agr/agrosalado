@@ -188,6 +188,33 @@
       cursor: pointer;
     }
 
+    /* ── Pestañas COMPRA / VENTA ── */
+    .tabs-modo { display: flex; gap: 8px; margin: 12px 0; }
+    .tab-modo {
+      flex: 1; padding: 12px; font-weight: bold; letter-spacing: 0.02em;
+      background: white; color: #2c3e50; border-radius: 8px; border: none;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+    .tab-modo.activo { background: #8a5a34; color: white; }
+    .tab-modo.activo-venta { background: #546e7a; color: white; }
+    /* Fondo gris tenue mientras se trabaja en VENTA, para diferenciarlo
+       claramente de COMPRA a simple vista. */
+    body.venta-activa .fondo-fijo {
+      background: linear-gradient(rgba(96,111,123,0.65), rgba(96,111,123,0.65)),
+                  url('/assets/fondo-login.jpg') center top/cover no-repeat;
+    }
+    #modoVenta {
+      background: #e3e6e8; border-radius: 10px; padding: 10px;
+      margin-top: 4px;
+    }
+    .venta-tabla { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    .venta-tabla th, .venta-tabla td { padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: right; white-space: nowrap; }
+    .venta-tabla th:nth-child(1), .venta-tabla td:nth-child(1),
+    .venta-tabla th:nth-child(2), .venta-tabla td:nth-child(2),
+    .venta-tabla th:nth-child(3), .venta-tabla td:nth-child(3),
+    .venta-tabla th:nth-child(4), .venta-tabla td:nth-child(4) { text-align: left; }
+    .venta-tabla thead th { background: #cfd8dc; }
+
     /* ── Combobox de Cliente ── */
     .campo-cliente-wrap { position: relative; }
     .cliente-dropdown {
@@ -246,7 +273,7 @@
       font-size: 1.3em; transition: transform 0.2s ease; opacity: 0.6;
     }
     .panel-menu-item.activo .panel-menu-flecha { transform: rotate(90deg); opacity: 1; }
-    .panel-menu-item.oculto-panel, .panel-seccion.oculto-panel { display: none !important; }
+    .oculto-panel { display: none !important; }
     .panel-seccion {
       display: none;
       background: white; border-radius: 8px; padding: 12px;
@@ -807,6 +834,12 @@
     </div>
   </div>
 
+  <div class="tabs-modo">
+    <button type="button" id="tabCompra" class="tab-modo activo" onclick="cambiarModo('compra')">COMPRA</button>
+    <button type="button" id="tabVenta" class="tab-modo" onclick="cambiarModo('venta')">VENTA</button>
+  </div>
+
+  <div id="modoCompra">
   <div class="formulario">
     <div class="campo-cliente-wrap campo-con-boton">
       <input type="text" id="cliente" placeholder="Cliente" autocomplete="off">
@@ -823,10 +856,10 @@
       <option value="CEBADA">CEBADA</option>
       <option value="OTROS">OTROS</option>
     </select>
-    <select id="destino" onchange="onCambioDestino()">
+    <select id="destino" onchange="onCambioDestino('destino','kmLargo','chkCobraFleteCorto')">
       <option value="">Destino...</option>
     </select>
-    <button type="button" id="chkCobraFleteCorto" class="boton-toggle activo full" onclick="toggleCobraFleteCorto()">✓ Cobra flete corto</button>
+    <button type="button" id="chkCobraFleteCorto" class="boton-toggle activo full" onclick="toggleCobraFleteCorto('chkCobraFleteCorto','kmCorto','destino','kmLargo')">✓ Cobra flete corto</button>
     <input type="number" id="precioBruto" placeholder="Precio Bruto">
     <select id="moneda" onchange="toggleTipoCambio()">
       <option value="ARS">$</option>
@@ -848,7 +881,7 @@
     <input type="date" id="fijacion" class="full">
     <input type="number" id="toneladas" placeholder="Toneladas">
     <button type="button" id="liquidaSaldo" class="boton-toggle" onclick="toggleLiquidaSaldo()">Liquida saldo</button>
-    <button type="button" id="fwdToggle" class="boton-toggle" onclick="toggleFwd()">FWD</button>
+    <button type="button" id="fwdToggle" class="boton-toggle" onclick="toggleFwd('fwdToggle','plazoPago','plazoFechaWrap')">FWD</button>
     <div class="campo-con-boton">
       <input type="text" id="plazoPago" placeholder="Plazo de Pago (días o texto)">
       <div class="boton-fecha-wrap" id="plazoFechaWrap">
@@ -908,6 +941,84 @@
       🔒 CERRAR NEGOCIO
     </button>
   </div>
+  </div>
+  <!-- fin #modoCompra -->
+
+  <div id="modoVenta" class="oculto-panel">
+    <div class="formulario">
+      <input type="text" id="ventaContratoCompra" placeholder="Contrato de compra asociado (opcional)" class="full">
+      <input type="text" id="ventaCliente" placeholder="Cliente vendedor">
+      <select id="ventaComprador" onchange="onCambioComprador()">
+        <option value="">Comprador...</option>
+      </select>
+      <input type="text" id="ventaCorredor" placeholder="Corredor">
+      <div class="campo-con-boton">
+        <select id="ventaComisionSel" onchange="onCambioComisionVenta()" style="flex:1;">
+          <option value="0.5" selected>Comisión 0.5%</option>
+          <option value="0">Comisión 0%</option>
+          <option value="1">Comisión 1%</option>
+          <option value="2">Comisión 2%</option>
+          <option value="3">Comisión 3%</option>
+          <option value="otra">Otra...</option>
+        </select>
+        <input type="number" id="ventaComisionOtra" placeholder="%" style="display:none;flex:0 0 70px;">
+      </div>
+      <select id="ventaProducto">
+        <option value="SOJA">SOJA</option>
+        <option value="TRIGO">TRIGO</option>
+        <option value="MAIZ">MAÍZ</option>
+        <option value="GIRASOL AO">GIRASOL AO</option>
+        <option value="GIRASOL COMUN">GIRASOL COMÚN</option>
+        <option value="AVENA">AVENA</option>
+        <option value="CEBADA">CEBADA</option>
+        <option value="OTROS">OTROS</option>
+      </select>
+      <input type="text" id="ventaOrigen" placeholder="Origen">
+      <select id="ventaDestino" onchange="onCambioDestino('ventaDestino','ventaKmLargo','ventaChkCobraFleteCorto')">
+        <option value="">Destino...</option>
+      </select>
+      <button type="button" id="ventaChkCobraFleteCorto" class="boton-toggle activo full" onclick="toggleCobraFleteCorto('ventaChkCobraFleteCorto','ventaKmCorto','ventaDestino','ventaKmLargo')">✓ Cobra flete corto</button>
+      <input type="number" id="ventaPrecio" placeholder="Precio en destino">
+      <input type="number" id="ventaToneladas" placeholder="Toneladas">
+      <input type="number" id="ventaKmCorto" placeholder="Flete Corto (KM)">
+      <input type="number" id="ventaDescCorto" placeholder="Descuento Flete Corto (%)">
+      <input type="number" id="ventaKmLargo" placeholder="Flete Largo (KM)">
+      <input type="number" id="ventaDescLargo" placeholder="Descuento Flete Largo (%)">
+      <button type="button" id="ventaFwdToggle" class="boton-toggle" onclick="toggleFwd('ventaFwdToggle','ventaPlazoPago')">FWD</button>
+      <input type="text" id="ventaPlazoPago" placeholder="Plazo de Pago (días o texto)">
+      <input type="text" id="ventaHumedad" placeholder="Humedad de entrega" value="SECO">
+      <input type="text" id="ventaObservaciones" placeholder="Observaciones" class="full">
+    </div>
+
+    <div class="botones">
+      <button onclick="confirmarBorradorVenta()">Confirmar borrador ➕</button>
+      <button onclick="borrarTodoVenta()">♻️ Borrar Todo</button>
+    </div>
+
+    <div class="tabla-wrapper">
+      <table id="tablaVenta" class="venta-tabla">
+        <thead>
+          <tr>
+            <th>Cliente vendedor</th><th>Comprador</th><th>Producto</th><th>Destino</th>
+            <th>Toneladas</th><th>Precio</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th><th>Neto</th>
+            <th>Contrato compra</th><th>FWD</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div class="botones">
+      <button onclick="abrirModalReportesVenta()">📊 Reportes</button>
+    </div>
+
+    <div style="margin-top: 0; text-align: center;">
+      <button id="cerrarNegocioVenta" onclick="cerrarNegocioVenta()" class="pendiente">
+        🔒 CERRAR NEGOCIO
+      </button>
+    </div>
+  </div>
+  <!-- fin #modoVenta -->
 
   <div id="toast" class="toast"></div>
 
@@ -955,6 +1066,41 @@
         </table>
       </div>
       <button onclick="cerrarModalReportes()" style="margin-top:16px;background:#888;">Cerrar</button>
+    </div>
+  </div>
+
+  <!-- Modal reportes de venta -->
+  <div id="modalReportesVenta" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:95%;max-width:1000px;max-height:85vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">📊 Reportes de ventas cerradas</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;margin-bottom:12px;">
+        <label style="font-size:0.85em;">Desde<br><input type="date" id="repVentaDesde" style="width:auto;"></label>
+        <label style="font-size:0.85em;">Hasta<br><input type="date" id="repVentaHasta" style="width:auto;"></label>
+        <button onclick="cargarReporteVenta()" style="width:auto;padding:10px 16px;">Filtrar</button>
+        <button onclick="exportarReporteVentaExcel()" style="width:auto;padding:10px 16px;background:#1e7e34;">📥 Exportar Excel</button>
+      </div>
+      <div id="repVentaMensaje" class="mensaje-panel"></div>
+      <div id="repVentaResumen" class="rep-resumen-grid"></div>
+      <div style="overflow-x:auto;">
+        <table id="repVentaTabla" class="rep-tabla">
+          <thead>
+            <tr>
+              <th rowspan="2">Fecha</th><th rowspan="2">Cliente vendedor</th><th rowspan="2">Comprador</th>
+              <th rowspan="2">Corredor</th><th rowspan="2">Producto</th><th rowspan="2">Origen</th><th rowspan="2">Destino</th>
+              <th rowspan="2">Contrato compra</th><th rowspan="2">N° orden</th><th rowspan="2">Toneladas</th>
+              <th colspan="4" style="text-align:center;">Por tonelada</th>
+              <th colspan="4" style="text-align:center;">Total del negocio</th>
+              <th rowspan="2">Humedad</th><th rowspan="2">Observaciones</th><th rowspan="2">FWD</th>
+            </tr>
+            <tr>
+              <th>Precio</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th>
+              <th>Precio</th><th>Comisión</th><th>Flete corto</th><th>Flete largo</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <button onclick="cerrarModalReportesVenta()" style="margin-top:16px;background:#888;">Cerrar</button>
     </div>
   </div>
 
@@ -1380,20 +1526,24 @@
     ];
     let destinosCache = [...DESTINOS_BASE];
 
+    // Ids de todos los <select> de Destino que existen en la app (COMPRA y
+    // VENTA comparten el mismo destinosCache/tabla destinos_km).
+    const SELECTS_DESTINO = ['destino', 'ventaDestino'];
+
     async function cargarDestinos() {
-      // Se pinta primero con la lista base (sin esperar la red), así el
-      // desplegable no queda vacío mientras se cargan los destinos guardados.
-      renderSelectDestino();
+      // Se pinta primero con la lista base (sin esperar la red), así los
+      // desplegables no quedan vacíos mientras se cargan los guardados.
+      SELECTS_DESTINO.forEach((id) => renderSelectDestino(id));
       const { data, error } = await window.supabaseClient.from('destinos_km').select('*').order('nombre');
       const custom = (!error && data) ? data : [];
       const nombresBase = new Set(DESTINOS_BASE.map((d) => d.nombre.toLowerCase()));
       destinosCache = [...DESTINOS_BASE, ...custom.filter((c) => !nombresBase.has((c.nombre || '').toLowerCase()))]
         .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-      renderSelectDestino();
+      SELECTS_DESTINO.forEach((id) => renderSelectDestino(id));
     }
 
-    function renderSelectDestino(seleccionar) {
-      const select = document.getElementById('destino');
+    function renderSelectDestino(selectId, seleccionar) {
+      const select = document.getElementById(selectId);
       const valorPrevio = seleccionar !== undefined ? seleccionar : select.value;
       select.innerHTML = '<option value="">Destino...</option>';
       for (const d of destinosCache) {
@@ -1412,8 +1562,8 @@
     // Por si se restaura un negocio guardado/cerrado con un destino que no
     // está en la lista actual (ej. un "OTROS" que en su momento no se
     // guardó) — así el <select> igual puede mostrarlo seleccionado.
-    function asegurarOpcionDestino(nombre) {
-      const select = document.getElementById('destino');
+    function asegurarOpcionDestino(selectId, nombre) {
+      const select = document.getElementById(selectId);
       if (!nombre) { select.value = ''; return; }
       const existe = Array.from(select.options).some((o) => o.value === nombre);
       if (!existe) {
@@ -1425,20 +1575,20 @@
       select.value = nombre;
     }
 
-    function aplicarKmLargoDelDestinoSeleccionado() {
-      const valor = document.getElementById('destino').value;
+    function aplicarKmLargoDelDestinoSeleccionado(destinoSelectId, kmLargoInputId) {
+      const valor = document.getElementById(destinoSelectId).value;
       const destino = destinosCache.find((d) => d.nombre === valor);
-      if (destino && destino.km) document.getElementById('kmLargo').value = destino.km;
+      if (destino && destino.km) document.getElementById(kmLargoInputId).value = destino.km;
     }
 
-    function cobraFleteCortoActivo() {
-      return document.getElementById('chkCobraFleteCorto').classList.contains('activo');
+    function cobraFleteCortoActivo(chkId) {
+      return document.getElementById(chkId).classList.contains('activo');
     }
 
-    async function onCambioDestino() {
-      const select = document.getElementById('destino');
+    async function onCambioDestino(destinoSelectId, kmLargoInputId, chkFleteCortoId) {
+      const select = document.getElementById(destinoSelectId);
       if (select.value !== 'OTROS') {
-        if (cobraFleteCortoActivo()) aplicarKmLargoDelDestinoSeleccionado();
+        if (cobraFleteCortoActivo(chkFleteCortoId)) aplicarKmLargoDelDestinoSeleccionado(destinoSelectId, kmLargoInputId);
         return;
       }
 
@@ -1448,12 +1598,12 @@
       // volver a preguntar por los km.
       const existente = destinosCache.find((d) => d.nombre === nombre);
       if (existente) {
-        renderSelectDestino(nombre);
-        if (cobraFleteCortoActivo()) aplicarKmLargoDelDestinoSeleccionado();
+        renderSelectDestino(destinoSelectId, nombre);
+        if (cobraFleteCortoActivo(chkFleteCortoId)) aplicarKmLargoDelDestinoSeleccionado(destinoSelectId, kmLargoInputId);
         return;
       }
 
-      asegurarOpcionDestino(nombre);
+      asegurarOpcionDestino(destinoSelectId, nombre);
 
       if (confirm(`¿Guardar los km hasta "${nombre}" para que se autocompleten la próxima vez?`)) {
         const km = parseInt(prompt('Kilómetros desde planta de acopio hasta este destino:'));
@@ -1465,26 +1615,26 @@
           } else if (data) {
             destinosCache.push(data);
             destinosCache.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
-            renderSelectDestino(nombre);
-            if (cobraFleteCortoActivo()) aplicarKmLargoDelDestinoSeleccionado();
+            renderSelectDestino(destinoSelectId, nombre);
+            if (cobraFleteCortoActivo(chkFleteCortoId)) aplicarKmLargoDelDestinoSeleccionado(destinoSelectId, kmLargoInputId);
           }
         }
       }
     }
 
-    function toggleCobraFleteCorto(forzar) {
-      const btn = document.getElementById('chkCobraFleteCorto');
+    function toggleCobraFleteCorto(chkId, kmCortoInputId, destinoSelectId, kmLargoInputId, forzar) {
+      const btn = document.getElementById(chkId);
       const activo = forzar !== undefined ? forzar : !btn.classList.contains('activo');
       btn.classList.toggle('activo', activo);
       btn.textContent = activo ? '✓ Cobra flete corto' : 'Cobra flete corto';
-      const kmCortoInput = document.getElementById('kmCorto');
+      const kmCortoInput = document.getElementById(kmCortoInputId);
       kmCortoInput.disabled = !activo;
       kmCortoInput.value = activo ? '' : '0';
       if (activo) {
-        aplicarKmLargoDelDestinoSeleccionado();
+        aplicarKmLargoDelDestinoSeleccionado(destinoSelectId, kmLargoInputId);
       } else {
         // Km directo campo→destino: varía caso a caso, no se autocompleta.
-        document.getElementById('kmLargo').value = '';
+        document.getElementById(kmLargoInputId).value = '';
       }
     }
 
@@ -1992,14 +2142,14 @@
       return { esFwd: false, plazo: texto };
     }
 
-    function toggleFwd(forzar) {
-      const btn = document.getElementById('fwdToggle');
+    function toggleFwd(btnId, plazoInputId, plazoFechaWrapId, forzar) {
+      const btn = document.getElementById(btnId);
       const activo = forzar !== undefined ? forzar : !btn.classList.contains('activo');
       btn.classList.toggle('activo', activo);
       btn.textContent = activo ? '✓ FWD' : 'FWD';
-      const campoPlazo = document.getElementById('plazoPago');
+      const campoPlazo = document.getElementById(plazoInputId);
       campoPlazo.placeholder = activo ? 'Período de entrega (ej: Marzo 2027)' : 'Plazo de Pago (días o texto)';
-      document.getElementById('plazoFechaWrap').style.display = activo ? 'none' : '';
+      if (plazoFechaWrapId) document.getElementById(plazoFechaWrapId).style.display = activo ? 'none' : '';
       campoPlazo.value = '';
     }
 
@@ -2009,6 +2159,7 @@
       cargarPizarra();
       cargarClientes();
       cargarDestinos();
+      cargarCompradores();
       cargarDestinatariosNegocio();
       wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
       wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
@@ -2270,7 +2421,7 @@
       // agrega una alternativa nueva para el mismo cliente.
       const producto        = document.getElementById('producto').value;
       const destino         = document.getElementById('destino').value;
-      const cobraFleteCorto = cobraFleteCortoActivo();
+      const cobraFleteCorto = cobraFleteCortoActivo('chkCobraFleteCorto');
       const moneda          = document.getElementById('moneda').value;
       const tipoCambio      = parseFloat(document.getElementById('tipoCambio').value) || 1;
       const precioInput     = parseFloat(document.getElementById('precioBruto').value) || 0;
@@ -2495,8 +2646,8 @@
     async function restaurarAlternativa(v) {
       document.getElementById('cliente').value = v.cliente || '';
       document.getElementById('producto').value = v.producto || 'SOJA';
-      asegurarOpcionDestino(v.destino || '');
-      toggleCobraFleteCorto(v.cobraFleteCorto !== false);
+      asegurarOpcionDestino('destino', v.destino || '');
+      toggleCobraFleteCorto('chkCobraFleteCorto', 'kmCorto', 'destino', 'kmLargo', v.cobraFleteCorto !== false);
       document.getElementById('moneda').value = v.moneda || 'ARS';
       toggleTipoCambio();
       document.getElementById('tipoCambio').value = v.tipoCambio || '';
@@ -2509,7 +2660,7 @@
       document.getElementById('fijacion').value = v.fijacionIso || '';
       toggleLiquidaSaldo(!!v.liquidaSaldo);
       document.getElementById('toneladas').value = v.liquidaSaldo ? '' : (v.toneladas || '');
-      toggleFwd(!!v.esFwd);
+      toggleFwd('fwdToggle', 'plazoPago', 'plazoFechaWrap', !!v.esFwd);
       document.getElementById('plazoPago').value = v.plazo || '';
       document.getElementById('observaciones').value = v.observaciones || '';
       await agregarAlternativa(v.codigo || undefined);
@@ -2856,6 +3007,129 @@
       XLSX.writeFile(wb, `reporte_negocios_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
+    // ── Reportes de VENTA (calcado del de compra, leyendo de
+    // negocios_venta_historial y con las columnas propias de venta) ──
+    let ultimoReporteVentaFilas = [];
+
+    function abrirModalReportesVenta() {
+      document.getElementById('modalReportesVenta').style.display = 'flex';
+      if (!document.getElementById('repVentaDesde').value) {
+        const hoy = new Date();
+        const haceUnMes = new Date(hoy);
+        haceUnMes.setMonth(hoy.getMonth() - 1);
+        document.getElementById('repVentaDesde').value = haceUnMes.toISOString().slice(0, 10);
+        document.getElementById('repVentaHasta').value = hoy.toISOString().slice(0, 10);
+      }
+      cargarReporteVenta();
+    }
+
+    function cerrarModalReportesVenta() {
+      document.getElementById('modalReportesVenta').style.display = 'none';
+    }
+
+    async function cargarReporteVenta() {
+      const desde = document.getElementById('repVentaDesde').value;
+      const hasta = document.getElementById('repVentaHasta').value;
+      const msj = document.getElementById('repVentaMensaje');
+      msj.textContent = 'Cargando…';
+      msj.style.color = '';
+
+      let query = window.supabaseClient.from('negocios_venta_historial').select('*').order('fecha_cierre', { ascending: false });
+      if (desde) query = query.gte('fecha_cierre', desde);
+      if (hasta) query = query.lte('fecha_cierre', hasta);
+
+      const { data, error } = await query;
+      if (error) {
+        msj.textContent = 'No se pudo cargar: ' + error.message;
+        msj.style.color = '#ad1e19';
+        return;
+      }
+
+      const filas = [];
+      for (const registro of (data || [])) {
+        const b = registro.datos && registro.datos.borrador;
+        if (!b) continue;
+        const porTonelada = calcularDerivadosVenta(b);
+        const toneladas = parseFloat(b.toneladas) || 0;
+        const totales = {
+          precioInput: porTonelada.precioInput * toneladas,
+          comision: porTonelada.comision * toneladas,
+          fleteCorto: porTonelada.fleteCorto * toneladas,
+          fleteLargo: porTonelada.fleteLargo * toneladas,
+        };
+        filas.push({ registro, b, toneladas, porTonelada, totales });
+      }
+
+      ultimoReporteVentaFilas = filas;
+      msj.textContent = filas.length ? '' : 'No hay ventas cerradas en ese rango de fechas.';
+
+      document.getElementById('repVentaResumen').innerHTML = `
+        <div class="rep-item"><div class="rep-label">Negocios cerrados</div><div class="rep-valor">${filas.length}</div></div>
+      `;
+
+      const tbody = document.querySelector('#repVentaTabla tbody');
+      tbody.innerHTML = '';
+      for (const f of filas) {
+        const tr = document.createElement('tr');
+        const celda = (valor) => valor != null ? formatoNumero(valor) : '—';
+        tr.innerHTML = `
+          <td>${formatearFecha(f.registro.fecha_cierre)}</td>
+          <td>${f.b.clienteVendedor || '-'}</td>
+          <td>${f.b.comprador || '-'}</td>
+          <td>${f.b.corredor || '-'}</td>
+          <td>${f.b.producto || '-'}</td>
+          <td>${f.b.origen || '-'}</td>
+          <td>${f.b.destino || '-'}</td>
+          <td>${f.b.contratoCompra || '-'}</td>
+          <td>${f.registro.numero_orden || '-'}</td>
+          <td>${f.toneladas.toLocaleString('es-AR')}</td>
+          <td>${celda(f.porTonelada.precioInput)}</td>
+          <td>${celda(f.porTonelada.comision)}</td>
+          <td>${celda(f.porTonelada.fleteCorto)}</td>
+          <td>${celda(f.porTonelada.fleteLargo)}</td>
+          <td>${celda(f.totales.precioInput)}</td>
+          <td>${celda(f.totales.comision)}</td>
+          <td>${celda(f.totales.fleteCorto)}</td>
+          <td>${celda(f.totales.fleteLargo)}</td>
+          <td>${f.b.humedad || '-'}</td>
+          <td style="text-align:left;white-space:normal;">${f.b.observaciones || '-'}</td>
+          <td style="text-align:left;white-space:normal;">${f.b.esFwd ? (f.b.plazo || '-') : '-'}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function exportarReporteVentaExcel() {
+      if (!ultimoReporteVentaFilas.length) { alert('No hay datos para exportar — filtrá primero.'); return; }
+      const filasExcel = ultimoReporteVentaFilas.map((f) => ({
+        Fecha: formatearFecha(f.registro.fecha_cierre),
+        'Cliente vendedor': f.b.clienteVendedor || '',
+        Comprador: f.b.comprador || '',
+        Corredor: f.b.corredor || '',
+        Producto: f.b.producto || '',
+        Origen: f.b.origen || '',
+        Destino: f.b.destino || '',
+        'Contrato compra': f.b.contratoCompra || '',
+        'N° orden': f.registro.numero_orden || '',
+        Toneladas: f.toneladas,
+        'Precio x tn': +f.porTonelada.precioInput.toFixed(2),
+        'Comisión x tn': +f.porTonelada.comision.toFixed(2),
+        'Flete corto x tn': +f.porTonelada.fleteCorto.toFixed(2),
+        'Flete largo x tn': +f.porTonelada.fleteLargo.toFixed(2),
+        'Precio total': +f.totales.precioInput.toFixed(2),
+        'Comisión total': +f.totales.comision.toFixed(2),
+        'Flete corto total': +f.totales.fleteCorto.toFixed(2),
+        'Flete largo total': +f.totales.fleteLargo.toFixed(2),
+        Humedad: f.b.humedad || '',
+        Observaciones: f.b.observaciones || '',
+        FWD: f.b.esFwd ? (f.b.plazo || '') : '',
+      }));
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(filasExcel);
+      XLSX.utils.book_append_sheet(wb, ws, 'Reporte ventas');
+      XLSX.writeFile(wb, `reporte_ventas_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    }
+
     async function obtenerNombreUsuario(userId) {
       if (!userId) return '';
       const { data } = await window.supabaseClient.from('perfiles')
@@ -2967,8 +3241,8 @@
       );
     }
 
-    function ocultarYCapturar(callback, onError, soloColumna) {
-      const tabla = document.getElementById('tablaNegocios');
+    function ocultarYCapturar(callback, onError, soloColumna, tablaId = 'tablaNegocios') {
+      const tabla = document.getElementById(tablaId);
       const ocultar = document.querySelectorAll('.ocultar-al-exportar');
       // Temporalmente quitar sticky de primera columna para que html2canvas la capture bien
       const stickyEls = tabla.querySelectorAll('td:first-child, th:first-child');
@@ -3177,6 +3451,311 @@
       }
 
       borrarTodo();
+
+      // Un negocio de compra puede dar lugar a 0, 1 o varios contratos de
+      // venta — se ofrece cargar uno ahora con los datos que ya se saben
+      // (cliente, N° de orden, producto), a completar en la pestaña VENTA.
+      // Los "tipo 2" son internos, sin ningún aviso: no tiene sentido
+      // ofrecerles cascada a venta.
+      if (!esTipo2 && confirm('¿Cargar este negocio como base de un contrato de venta?')) {
+        precargarBorradorVentaDesdeCompra(elegida, numeroOrden);
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ── VENTA ──
+    // A diferencia de COMPRA (comparador de alternativas, se cierra UNA),
+    // VENTA acumula "borradores" (uno por cada contrato de venta que se va
+    // confirmando) y los cierra TODOS JUNTOS: un mismo contrato de compra
+    // puede repartirse en varios contratos de venta a compradores
+    // distintos. Por eso acá no hay tabla-comparador por columnas ni
+    // selección de una sola alternativa — es una lista que se arma con
+    // "Confirmar borrador" y se cierra en bloque con "Cerrar negocio".
+    // ══════════════════════════════════════════════════════════════════
+
+    function cambiarModo(modo) {
+      const esVenta = modo === 'venta';
+      document.getElementById('modoCompra').classList.toggle('oculto-panel', esVenta);
+      document.getElementById('modoVenta').classList.toggle('oculto-panel', !esVenta);
+      document.getElementById('tabCompra').classList.toggle('activo', !esVenta);
+      document.getElementById('tabVenta').classList.toggle('activo-venta', esVenta);
+      document.body.classList.toggle('venta-activa', esVenta);
+    }
+
+    function precargarBorradorVentaDesdeCompra(elegida, numeroOrdenCompra) {
+      cambiarModo('venta');
+      document.getElementById('ventaContratoCompra').value = numeroOrdenCompra || '';
+      document.getElementById('ventaCliente').value = elegida.cliente || '';
+      document.getElementById('ventaProducto').value = elegida.producto || 'SOJA';
+    }
+
+    // ── Compradores: desplegable de "Comprador", mismo mecanismo que
+    // Destino (lista base + guardados en Supabase + "OTRO" que guarda) ──
+    const COMPRADORES_BASE = ['ZENI', 'MOLCA', 'AMAGGI', 'CARGILL', 'BUNGE', 'MIRALEJOS', 'GALDOS', 'MORO', 'RECENTAL', 'LA PORFIA'];
+    let compradoresCache = [...COMPRADORES_BASE];
+
+    function renderSelectComprador(seleccionar) {
+      const select = document.getElementById('ventaComprador');
+      const valorPrevio = seleccionar !== undefined ? seleccionar : select.value;
+      select.innerHTML = '<option value="">Comprador...</option>';
+      for (const nombre of compradoresCache) {
+        const opt = document.createElement('option');
+        opt.value = nombre;
+        opt.textContent = nombre;
+        select.appendChild(opt);
+      }
+      const optOtro = document.createElement('option');
+      optOtro.value = 'OTRO';
+      optOtro.textContent = 'OTRO (escribir cuál)';
+      select.appendChild(optOtro);
+      if (valorPrevio) select.value = valorPrevio;
+    }
+
+    async function cargarCompradores() {
+      renderSelectComprador();
+      const { data, error } = await window.supabaseClient.from('compradores').select('*').order('nombre');
+      const custom = (!error && data) ? data.map((d) => d.nombre) : [];
+      const baseSet = new Set(COMPRADORES_BASE.map((n) => n.toLowerCase()));
+      compradoresCache = [...COMPRADORES_BASE, ...custom.filter((n) => !baseSet.has((n || '').toLowerCase()))]
+        .sort((a, b) => a.localeCompare(b, 'es'));
+      renderSelectComprador();
+    }
+
+    async function onCambioComprador() {
+      const select = document.getElementById('ventaComprador');
+      if (select.value !== 'OTRO') return;
+      const nombre = (prompt('Nombre del comprador:') || '').trim().toUpperCase();
+      if (!nombre) { select.value = ''; return; }
+      if (compradoresCache.includes(nombre)) { renderSelectComprador(nombre); return; }
+      const { error } = await window.supabaseClient.from('compradores').insert({ nombre });
+      if (error) { alert('No se pudo guardar el comprador: ' + error.message); }
+      compradoresCache.push(nombre);
+      compradoresCache.sort((a, b) => a.localeCompare(b, 'es'));
+      renderSelectComprador(nombre);
+    }
+
+    function onCambioComisionVenta() {
+      const esOtra = document.getElementById('ventaComisionSel').value === 'otra';
+      document.getElementById('ventaComisionOtra').style.display = esOtra ? '' : 'none';
+    }
+
+    // ── Numeración propia para negocios de venta (prefijo "V", mismo
+    // esquema DDD+LLL+AAHHMM que la de compra) ──
+    function formatearCodigoVentaDesdeContador(n) {
+      const ddd = String(n % 1000).padStart(3, '0');
+      let li = Math.floor(n / 1000) % 17576;
+      let lll = '';
+      for (let i = 0; i < 3; i++) {
+        lll = String.fromCharCode(65 + (li % 26)) + lll;
+        li = Math.floor(li / 26);
+      }
+      const ahora = new Date();
+      const aa = String(ahora.getFullYear()).slice(-2);
+      const hh = String(ahora.getHours()).padStart(2, '0');
+      const mm = String(ahora.getMinutes()).padStart(2, '0');
+      return `V${ddd}${lll}${aa}${hh}${mm}`;
+    }
+
+    async function generarCodigoVenta() {
+      const { data, error } = await window.supabaseClient.rpc('siguiente_numero_orden_venta');
+      const n = (!error && data != null) ? Number(data) - 1 : Date.now();
+      return formatearCodigoVentaDesdeContador(n);
+    }
+
+    // ── Borradores de venta (lista pendiente hasta "Cerrar negocio") ──
+    let borradoresVentaPendientes = [];
+
+    function calcularDerivadosVenta(b) {
+      const precioInput = parseFloat(b.precioInput) || 0;
+      const comisionPct = parseFloat(b.comisionPct) || 0;
+      const kmCorto = parseInt(b.kmCorto) || 0;
+      const kmLargo = parseInt(b.kmLargo) || 0;
+      const descCorto = parseFloat(b.descCorto) || 0;
+      const descLargo = parseFloat(b.descLargo) || 0;
+      const fleteCorto = obtenerTarifaPorKm(kmCorto) * (1 - descCorto / 100);
+      const fleteLargo = obtenerTarifaPorKm(kmLargo) * (1 - descLargo / 100);
+      const comision = +(precioInput * (comisionPct / 100)).toFixed(2);
+      const neto = +(precioInput - comision - fleteCorto - fleteLargo).toFixed(2);
+      return { precioInput, comision, fleteCorto, fleteLargo, neto };
+    }
+
+    function leerBorradorVentaDesdeFormulario() {
+      const comisionSel = document.getElementById('ventaComisionSel').value;
+      const comisionPct = comisionSel === 'otra'
+        ? (parseFloat(document.getElementById('ventaComisionOtra').value) || 0)
+        : parseFloat(comisionSel);
+      return {
+        contratoCompra: document.getElementById('ventaContratoCompra').value.trim(),
+        clienteVendedor: document.getElementById('ventaCliente').value.trim(),
+        comprador: document.getElementById('ventaComprador').value,
+        corredor: document.getElementById('ventaCorredor').value.trim(),
+        comisionPct,
+        producto: document.getElementById('ventaProducto').value,
+        origen: document.getElementById('ventaOrigen').value.trim(),
+        destino: document.getElementById('ventaDestino').value,
+        precioInput: document.getElementById('ventaPrecio').value,
+        toneladas: document.getElementById('ventaToneladas').value,
+        kmCorto: document.getElementById('ventaKmCorto').value,
+        descCorto: document.getElementById('ventaDescCorto').value,
+        kmLargo: document.getElementById('ventaKmLargo').value,
+        descLargo: document.getElementById('ventaDescLargo').value,
+        cobraFleteCorto: cobraFleteCortoActivo('ventaChkCobraFleteCorto'),
+        esFwd: document.getElementById('ventaFwdToggle').classList.contains('activo'),
+        plazo: document.getElementById('ventaPlazoPago').value.trim(),
+        humedad: document.getElementById('ventaHumedad').value.trim() || 'SECO',
+        observaciones: document.getElementById('ventaObservaciones').value.trim(),
+      };
+    }
+
+    function validarBorradorVenta(b) {
+      const faltantes = [];
+      if (!b.clienteVendedor) faltantes.push('Cliente vendedor');
+      if (!b.comprador) faltantes.push('Comprador');
+      if (!b.destino) faltantes.push('Destino');
+      if (!parseFloat(b.precioInput)) faltantes.push('Precio en destino');
+      if (!parseFloat(b.toneladas)) faltantes.push('Toneladas');
+      if (!b.plazo) faltantes.push(b.esFwd ? 'Período de entrega' : 'Plazo de Pago');
+      return faltantes;
+    }
+
+    function renderTablaVentaPendientes() {
+      const tbody = document.querySelector('#tablaVenta tbody');
+      tbody.innerHTML = '';
+      borradoresVentaPendientes.forEach((b, idx) => {
+        const d = calcularDerivadosVenta(b);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${b.clienteVendedor}</td>
+          <td>${b.comprador}</td>
+          <td>${b.producto}</td>
+          <td>${b.destino}</td>
+          <td>${b.toneladas || '-'}</td>
+          <td>${formatoNumero(d.precioInput)}</td>
+          <td>${formatoNumero(d.comision)}</td>
+          <td>${formatoNumero(d.fleteCorto)}</td>
+          <td>${formatoNumero(d.fleteLargo)}</td>
+          <td>${formatoNumero(d.neto)}</td>
+          <td>${b.contratoCompra || '-'}</td>
+          <td>${b.esFwd ? ('FWD' + (b.plazo ? ': ' + b.plazo : '')) : '-'}</td>
+          <td class="ocultar-al-exportar"></td>
+        `;
+        const btnBorrar = document.createElement('button');
+        btnBorrar.textContent = '🗑️';
+        btnBorrar.style.cssText = 'width:auto;padding:4px 8px;font-size:0.85em;';
+        btnBorrar.onclick = () => { borradoresVentaPendientes.splice(idx, 1); renderTablaVentaPendientes(); };
+        tr.lastElementChild.appendChild(btnBorrar);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function confirmarBorradorVenta() {
+      const b = leerBorradorVentaDesdeFormulario();
+      const faltantes = validarBorradorVenta(b);
+      if (faltantes.length) { alert('⚠️ Completá: ' + faltantes.join(', ')); return; }
+
+      borradoresVentaPendientes.push(b);
+      renderTablaVentaPendientes();
+
+      // Se mantienen Contrato de compra / Cliente vendedor / Producto /
+      // Origen (para cargar varias ventas seguidas del mismo contexto);
+      // el resto se limpia porque es propio de cada contrato de venta.
+      document.getElementById('ventaComprador').value = '';
+      document.getElementById('ventaCorredor').value = '';
+      document.getElementById('ventaComisionSel').value = '0.5';
+      onCambioComisionVenta();
+      document.getElementById('ventaDestino').value = '';
+      document.getElementById('ventaPrecio').value = '';
+      document.getElementById('ventaToneladas').value = '';
+      document.getElementById('ventaKmCorto').value = '';
+      document.getElementById('ventaDescCorto').value = '';
+      document.getElementById('ventaKmLargo').value = '';
+      document.getElementById('ventaDescLargo').value = '';
+      toggleCobraFleteCorto('ventaChkCobraFleteCorto', 'ventaKmCorto', 'ventaDestino', 'ventaKmLargo', true);
+      toggleFwd('ventaFwdToggle', 'ventaPlazoPago', null, false);
+      document.getElementById('ventaObservaciones').value = '';
+    }
+
+    function borrarTodoVenta() {
+      if (!borradoresVentaPendientes.length) return;
+      if (!confirm('¿Borrar todos los borradores de venta pendientes?')) return;
+      borradoresVentaPendientes = [];
+      renderTablaVentaPendientes();
+    }
+
+    async function enviarMailVenta(filas, canvas) {
+      const unaSola = filas.length === 1;
+      const subject = unaSola
+        ? (filas[0].esFwd ? `NUEVO NEGOCIO FORWARD (VENTA) N° ${filas[0].numeroOrden}` : `NUEVA ORDEN DE VENTA N° ${filas[0].numeroOrden}`)
+        : `NUEVAS ÓRDENES DE VENTA (${filas.length})`;
+
+      const cuerpoFilas = filas.map((f) => {
+        const legenda = f.esFwd
+          ? `<p style="background:#fff176;color:#c62828;font-weight:bold;padding:6px 10px;border-radius:4px;">FORWARD — NEGOCIO A LIQUIDAR EN EL FUTURO, CONTRA DESCARGA DE MERCADERÍA EN DESTINO. Se tomará la tarifa vigente al momento de la entrega; los kilómetros podrán sufrir modificaciones y se tomarán los efectivamente realizados.${f.plazo ? ' Período de entrega: ' + f.plazo : ''}</p>`
+          : '';
+        return [
+          `<p><strong>N° de orden: ${f.numeroOrden}</strong></p>`,
+          `<p>Cliente vendedor: ${f.clienteVendedor} · Comprador: ${f.comprador}</p>`,
+          `<p>Producto: ${f.producto} · Destino: ${f.destino} · Toneladas: ${f.toneladas || '-'}</p>`,
+          f.contratoCompra ? `<p>Contrato de compra asociado: ${f.contratoCompra}</p>` : '',
+          legenda,
+          '<hr>',
+        ].join('');
+      }).join('');
+
+      const body = {
+        subject,
+        mensajeHtml: `<p><strong>${unaSola ? 'NUEVA ORDEN DE VENTA' : 'NUEVAS ÓRDENES DE VENTA'}</strong></p>` + cuerpoFilas,
+      };
+      if (canvas) body.imagenBase64 = canvas.toDataURL('image/png').split(',')[1];
+
+      const destinatariosLiq = destinatariosNegocioCache.filter((d) => d.recibe_liquidaciones).map((d) => d.email);
+      if (destinatariosLiq.length) body.destinatarios = destinatariosLiq;
+
+      try {
+        const res = await fetch('/.netlify/functions/enviar-liquidacion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        if (!res.ok) throw new Error(await res.text());
+        mostrarMensajeCerrarNegocio('✅ Mail enviado');
+      } catch (error) {
+        alert('⚠️ No se pudo mandar el mail: ' + error.message);
+      }
+    }
+
+    function enviarMailVentaConCaptura(filas) {
+      return ocultarYCapturar(
+        (canvas) => enviarMailVenta(filas, canvas),
+        () => enviarMailVenta(filas),
+        null,
+        'tablaVenta'
+      );
+    }
+
+    async function cerrarNegocioVenta() {
+      if (!borradoresVentaPendientes.length) { alert('⚠️ No hay borradores de venta para cerrar.'); return; }
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { alert('No hay sesión activa.'); return; }
+
+      const filasParaMail = [];
+      for (const b of borradoresVentaPendientes) {
+        const numeroOrden = await generarCodigoVenta();
+        const { error } = await window.supabaseClient.from('negocios_venta_historial').insert({
+          usuario_id: session.user.id,
+          cliente_vendedor: b.clienteVendedor,
+          numero_orden: numeroOrden,
+          fecha_cierre: new Date().toISOString().slice(0, 10),
+          datos: { borrador: b },
+        });
+        if (error) console.error('No se pudo guardar la venta en el historial:', error);
+        filasParaMail.push({ ...b, numeroOrden });
+      }
+
+      await enviarMailVentaConCaptura(filasParaMail);
+
+      borradoresVentaPendientes = [];
+      renderTablaVentaPendientes();
     }
   </script>
 </body>
