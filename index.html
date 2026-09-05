@@ -246,6 +246,7 @@
       font-size: 1.3em; transition: transform 0.2s ease; opacity: 0.6;
     }
     .panel-menu-item.activo .panel-menu-flecha { transform: rotate(90deg); opacity: 1; }
+    .panel-menu-item.oculto-panel, .panel-seccion.oculto-panel { display: none !important; }
     .panel-seccion {
       display: none;
       background: white; border-radius: 8px; padding: 12px;
@@ -669,6 +670,8 @@
       boton.innerHTML = mostrar ? ICONO_OJO_TACHADO : ICONO_OJO;
     });
 
+    let perfilActual = null;
+
     async function verificarAcceso() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
@@ -688,6 +691,7 @@
         window.location.replace('/stock/');
         return;
       }
+      perfilActual = perfil;
       overlay.classList.add('oculto');
     }
 
@@ -1596,6 +1600,15 @@
       fetch('/version.json').then(r => r.json()).then(d => {
         document.getElementById('version-footer-panel').textContent = 'v.' + d.version;
       }).catch(() => {});
+      // Dar (o quitar) acceso a las áreas del sistema es una operación que
+      // solo puede hacer un owner (ya validado server-side en las
+      // funciones admin-*.js) — acá además se ocultan esas secciones para
+      // el resto, que ni siquiera debería verlas.
+      const esOwnerActual = perfilActual && perfilActual.rol === 'owner';
+      document.querySelector('.panel-menu-item[data-seccion="crear"]').classList.toggle('oculto-panel', !esOwnerActual);
+      document.querySelector('.panel-menu-item[data-seccion="administrar"]').classList.toggle('oculto-panel', !esOwnerActual);
+      document.getElementById('seccionCrear').classList.toggle('oculto-panel', !esOwnerActual);
+      document.getElementById('seccionAdministrar').classList.toggle('oculto-panel', !esOwnerActual);
       renderListaClientesPanel();
     }
 
