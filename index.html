@@ -207,6 +207,13 @@
       background: #e3e6e8; border-radius: 10px; padding: 10px;
       margin-top: 4px;
     }
+    /* Botones en tono gris-azulado en vez del marrón de Compra, mismo
+       criterio de color que la pestaña VENTA activa — pero los estados
+       pendiente/confirmado (rojo/verde) se mantienen iguales en las dos
+       pestañas, son un semáforo, no una identidad de marca. */
+    #modoVenta button { background-color: #546e7a; }
+    #modoVenta .boton-toggle { background: #e9ecef; color: #2c3e50; border: 1px solid #ccc; }
+    #modoVenta .boton-toggle.activo { background: #546e7a; color: white; border-color: #546e7a; font-weight: bold; }
     .venta-tabla { width: 100%; border-collapse: collapse; font-size: 0.85em; }
     .venta-tabla th, .venta-tabla td { padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: right; white-space: nowrap; }
     .venta-tabla th:nth-child(1), .venta-tabla td:nth-child(1),
@@ -1034,6 +1041,8 @@
     </div>
 
     <div class="botones">
+      <button onclick="guardarNegocioVenta()">💾 Guardar</button>
+      <button onclick="abrirModalRecuperarVenta()">📂 Recuperar negocio</button>
       <button onclick="abrirModalReportesVenta()">📊 Reportes</button>
     </div>
 
@@ -1057,6 +1066,19 @@
       </div>
       <div id="listaNegocios" style="display:flex;flex-direction:column;gap:8px;"></div>
       <button onclick="cerrarModalRecuperar()" style="margin-top:16px;background:#888;">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Modal recuperar venta -->
+  <div id="modalRecuperarVenta" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:420px;max-height:75vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">Recuperar venta</div>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button type="button" id="tabGuardadosVenta" class="boton-toggle" onclick="cambiarTabRecuperarVenta('guardados')" style="flex:1;">Guardados</button>
+        <button type="button" id="tabCerradosVenta" class="boton-toggle" onclick="cambiarTabRecuperarVenta('cerrados')" style="flex:1;">Cerrados</button>
+      </div>
+      <div id="listaNegociosVenta" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <button onclick="cerrarModalRecuperarVenta()" style="margin-top:16px;background:#888;">Cancelar</button>
     </div>
   </div>
 
@@ -3738,7 +3760,127 @@
       if (!borradoresVentaPendientes.length) return;
       if (!confirm('¿Borrar todos los borradores de venta pendientes?')) return;
       borradoresVentaPendientes = [];
+      guardadoVentaIdActual = null;
       renderTablaVentaPendientes();
+    }
+
+    // ── Guardar / Recuperar venta ──
+    // Mismo criterio que Guardar/Recuperar de COMPRA, pero acá "guardar"
+    // congela TODA la lista de borradores pendientes en un solo registro
+    // (no una alternativa suelta), para poder retomarla más tarde.
+    let guardadoVentaIdActual = null;
+    let cacheGuardadosVenta = [];
+    let cacheCerradosVenta = [];
+
+    async function guardarNegocioVenta() {
+      if (!borradoresVentaPendientes.length) {
+        alert('⚠️ Confirmá al menos un borrador antes de guardar.');
+        return;
+      }
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { alert('No hay sesión activa.'); return; }
+      const cliente = borradoresVentaPendientes[0].clienteVendedor || '-';
+      const { error } = await window.supabaseClient.from('negocios_venta_guardados').insert({
+        usuario_id: session.user.id,
+        cliente,
+        datos: { borradores: borradoresVentaPendientes },
+      });
+      if (error) { alert('❌ No se pudo guardar: ' + error.message); return; }
+      alert('💾 Borradores de venta guardados. Vas a poder recuperarlos durante 40 días desde "Recuperar negocio".');
+    }
+
+    async function abrirModalRecuperarVenta() {
+      const lista = document.getElementById('listaNegociosVenta');
+      lista.innerHTML = 'Cargando…';
+      document.getElementById('modalRecuperarVenta').style.display = 'flex';
+
+      const [{ data: guardados, error: e1 }, { data: cerrados, error: e2 }] = await Promise.all([
+        window.supabaseClient.from('negocios_venta_guardados').select('*')
+          .gt('expira_at', new Date().toISOString()).order('creado_at', { ascending: false }),
+        window.supabaseClient.from('negocios_venta_historial').select('*')
+          .order('fecha_cierre', { ascending: false }).limit(100),
+      ]);
+
+      if (e1 || e2) {
+        lista.innerHTML = 'No se pudo cargar la lista (¿sin conexión?).';
+        return;
+      }
+
+      cacheGuardadosVenta = guardados;
+      cacheCerradosVenta = cerrados;
+      cambiarTabRecuperarVenta('guardados');
+    }
+
+    function cerrarModalRecuperarVenta() {
+      document.getElementById('modalRecuperarVenta').style.display = 'none';
+    }
+
+    function cambiarTabRecuperarVenta(tab) {
+      document.getElementById('tabGuardadosVenta').classList.toggle('activo', tab === 'guardados');
+      document.getElementById('tabCerradosVenta').classList.toggle('activo', tab === 'cerrados');
+
+      const lista = document.getElementById('listaNegociosVenta');
+      lista.innerHTML = '';
+      const datos = tab === 'guardados' ? cacheGuardadosVenta : cacheCerradosVenta;
+
+      if (!datos.length) {
+        lista.innerHTML = `<div style="color:#888;">${tab === 'guardados' ? 'No hay borradores de venta guardados.' : 'No hay ventas cerradas.'}</div>`;
+        return;
+      }
+
+      datos.forEach((registro) => {
+        const fecha = tab === 'cerrados' ? formatearFechaHora(registro.created_at) : formatearFechaHora(registro.creado_at);
+        const numeroOrden = tab === 'cerrados' && registro.numero_orden ? ` · N° ${registro.numero_orden}` : '';
+        const nombreCliente = tab === 'cerrados' ? (registro.cliente_vendedor || '-') : (registro.cliente || '-');
+        const borradores = tab === 'guardados'
+          ? ((registro.datos && registro.datos.borradores) || [])
+          : [registro.datos && registro.datos.borrador].filter(Boolean);
+        const productos = [...new Set(borradores.map((b) => b.producto).filter(Boolean))].join(' / ') || '-';
+        const cantidad = tab === 'guardados' ? ` · ${borradores.length} borrador(es)` : '';
+
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:8px;gap:8px;';
+        div.innerHTML = `<div><strong>${nombreCliente}</strong> <span style="color:#888;font-weight:normal;">(${productos})</span><br><small>${fecha}${numeroOrden}${cantidad}</small></div>`;
+
+        const acciones = document.createElement('div');
+        acciones.style.cssText = 'display:flex;gap:6px;flex-shrink:0;';
+
+        const btnTraer = document.createElement('button');
+        btnTraer.textContent = 'Traer';
+        btnTraer.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;';
+        btnTraer.onclick = () => {
+          if (tab === 'guardados') {
+            guardadoVentaIdActual = registro.id;
+            borradoresVentaPendientes = (registro.datos && registro.datos.borradores) || [];
+          } else {
+            // Cerrado: se suma como un borrador más a los pendientes (ej.
+            // para armar una venta parecida), no reemplaza la lista.
+            borradoresVentaPendientes.push(registro.datos.borrador);
+          }
+          renderTablaVentaPendientes();
+          cerrarModalRecuperarVenta();
+        };
+        acciones.appendChild(btnTraer);
+
+        if (tab === 'guardados') {
+          const btnEliminar = document.createElement('button');
+          btnEliminar.textContent = '🗑️';
+          btnEliminar.title = 'Eliminar';
+          btnEliminar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#ad1e19;';
+          btnEliminar.onclick = () => eliminarGuardadoVenta(registro);
+          acciones.appendChild(btnEliminar);
+        }
+        div.appendChild(acciones);
+        lista.appendChild(div);
+      });
+    }
+
+    async function eliminarGuardadoVenta(registro) {
+      if (!confirm(`¿Eliminar el borrador de venta guardado de "${registro.cliente}"?`)) return;
+      const { error } = await window.supabaseClient.from('negocios_venta_guardados').delete().eq('id', registro.id);
+      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+      cacheGuardadosVenta = cacheGuardadosVenta.filter((r) => r.id !== registro.id);
+      cambiarTabRecuperarVenta('guardados');
     }
 
     async function enviarMailVenta(filas, canvas) {
@@ -3826,6 +3968,14 @@
         await enviarMailVentaConCaptura(filasParaMail);
       } else {
         mostrarMensajeCerrarNegocio('✅ Ventas guardadas (sin mail)');
+      }
+
+      // Si esta tanda venía de un "guardado" (Traer), ya cerró: no tiene
+      // sentido que siga apareciendo en la lista de guardados de venta.
+      if (guardadoVentaIdActual) {
+        const { error } = await window.supabaseClient.from('negocios_venta_guardados').delete().eq('id', guardadoVentaIdActual);
+        if (error) console.error('No se pudo borrar el guardado de venta tras cerrar el negocio:', error);
+        guardadoVentaIdActual = null;
       }
 
       borradoresVentaPendientes = [];

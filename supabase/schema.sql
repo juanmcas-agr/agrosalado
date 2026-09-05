@@ -390,6 +390,27 @@ language sql security definer as
 
 grant execute on function siguiente_numero_orden_tipo2() to authenticated;
 
+-- Borradores de VENTA guardados (mismo criterio que negocios_guardados
+-- de compra, pero acá "datos" guarda LA LISTA COMPLETA de borradores
+-- pendientes de un cierre, no una sola alternativa).
+create table negocios_venta_guardados (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
+  cliente text not null,
+  datos jsonb not null,
+  creado_at timestamptz not null default now(),
+  expira_at timestamptz not null default (now() + interval '40 days')
+);
+
+alter table negocios_venta_guardados enable row level security;
+
+create policy negocios_venta_guardados_select on negocios_venta_guardados for select to authenticated
+  using (rol_actual() = 'owner');
+create policy negocios_venta_guardados_insert on negocios_venta_guardados for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy negocios_venta_guardados_delete on negocios_venta_guardados for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- Negocios de VENTA (pestaña VENTA de Granos): un registro por cada
 -- contrato de venta cerrado. A diferencia de negocios_historial (compra,
 -- una alternativa elegida por negocio), acá un mismo "cierre" puede
