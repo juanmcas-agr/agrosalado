@@ -997,6 +997,7 @@
       </select>
       <label class="chk-tipo2" title="Negocio interno: no manda mail"><input type="checkbox" id="ventaChkTipo2"></label>
       <input type="text" id="ventaCorredor" placeholder="Corredor">
+      <input type="text" id="ventaNumeroContratoCorredor" placeholder="N° contrato corredor (opcional)">
       <div class="campo-con-boton">
         <select id="ventaComisionSel" onchange="onCambioComisionVenta()" style="flex:1;">
           <option value="0.5" selected>Comisión 0.5%</option>
@@ -1193,7 +1194,7 @@
           <thead>
             <tr>
               <th rowspan="2">Fecha</th><th rowspan="2">Cliente vendedor</th><th rowspan="2">Comprador</th>
-              <th rowspan="2">Corredor</th><th rowspan="2">Producto</th><th rowspan="2">Origen</th><th rowspan="2">Destino</th>
+              <th rowspan="2">Corredor</th><th rowspan="2">N° contrato corredor</th><th rowspan="2">Producto</th><th rowspan="2">Origen</th><th rowspan="2">Destino</th>
               <th rowspan="2">Contrato compra</th><th rowspan="2">N° orden</th><th rowspan="2">Toneladas</th>
               <th colspan="4" style="text-align:center;">Por tonelada</th>
               <th colspan="4" style="text-align:center;">Total del negocio</th>
@@ -3215,6 +3216,7 @@
           <td>${f.b.clienteVendedor || '-'}</td>
           <td>${f.b.comprador || '-'}</td>
           <td>${f.b.corredor || '-'}</td>
+          <td>${f.b.numeroContratoCorredor || '-'}</td>
           <td>${f.b.producto || '-'}</td>
           <td>${f.b.origen || '-'}</td>
           <td>${f.b.destino || '-'}</td>
@@ -3244,6 +3246,7 @@
         'Cliente vendedor': f.b.clienteVendedor || '',
         Comprador: f.b.comprador || '',
         Corredor: f.b.corredor || '',
+        'N° contrato corredor': f.b.numeroContratoCorredor || '',
         Producto: f.b.producto || '',
         Origen: f.b.origen || '',
         Destino: f.b.destino || '',
@@ -3879,6 +3882,21 @@
       });
       if (error) { msj.textContent = 'No se pudo asignar: ' + error.message; msj.style.color = '#ad1e19'; return; }
 
+      // Es un dato importante para la pestaña VENTA pero no obligatorio,
+      // así que solo se pregunta acá (al asignar, cuando tiene más sentido
+      // tenerlo a mano) y solo si esa venta todavía no lo tiene cargado.
+      if (venta && !venta.b.numeroContratoCorredor) {
+        if (confirm('¿Querés cargar el N° de contrato de corredor para esta venta?')) {
+          const numero = (prompt('N° de contrato corredor:') || '').trim();
+          if (numero) {
+            const nuevosDatos = { ...venta.registro.datos, borrador: { ...venta.b, numeroContratoCorredor: numero } };
+            const { error: errorUpdate } = await window.supabaseClient.from('negocios_venta_historial')
+              .update({ datos: nuevosDatos }).eq('id', venta.registro.id);
+            if (errorUpdate) alert('No se pudo guardar el N° de contrato corredor: ' + errorUpdate.message);
+          }
+        }
+      }
+
       cerrarModalAsignar();
       if (document.getElementById('modoPosicion').offsetParent !== null) cargarPosicion();
       mostrarMensajeCerrarNegocio('✅ Asignación guardada');
@@ -4002,6 +4020,7 @@
         comprador: document.getElementById('ventaComprador').value,
         esTipo2: document.getElementById('ventaChkTipo2').checked,
         corredor: document.getElementById('ventaCorredor').value.trim(),
+        numeroContratoCorredor: document.getElementById('ventaNumeroContratoCorredor').value.trim(),
         comisionPct,
         producto: document.getElementById('ventaProducto').value,
         origen: document.getElementById('ventaOrigen').value.trim(),
@@ -4044,6 +4063,7 @@
       asegurarOpcionComprador(b.comprador || '');
       document.getElementById('ventaChkTipo2').checked = !!b.esTipo2;
       document.getElementById('ventaCorredor').value = b.corredor || '';
+      document.getElementById('ventaNumeroContratoCorredor').value = b.numeroContratoCorredor || '';
       const comisionStr = String(b.comisionPct ?? '0.5');
       const esComisionFija = ['0.5', '0', '1', '2', '3'].includes(comisionStr);
       document.getElementById('ventaComisionSel').value = esComisionFija ? comisionStr : 'otra';
@@ -4116,6 +4136,7 @@
       // silencie el mail de una venta real sin que nadie lo note.
       document.getElementById('ventaChkTipo2').checked = false;
       document.getElementById('ventaCorredor').value = '';
+      document.getElementById('ventaNumeroContratoCorredor').value = '';
       document.getElementById('ventaComisionSel').value = '0.5';
       onCambioComisionVenta();
       document.getElementById('ventaDestino').value = '';
