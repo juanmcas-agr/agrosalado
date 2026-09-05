@@ -3644,11 +3644,42 @@
       if (modo === 'posicion') cargarPosicion();
     }
 
+    // Precarga TODO lo que tiene equivalente directo en la compra (destino,
+    // precio, toneladas, fletes, plazo, FWD, observaciones...), no solo
+    // cliente/contrato/producto — se usa tal cual de punto de partida y se
+    // corrige lo que haga falta antes de "Confirmar borrador". Lo que no
+    // tiene equivalente en compra (Comprador, Corredor, Origen, Humedad)
+    // se deja en blanco/default a propósito, no son datos de la compra.
     function precargarBorradorVentaDesdeCompra(elegida, numeroOrdenCompra) {
       cambiarModo('venta');
       document.getElementById('ventaContratoCompra').value = numeroOrdenCompra || '';
       document.getElementById('ventaCliente').value = elegida.cliente || '';
+      document.getElementById('ventaComprador').value = '';
+      document.getElementById('ventaChkTipo2').checked = !!elegida.esTipo2;
+      document.getElementById('ventaCorredor').value = '';
+      document.getElementById('ventaNumeroContratoCorredor').value = '';
+      const comisionStr = String(elegida.comisionPct ?? '0.5');
+      const esComisionFija = ['0.5', '0', '1', '2', '3'].includes(comisionStr);
+      document.getElementById('ventaComisionSel').value = esComisionFija ? comisionStr : 'otra';
+      onCambioComisionVenta();
+      if (!esComisionFija) document.getElementById('ventaComisionOtra').value = comisionStr;
       document.getElementById('ventaProducto').value = elegida.producto || 'SOJA';
+      document.getElementById('ventaOrigen').value = '';
+      asegurarOpcionDestino('ventaDestino', elegida.destino || '');
+      document.getElementById('ventaMoneda').value = elegida.moneda || 'ARS';
+      toggleTipoCambio('ventaMoneda', 'ventaTipoCambio');
+      document.getElementById('ventaTipoCambio').value = elegida.tipoCambio || '';
+      document.getElementById('ventaPrecio').value = elegida.precioInput || '';
+      document.getElementById('ventaToneladas').value = elegida.liquidaSaldo ? '' : (elegida.toneladas || '');
+      toggleCobraFleteCorto('ventaChkCobraFleteCorto', 'ventaKmCorto', 'ventaDestino', 'ventaKmLargo', elegida.cobraFleteCorto !== false);
+      document.getElementById('ventaKmCorto').value = elegida.kmCorto || '';
+      document.getElementById('ventaDescCorto').value = elegida.descCorto || '';
+      document.getElementById('ventaKmLargo').value = elegida.kmLargo || '';
+      document.getElementById('ventaDescLargo').value = elegida.descLargo || '';
+      toggleFwd('ventaFwdToggle', 'ventaPlazoPago', null, !!elegida.esFwd);
+      document.getElementById('ventaPlazoPago').value = elegida.plazo || '';
+      document.getElementById('ventaHumedad').value = 'SECO';
+      document.getElementById('ventaObservaciones').value = elegida.observaciones || '';
     }
 
     // Botón "📂 Traer de compra": igual que la cascada automática al
