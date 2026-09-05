@@ -995,6 +995,7 @@
         <button type="button" onclick="abrirModalTraerCompra()" style="width:auto;">📂 Traer de compra</button>
       </div>
       <input type="text" id="ventaCliente" placeholder="Cliente vendedor">
+      <label style="font-size:0.85em;color:#666;">Fecha de venta<br><input type="date" id="ventaFecha"></label>
       <select id="ventaComprador" onchange="onCambioComprador()">
         <option value="">Comprador...</option>
       </select>
@@ -2280,6 +2281,7 @@
 
     window.addEventListener("DOMContentLoaded", () => {
       document.getElementById("fijacion").value = new Date().toISOString().split("T")[0];
+      document.getElementById("ventaFecha").value = new Date().toISOString().split("T")[0];
       cargarTC();
       cargarPizarra();
       cargarClientes();
@@ -4179,6 +4181,7 @@
         contratoCompra: document.getElementById('ventaContratoCompra').value.trim(),
         compraVinculadaId: compraVinculadaIdActual,
         clienteVendedor: document.getElementById('ventaCliente').value.trim(),
+        fecha: document.getElementById('ventaFecha').value,
         comprador: document.getElementById('ventaComprador').value,
         esTipo2: document.getElementById('ventaChkTipo2').checked,
         corredor: document.getElementById('ventaCorredor').value.trim(),
@@ -4223,6 +4226,7 @@
       compraVinculadaIdActual = b.compraVinculadaId || null;
       document.getElementById('ventaContratoCompra').value = b.contratoCompra || '';
       document.getElementById('ventaCliente').value = b.clienteVendedor || '';
+      document.getElementById('ventaFecha').value = b.fecha || new Date().toISOString().split('T')[0];
       asegurarOpcionComprador(b.comprador || '');
       document.getElementById('ventaChkTipo2').checked = !!b.esTipo2;
       document.getElementById('ventaCorredor').value = b.corredor || '';
@@ -4576,7 +4580,7 @@
           usuario_id: session.user.id,
           cliente_vendedor: b.clienteVendedor,
           numero_orden: numeroOrden,
-          fecha_cierre: new Date().toISOString().slice(0, 10),
+          fecha_cierre: b.fecha || new Date().toISOString().slice(0, 10),
           datos: { borrador: b },
         }).select().single();
         if (error) console.error('No se pudo guardar la venta en el historial:', error);
