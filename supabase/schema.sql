@@ -469,6 +469,32 @@ create policy compradores_update on compradores for update to authenticated
 create policy compradores_delete on compradores for delete to authenticated
   using (rol_actual() = 'owner');
 
+-- Posición: cuánto de un negocio de compra ya cerrado está asignado a
+-- uno o más negocios de venta cerrados (y viceversa), en toneladas
+-- parciales — un contrato de compra puede repartirse en varios de
+-- venta y viceversa, no es el vínculo 1 a 1 de "Contrato de compra
+-- asociado" (que es solo texto libre, cargado por la cascada al cerrar).
+-- "on delete cascade": si se anula la compra o la venta, sus
+-- asignaciones se borran solas (no tiene sentido que sobrevivan a un
+-- negocio que ya no existe).
+create table asignaciones_compra_venta (
+  id uuid primary key default gen_random_uuid(),
+  compra_id uuid not null references negocios_historial(id) on delete cascade,
+  venta_id uuid not null references negocios_venta_historial(id) on delete cascade,
+  toneladas numeric not null check (toneladas > 0),
+  usuario_id uuid not null references auth.users(id),
+  creado_at timestamptz not null default now()
+);
+
+alter table asignaciones_compra_venta enable row level security;
+
+create policy asignaciones_compra_venta_select on asignaciones_compra_venta for select to authenticated
+  using (rol_actual() = 'owner');
+create policy asignaciones_compra_venta_insert on asignaciones_compra_venta for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy asignaciones_compra_venta_delete on asignaciones_compra_venta for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- Clientes: nombre + mail opcional, para autocompletar el campo "Cliente"
 -- del formulario y poder mandarles por mail la liquidación cuando se
 -- cierra un negocio a su nombre.

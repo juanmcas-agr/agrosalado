@@ -222,6 +222,23 @@
     .venta-tabla th:nth-child(4), .venta-tabla td:nth-child(4) { text-align: left; }
     .venta-tabla thead th { background: #cfd8dc; }
 
+    /* ── Pestaña POSICIÓN (compra ↔ venta) ── */
+    .tab-modo.activo-posicion { background: #3f6b5e; color: white; }
+    body.posicion-activa .fondo-fijo {
+      background: linear-gradient(rgba(63,107,94,0.65), rgba(63,107,94,0.65)),
+                  url('/assets/fondo-login.jpg') center top/cover no-repeat;
+    }
+    #modoPosicion {
+      background: #e1e9e6; border-radius: 10px; padding: 10px;
+      margin-top: 4px;
+    }
+    #modoPosicion button { background-color: #3f6b5e; }
+    .pos-tabla { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+    .pos-tabla th, .pos-tabla td { padding: 6px 8px; border-bottom: 1px solid #ddd; text-align: right; white-space: nowrap; }
+    .pos-tabla th:nth-child(-n+4), .pos-tabla td:nth-child(-n+4) { text-align: left; }
+    .pos-tabla thead th { background: #cfe0d9; }
+    .pos-tabla td.pos-libre { font-weight: bold; }
+
     /* Casillero sin texto para marcar un negocio "tipo 2" (interno, sin
        mail) — deliberadamente sin ninguna etiqueta visible ni recuadro
        propio, solo el tilde nativo, bien chico. */
@@ -862,6 +879,7 @@
   <div class="tabs-modo">
     <button type="button" id="tabCompra" class="tab-modo activo" onclick="cambiarModo('compra')">COMPRA</button>
     <button type="button" id="tabVenta" class="tab-modo" onclick="cambiarModo('venta')">VENTA</button>
+    <button type="button" id="tabPosicion" class="tab-modo" onclick="cambiarModo('posicion')">POSICIÓN</button>
   </div>
 
   <div id="modoCompra">
@@ -1053,6 +1071,48 @@
     </div>
   </div>
   <!-- fin #modoVenta -->
+
+  <div id="modoPosicion" class="oculto-panel">
+    <div style="font-weight:bold;font-size:1.1em;margin-bottom:8px;">📐 Posición por cereal</div>
+    <div id="posResumenCereales" class="rep-resumen-grid"></div>
+
+    <div style="font-weight:bold;margin:14px 0 6px;">Compras cerradas</div>
+    <div style="overflow-x:auto;">
+      <table id="posTablaCompras" class="pos-tabla">
+        <thead>
+          <tr><th>Fecha</th><th>Cliente</th><th>Producto</th><th>N° orden</th><th>Toneladas</th><th>Asignado</th><th>Libre</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div style="font-weight:bold;margin:14px 0 6px;">Ventas cerradas</div>
+    <div style="overflow-x:auto;">
+      <table id="posTablaVentas" class="pos-tabla">
+        <thead>
+          <tr><th>Fecha</th><th>Cliente vendedor</th><th>Comprador</th><th>Producto</th><th>N° orden</th><th>Toneladas</th><th>Asignado</th><th>Libre</th><th></th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+
+    <div style="font-weight:bold;margin:14px 0 6px;">Asignaciones</div>
+    <div id="posListaAsignaciones" style="display:flex;flex-direction:column;gap:4px;"></div>
+  </div>
+  <!-- fin #modoPosicion -->
+
+  <!-- Modal asignar compra ↔ venta -->
+  <div id="modalAsignar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:420px;max-height:75vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">🔗 Asignar compra ↔ venta</div>
+      <label style="font-size:0.85em;">Compra<br><select id="asignarCompraSel" onchange="actualizarToneladasSugeridas()"></select></label>
+      <label style="font-size:0.85em;">Venta<br><select id="asignarVentaSel" onchange="actualizarToneladasSugeridas()"></select></label>
+      <label style="font-size:0.85em;">Toneladas a asignar<br><input type="number" id="asignarToneladas"></label>
+      <div id="asignarMensaje" class="mensaje-panel"></div>
+      <button onclick="confirmarAsignacion()" style="margin-top:10px;background:#3f6b5e;">Asignar</button>
+      <button onclick="cerrarModalAsignar()" style="margin-top:8px;background:#888;">Cancelar</button>
+    </div>
+  </div>
 
   <div id="toast" class="toast"></div>
 
@@ -2837,6 +2897,13 @@
         acciones.appendChild(btnTraer);
 
         if (tab === 'cerrados') {
+          const btnAsignar = document.createElement('button');
+          btnAsignar.textContent = '🔗';
+          btnAsignar.title = 'Asignar a un contrato de venta';
+          btnAsignar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#3f6b5e;';
+          btnAsignar.onclick = () => { cerrarModalRecuperar(); abrirModalAsignar({ compraId: registro.id }); };
+          acciones.appendChild(btnAsignar);
+
           const btnRectificar = document.createElement('button');
           btnRectificar.textContent = '🛠️';
           btnRectificar.title = 'Rectificar (anula y lo carga para corregir)';
@@ -3551,12 +3618,15 @@
 
     function cambiarModo(modo) {
       modoActivo = modo;
-      const esVenta = modo === 'venta';
-      document.getElementById('modoCompra').classList.toggle('oculto-panel', esVenta);
-      document.getElementById('modoVenta').classList.toggle('oculto-panel', !esVenta);
-      document.getElementById('tabCompra').classList.toggle('activo', !esVenta);
-      document.getElementById('tabVenta').classList.toggle('activo-venta', esVenta);
-      document.body.classList.toggle('venta-activa', esVenta);
+      document.getElementById('modoCompra').classList.toggle('oculto-panel', modo !== 'compra');
+      document.getElementById('modoVenta').classList.toggle('oculto-panel', modo !== 'venta');
+      document.getElementById('modoPosicion').classList.toggle('oculto-panel', modo !== 'posicion');
+      document.getElementById('tabCompra').classList.toggle('activo', modo === 'compra');
+      document.getElementById('tabVenta').classList.toggle('activo-venta', modo === 'venta');
+      document.getElementById('tabPosicion').classList.toggle('activo-posicion', modo === 'posicion');
+      document.body.classList.toggle('venta-activa', modo === 'venta');
+      document.body.classList.toggle('posicion-activa', modo === 'posicion');
+      if (modo === 'posicion') cargarPosicion();
     }
 
     function precargarBorradorVentaDesdeCompra(elegida, numeroOrdenCompra) {
@@ -3564,6 +3634,254 @@
       document.getElementById('ventaContratoCompra').value = numeroOrdenCompra || '';
       document.getElementById('ventaCliente').value = elegida.cliente || '';
       document.getElementById('ventaProducto').value = elegida.producto || 'SOJA';
+    }
+
+    // ══════════════════════════════════════════════════════════════════
+    // ── POSICIÓN: cuánto de cada compra/venta cerrada está asignado a
+    // la otra punta, y cuánto queda libre — por contrato y por cereal.
+    // Una compra o venta puede repartirse en varias asignaciones
+    // parciales (asignaciones_compra_venta: compra_id + venta_id +
+    // toneladas), no es un vínculo 1 a 1 como "Contrato de compra
+    // asociado" (que es solo un dato informativo cargado al cerrar).
+    // ══════════════════════════════════════════════════════════════════
+
+    // Cache de la última carga (compras/ventas con su libre calculado) —
+    // la reutiliza el modal de Asignar para no volver a pedir todo de nuevo
+    // apenas se abre desde Posición.
+    let datosParaAsignar = null;
+
+    async function calcularLibres() {
+      const [{ data: compras, error: e1 }, { data: ventas, error: e2 }, { data: asignaciones, error: e3 }] = await Promise.all([
+        window.supabaseClient.from('negocios_historial').select('*').order('fecha_cierre', { ascending: false }),
+        window.supabaseClient.from('negocios_venta_historial').select('*').order('fecha_cierre', { ascending: false }),
+        window.supabaseClient.from('asignaciones_compra_venta').select('*'),
+      ]);
+      if (e1 || e2 || e3) return null;
+
+      const asignadoCompra = {};
+      const asignadoVenta = {};
+      for (const a of asignaciones) {
+        asignadoCompra[a.compra_id] = (asignadoCompra[a.compra_id] || 0) + Number(a.toneladas);
+        asignadoVenta[a.venta_id] = (asignadoVenta[a.venta_id] || 0) + Number(a.toneladas);
+      }
+
+      const comprasConLibre = compras.map((c) => {
+        const alt = c.datos && c.datos.alternativas && c.datos.alternativas[0];
+        const toneladas = (alt && !alt.liquidaSaldo) ? (parseFloat(alt.toneladas) || 0) : 0;
+        const asignado = +(asignadoCompra[c.id] || 0).toFixed(2);
+        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre: +(toneladas - asignado).toFixed(2) };
+      });
+
+      const ventasConLibre = ventas.map((v) => {
+        const b = v.datos && v.datos.borrador;
+        const toneladas = parseFloat(b && b.toneladas) || 0;
+        const asignado = +(asignadoVenta[v.id] || 0).toFixed(2);
+        return { registro: v, b: b || {}, producto: b && b.producto, toneladas, asignado, libre: +(toneladas - asignado).toFixed(2) };
+      });
+
+      return { comprasConLibre, ventasConLibre, asignaciones };
+    }
+
+    async function cargarPosicion() {
+      const cont = document.getElementById('posResumenCereales');
+      cont.innerHTML = 'Cargando…';
+
+      const datos = await calcularLibres();
+      if (!datos) { cont.textContent = 'No se pudo cargar (¿sin conexión?).'; return; }
+      datosParaAsignar = datos;
+
+      const porCereal = {};
+      for (const c of datos.comprasConLibre) {
+        if (!c.producto) continue;
+        porCereal[c.producto] = porCereal[c.producto] || { comprado: 0, vendido: 0 };
+        porCereal[c.producto].comprado += c.toneladas;
+      }
+      for (const v of datos.ventasConLibre) {
+        if (!v.producto) continue;
+        porCereal[v.producto] = porCereal[v.producto] || { comprado: 0, vendido: 0 };
+        porCereal[v.producto].vendido += v.toneladas;
+      }
+
+      const entradas = Object.entries(porCereal);
+      cont.innerHTML = entradas.length ? entradas.map(([producto, t]) => {
+        const posicion = +(t.comprado - t.vendido).toFixed(2);
+        const etiqueta = posicion > 0 ? 'Sobre comprado' : posicion < 0 ? 'Sobre vendido' : 'Neutro';
+        const color = posicion > 0 ? '#1d5236' : posicion < 0 ? '#ad1e19' : '#666';
+        return `<div class="rep-item">
+          <div class="rep-label">${producto}</div>
+          <div class="rep-valor" style="color:${color};">${Math.abs(posicion).toLocaleString('es-AR')} tn</div>
+          <div style="font-size:0.75em;color:#666;">${etiqueta}</div>
+        </div>`;
+      }).join('') : '<div style="color:#888;">No hay negocios cerrados todavía.</div>';
+
+      renderTablaPosCompras(datos.comprasConLibre);
+      renderTablaPosVentas(datos.ventasConLibre);
+      renderListaAsignaciones(datos);
+    }
+
+    function renderTablaPosCompras(lista) {
+      const tbody = document.querySelector('#posTablaCompras tbody');
+      tbody.innerHTML = '';
+      for (const c of lista) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${formatearFecha(c.registro.fecha_cierre)}</td>
+          <td>${c.registro.cliente || '-'}</td>
+          <td>${c.producto || '-'}</td>
+          <td>${c.registro.numero_orden || '-'}</td>
+          <td>${c.toneladas.toLocaleString('es-AR')}</td>
+          <td>${c.asignado.toLocaleString('es-AR')}</td>
+          <td class="pos-libre">${c.libre.toLocaleString('es-AR')}</td>
+          <td></td>
+        `;
+        const btn = document.createElement('button');
+        btn.textContent = '🔗 Asignar';
+        btn.style.cssText = 'width:auto;padding:4px 8px;font-size:0.8em;';
+        btn.disabled = c.libre <= 0;
+        btn.onclick = () => abrirModalAsignar({ compraId: c.registro.id });
+        tr.lastElementChild.appendChild(btn);
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderTablaPosVentas(lista) {
+      const tbody = document.querySelector('#posTablaVentas tbody');
+      tbody.innerHTML = '';
+      for (const v of lista) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${formatearFecha(v.registro.fecha_cierre)}</td>
+          <td>${v.b.clienteVendedor || '-'}</td>
+          <td>${v.b.comprador || '-'}</td>
+          <td>${v.producto || '-'}</td>
+          <td>${v.registro.numero_orden || '-'}</td>
+          <td>${v.toneladas.toLocaleString('es-AR')}</td>
+          <td>${v.asignado.toLocaleString('es-AR')}</td>
+          <td class="pos-libre">${v.libre.toLocaleString('es-AR')}</td>
+          <td></td>
+        `;
+        const btn = document.createElement('button');
+        btn.textContent = '🔗 Asignar';
+        btn.style.cssText = 'width:auto;padding:4px 8px;font-size:0.8em;';
+        btn.disabled = v.libre <= 0;
+        btn.onclick = () => abrirModalAsignar({ ventaId: v.registro.id });
+        tr.lastElementChild.appendChild(btn);
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderListaAsignaciones(datos) {
+      const cont = document.getElementById('posListaAsignaciones');
+      if (!datos.asignaciones.length) {
+        cont.innerHTML = '<div style="color:#888;">No hay asignaciones todavía.</div>';
+        return;
+      }
+      cont.innerHTML = '';
+      for (const a of datos.asignaciones) {
+        const compra = datos.comprasConLibre.find((c) => c.registro.id === a.compra_id);
+        const venta = datos.ventasConLibre.find((v) => v.registro.id === a.venta_id);
+        const nombreCompra = compra ? `${compra.registro.cliente} (N° ${compra.registro.numero_orden || '-'})` : '(compra anulada)';
+        const nombreVenta = venta ? `${venta.b.clienteVendedor || '-'} (N° ${venta.registro.numero_orden || '-'})` : '(venta anulada)';
+
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:1px solid #eee;border-radius:6px;font-size:0.85em;';
+        div.innerHTML = `<div>${nombreCompra} → ${nombreVenta} · <strong>${Number(a.toneladas).toLocaleString('es-AR')} tn</strong></div>`;
+        const btn = document.createElement('button');
+        btn.textContent = '🗑️';
+        btn.style.cssText = 'width:auto;padding:4px 8px;background:#ad1e19;';
+        btn.onclick = () => eliminarAsignacion(a.id);
+        div.appendChild(btn);
+        cont.appendChild(div);
+      }
+    }
+
+    async function eliminarAsignacion(id) {
+      if (!confirm('¿Eliminar esta asignación?')) return;
+      const { error } = await window.supabaseClient.from('asignaciones_compra_venta').delete().eq('id', id);
+      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+      cargarPosicion();
+    }
+
+    // ── Modal "Asignar compra ↔ venta" — se abre fijando un lado
+    // (compraId o ventaId) desde Posición o desde Recuperar negocio/venta,
+    // y deja elegir el otro lado (filtrado al mismo cereal cuando se sabe).
+    async function abrirModalAsignar(opciones) {
+      document.getElementById('modalAsignar').style.display = 'flex';
+      const msj = document.getElementById('asignarMensaje');
+      msj.textContent = 'Cargando…';
+      msj.style.color = '';
+
+      datosParaAsignar = await calcularLibres();
+      if (!datosParaAsignar) { msj.textContent = 'No se pudo cargar (¿sin conexión?).'; msj.style.color = '#ad1e19'; return; }
+
+      const compraFija = opciones && opciones.compraId
+        ? datosParaAsignar.comprasConLibre.find((c) => c.registro.id === opciones.compraId) : null;
+      const ventaFija = opciones && opciones.ventaId
+        ? datosParaAsignar.ventasConLibre.find((v) => v.registro.id === opciones.ventaId) : null;
+      const productoFiltro = (compraFija && compraFija.producto) || (ventaFija && ventaFija.producto) || null;
+
+      const selCompra = document.getElementById('asignarCompraSel');
+      const selVenta = document.getElementById('asignarVentaSel');
+
+      const opcionesCompra = datosParaAsignar.comprasConLibre
+        .filter((c) => (compraFija ? c.registro.id === compraFija.registro.id : c.libre > 0 && (!productoFiltro || c.producto === productoFiltro)));
+      const opcionesVenta = datosParaAsignar.ventasConLibre
+        .filter((v) => (ventaFija ? v.registro.id === ventaFija.registro.id : v.libre > 0 && (!productoFiltro || v.producto === productoFiltro)));
+
+      selCompra.innerHTML = opcionesCompra.map((c) =>
+        `<option value="${c.registro.id}">${c.registro.cliente} · ${c.producto || '-'} · N° ${c.registro.numero_orden || '-'} · libre ${c.libre.toLocaleString('es-AR')}tn</option>`
+      ).join('') || '<option value="">Sin compras disponibles</option>';
+      selVenta.innerHTML = opcionesVenta.map((v) =>
+        `<option value="${v.registro.id}">${v.b.clienteVendedor || '-'} · ${v.producto || '-'} · N° ${v.registro.numero_orden || '-'} · libre ${v.libre.toLocaleString('es-AR')}tn</option>`
+      ).join('') || '<option value="">Sin ventas disponibles</option>';
+
+      selCompra.disabled = !!compraFija;
+      selVenta.disabled = !!ventaFija;
+      if (compraFija) selCompra.value = compraFija.registro.id;
+      if (ventaFija) selVenta.value = ventaFija.registro.id;
+
+      actualizarToneladasSugeridas();
+      msj.textContent = '';
+    }
+
+    function actualizarToneladasSugeridas() {
+      if (!datosParaAsignar) return;
+      const compra = datosParaAsignar.comprasConLibre.find((c) => c.registro.id === document.getElementById('asignarCompraSel').value);
+      const venta = datosParaAsignar.ventasConLibre.find((v) => v.registro.id === document.getElementById('asignarVentaSel').value);
+      if (compra && venta) {
+        document.getElementById('asignarToneladas').value = Math.max(0, Math.min(compra.libre, venta.libre));
+      }
+    }
+
+    function cerrarModalAsignar() {
+      document.getElementById('modalAsignar').style.display = 'none';
+    }
+
+    async function confirmarAsignacion() {
+      const msj = document.getElementById('asignarMensaje');
+      const compraId = document.getElementById('asignarCompraSel').value;
+      const ventaId = document.getElementById('asignarVentaSel').value;
+      const toneladas = parseFloat(document.getElementById('asignarToneladas').value);
+
+      if (!compraId || !ventaId) { msj.textContent = 'Elegí una compra y una venta.'; msj.style.color = '#ad1e19'; return; }
+      if (!toneladas || toneladas <= 0) { msj.textContent = 'Ingresá las toneladas a asignar.'; msj.style.color = '#ad1e19'; return; }
+
+      const compra = datosParaAsignar && datosParaAsignar.comprasConLibre.find((c) => c.registro.id === compraId);
+      const venta = datosParaAsignar && datosParaAsignar.ventasConLibre.find((v) => v.registro.id === ventaId);
+      if (compra && toneladas > compra.libre + 0.001) { msj.textContent = `Esa compra solo tiene ${compra.libre} tn libres.`; msj.style.color = '#ad1e19'; return; }
+      if (venta && toneladas > venta.libre + 0.001) { msj.textContent = `Esa venta solo tiene ${venta.libre} tn libres.`; msj.style.color = '#ad1e19'; return; }
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { msj.textContent = 'No hay sesión activa.'; msj.style.color = '#ad1e19'; return; }
+
+      const { error } = await window.supabaseClient.from('asignaciones_compra_venta').insert({
+        compra_id: compraId, venta_id: ventaId, toneladas, usuario_id: session.user.id,
+      });
+      if (error) { msj.textContent = 'No se pudo asignar: ' + error.message; msj.style.color = '#ad1e19'; return; }
+
+      cerrarModalAsignar();
+      if (document.getElementById('modoPosicion').offsetParent !== null) cargarPosicion();
+      mostrarMensajeCerrarNegocio('✅ Asignación guardada');
     }
 
     // ── Compradores: desplegable de "Comprador", mismo mecanismo que
@@ -3928,6 +4246,13 @@
         }
 
         if (tab === 'cerrados') {
+          const btnAsignar = document.createElement('button');
+          btnAsignar.textContent = '🔗';
+          btnAsignar.title = 'Asignar a un contrato de compra';
+          btnAsignar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#3f6b5e;';
+          btnAsignar.onclick = () => { cerrarModalRecuperarVenta(); abrirModalAsignar({ ventaId: registro.id }); };
+          acciones.appendChild(btnAsignar);
+
           const btnRectificar = document.createElement('button');
           btnRectificar.textContent = '🛠️';
           btnRectificar.title = 'Rectificar (anula y lo carga para corregir)';
