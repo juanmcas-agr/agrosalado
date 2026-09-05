@@ -3553,20 +3553,22 @@
       // (xx0001aa...) — el Cliente sigue siendo el real.
       const esTipo2 = !!elegida.esTipo2;
       const numeroOrden = esTipo2 ? await generarCodigoTipo2() : (elegida.codigo || '-');
+      let compraRecienCerradaId = null;
 
       let nombreUsuario = '';
       if (cliente) {
         const { data: { session } } = await window.supabaseClient.auth.getSession();
         if (session) {
           nombreUsuario = await obtenerNombreUsuario(session.user.id);
-          const { error } = await window.supabaseClient.from('negocios_historial').insert({
+          const { data: insertada, error } = await window.supabaseClient.from('negocios_historial').insert({
             usuario_id: session.user.id,
             cliente,
             numero_orden: numeroOrden,
             fecha_cierre: new Date().toISOString().slice(0, 10),
             datos: { alternativas: [elegida], seleccionada: 0 },
-          });
+          }).select().single();
           if (error) console.error('No se pudo guardar en el historial de negocios:', error);
+          compraRecienCerradaId = insertada ? insertada.id : null;
         }
       }
 
@@ -3612,7 +3614,7 @@
       // Se ofrece también para los "tipo 2": el cliente ahí es real, así
       // que puede perfectamente terminar en un contrato de venta.
       if (confirm('¿Cargar este negocio como base de un contrato de venta?')) {
-        precargarBorradorVentaDesdeCompra(elegida, numeroOrden);
+        precargarBorradorVentaDesdeCompra(elegida, numeroOrden, compraRecienCerradaId);
       }
     }
 
@@ -3644,14 +3646,28 @@
       if (modo === 'posicion') cargarPosicion();
     }
 
+    // Id real (uuid) de la compra vinculada al borrador que se está
+    // armando en el formulario — la pone precargarBorradorVentaDesdeCompra
+    // (cascada o "Traer de compra"), viaja con el borrador, y al cerrar el
+    // negocio de venta se usa para crear sola la asignación de posición
+    // (sin tener que ir a Posición a mano). Persiste entre "Confirmar
+    // borrador" como Contrato de compra/Cliente vendedor (mismo criterio:
+    // varias ventas seguidas del mismo contexto), se resetea con
+    // Borrar Todo.
+    let compraVinculadaIdActual = null;
+
     // Precarga TODO lo que tiene equivalente directo en la compra (destino,
     // precio, toneladas, fletes, plazo, FWD, observaciones...), no solo
     // cliente/contrato/producto — se usa tal cual de punto de partida y se
     // corrige lo que haga falta antes de "Confirmar borrador". Lo que no
     // tiene equivalente en compra (Comprador, Corredor, Origen, Humedad)
     // se deja en blanco/default a propósito, no son datos de la compra.
-    function precargarBorradorVentaDesdeCompra(elegida, numeroOrdenCompra) {
+    function precargarBorradorVentaDesdeCompra(elegida, numeroOrdenCompra, compraId) {
       cambiarModo('venta');
+      // Guarda el id real de la compra (no solo su N° de orden en texto)
+      // para poder crear la asignación de posición sola al cerrar la
+      // venta — ver compraVinculadaIdActual.
+      compraVinculadaIdActual = compraId || null;
       document.getElementById('ventaContratoCompra').value = numeroOrdenCompra || '';
       document.getElementById('ventaCliente').value = elegida.cliente || '';
       document.getElementById('ventaComprador').value = '';
@@ -3705,7 +3721,7 @@
         btn.textContent = 'Traer';
         btn.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;';
         btn.onclick = () => {
-          precargarBorradorVentaDesdeCompra(alt, registro.numero_orden);
+          precargarBorradorVentaDesdeCompra(alt, registro.numero_orden, registro.id);
           cerrarModalTraerCompra();
         };
         div.appendChild(btn);
@@ -3757,7 +3773,12 @@
         // queda indeterminado) y el botón de Asignar no debe bloquearse
         // por falta de libre, solo para este caso puntual.
         const libre = esLiquidaSaldo ? null : +(toneladas - asignado).toFixed(2);
-        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre, esLiquidaSaldo };
+        // Una vez "completada", el negocio deja de estar en liquidaSaldo
+        // (ya cuenta normal para libre/posición), pero sigue siendo
+        // editable — fueLiquidaSaldo queda marcado para siempre, a
+        // diferencia de un negocio que nunca fue "liquida saldo".
+        const puedeEditarToneladas = esLiquidaSaldo || !!(alt && alt.fueLiquidaSaldo);
+        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre, esLiquidaSaldo, puedeEditarToneladas };
       });
 
       const ventasConLibre = ventas.map((v) => {
@@ -3825,13 +3846,15 @@
           <td></td>
         `;
         const tdToneladas = tr.children[4];
-        if (c.esLiquidaSaldo) {
+        if (c.puedeEditarToneladas) {
           tdToneladas.style.cssText = 'text-align:left;white-space:normal;';
-          tdToneladas.innerHTML = '<span style="color:#888;">COMPLETAR TONS (liquida saldo)</span> ';
+          tdToneladas.innerHTML = c.esLiquidaSaldo
+            ? '<span style="color:#888;">COMPLETAR TONS (liquida saldo)</span> '
+            : `<span>${c.toneladas.toLocaleString('es-AR')}</span> `;
           const btnCompletar = document.createElement('button');
-          btnCompletar.textContent = '✏️ Completar';
+          btnCompletar.textContent = c.esLiquidaSaldo ? '✏️ Completar' : '✏️ Editar';
           btnCompletar.style.cssText = 'width:auto;padding:2px 6px;font-size:0.8em;';
-          btnCompletar.onclick = () => completarToneladasCompra(c.registro.id);
+          btnCompletar.onclick = () => completarToneladasCompra(c.registro.id, c.toneladas);
           tdToneladas.appendChild(btnCompletar);
         } else {
           tdToneladas.textContent = c.toneladas.toLocaleString('es-AR');
@@ -3847,11 +3870,14 @@
       }
     }
 
-    // Resuelve un negocio de compra "liquida saldo" directamente desde
-    // Posición: se carga la cantidad real y deja de ser "liquida saldo",
-    // así ya entra en los cálculos normales de libre/asignado.
-    async function completarToneladasCompra(compraId) {
-      const texto = prompt('¿Cuántas toneladas tuvo finalmente este negocio?');
+    // Resuelve (o corrige) las toneladas de un negocio de compra que en
+    // algún momento se cerró como "Liquida saldo" — directamente desde
+    // Posición. fueLiquidaSaldo queda marcado para siempre (aunque
+    // liquidaSaldo ya pase a false), así el dato sigue editable más
+    // adelante si hace falta corregirlo; un negocio que NUNCA fue
+    // "liquida saldo" no se puede tocar desde acá.
+    async function completarToneladasCompra(compraId, valorActual) {
+      const texto = prompt('¿Cuántas toneladas tiene este negocio?', valorActual != null ? String(valorActual) : '');
       if (texto == null) return;
       const toneladas = parseFloat(texto);
       if (!toneladas || toneladas <= 0) { alert('Ingresá un número de toneladas válido.'); return; }
@@ -3861,7 +3887,7 @@
       if (errorFetch || !data) { alert('No se pudo cargar el negocio: ' + (errorFetch ? errorFetch.message : '')); return; }
 
       const alt = (data.datos && data.datos.alternativas && data.datos.alternativas[0]) || {};
-      const nuevaAlt = { ...alt, toneladas: String(toneladas), liquidaSaldo: false };
+      const nuevaAlt = { ...alt, toneladas: String(toneladas), liquidaSaldo: false, fueLiquidaSaldo: true };
       const nuevosDatos = { ...data.datos, alternativas: [nuevaAlt] };
 
       const { error } = await window.supabaseClient.from('negocios_historial')
@@ -4143,6 +4169,7 @@
         : parseFloat(comisionSel);
       return {
         contratoCompra: document.getElementById('ventaContratoCompra').value.trim(),
+        compraVinculadaId: compraVinculadaIdActual,
         clienteVendedor: document.getElementById('ventaCliente').value.trim(),
         comprador: document.getElementById('ventaComprador').value,
         esTipo2: document.getElementById('ventaChkTipo2').checked,
@@ -4185,6 +4212,7 @@
     // hace falta "Confirmar borrador" de nuevo antes de poder cerrarlo.
     function cargarBorradorEnFormularioVenta(b) {
       cambiarModo('venta');
+      compraVinculadaIdActual = b.compraVinculadaId || null;
       document.getElementById('ventaContratoCompra').value = b.contratoCompra || '';
       document.getElementById('ventaCliente').value = b.clienteVendedor || '';
       asegurarOpcionComprador(b.comprador || '');
@@ -4294,6 +4322,7 @@
       if (!confirm('¿Borrar todos los borradores de venta pendientes?')) return;
       borradoresVentaPendientes = [];
       guardadoVentaIdActual = null;
+      compraVinculadaIdActual = null;
       renderTablaVentaPendientes();
     }
 
@@ -4535,14 +4564,26 @@
         // "Tipo 2" reusa exactamente la numeración/código de compra
         // (xx0001aa...); un negocio de venta normal usa la propia (V...).
         const numeroOrden = b.esTipo2 ? await generarCodigoTipo2() : await generarCodigoVenta();
-        const { error } = await window.supabaseClient.from('negocios_venta_historial').insert({
+        const { data: ventaInsertada, error } = await window.supabaseClient.from('negocios_venta_historial').insert({
           usuario_id: session.user.id,
           cliente_vendedor: b.clienteVendedor,
           numero_orden: numeroOrden,
           fecha_cierre: new Date().toISOString().slice(0, 10),
           datos: { borrador: b },
-        });
+        }).select().single();
         if (error) console.error('No se pudo guardar la venta en el historial:', error);
+
+        // Si este borrador vino de "Traer de compra" (o de la cascada
+        // automática al cerrar una compra), se crea sola la asignación de
+        // Posición por las toneladas de esta venta — así no hay que ir a
+        // Posición a mano a asignar lo que ya se sabía desde el vamos.
+        const toneladasAsignar = parseFloat(b.toneladas) || 0;
+        if (!error && ventaInsertada && b.compraVinculadaId && toneladasAsignar > 0) {
+          const { error: errorAsig } = await window.supabaseClient.from('asignaciones_compra_venta').insert({
+            compra_id: b.compraVinculadaId, venta_id: ventaInsertada.id, toneladas: toneladasAsignar, usuario_id: session.user.id,
+          });
+          if (errorAsig) console.error('No se pudo crear la asignación automática compra↔venta:', errorAsig);
+        }
       }
 
       mostrarMensajeCerrarNegocio('✅ Cerrado');
