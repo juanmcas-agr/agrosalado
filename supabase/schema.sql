@@ -362,6 +362,8 @@ create policy negocios_historial_select on negocios_historial for select to auth
   using (rol_actual() = 'owner');
 create policy negocios_historial_insert on negocios_historial for insert to authenticated
   with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy negocios_historial_update on negocios_historial for update to authenticated
+  using (rol_actual() = 'owner');
 create policy negocios_historial_delete on negocios_historial for delete to authenticated
   using (rol_actual() = 'owner');
 
