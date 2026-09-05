@@ -216,14 +216,21 @@
     .venta-tabla thead th { background: #cfd8dc; }
 
     /* Casillero sin texto para marcar un negocio "tipo 2" (interno, sin
-       mail) — deliberadamente sin ninguna etiqueta visible. */
+       mail) — deliberadamente sin ninguna etiqueta visible ni recuadro
+       propio, solo el tilde nativo, bien chico. */
     .chk-tipo2 {
-      display: flex; align-items: center; justify-content: center;
-      background: white; border: 1px solid #ccc; border-radius: 8px;
-      cursor: pointer;
+      display: flex; align-items: center; justify-content: flex-start;
+      justify-self: start; cursor: pointer;
     }
     .chk-tipo2 input[type="checkbox"] {
-      width: 22px; height: 22px; margin: 0; cursor: pointer;
+      /* .formulario input ya trae appearance:none + border + fondo +
+         100% de ancho/alto para los campos de texto — hay que pisar todo
+         eso acá o el tilde queda invisible (parece que no hace nada) y
+         el casillero termina del mismo tamaño que los demás campos. */
+      width: 22px; height: 22px; max-width: 22px;
+      margin: 0; padding: 0; border: none; background: none;
+      -webkit-appearance: checkbox; appearance: checkbox;
+      cursor: pointer;
     }
 
     /* ── Combobox de Cliente ── */
@@ -992,6 +999,11 @@
       </select>
       <button type="button" id="ventaChkCobraFleteCorto" class="boton-toggle activo full" onclick="toggleCobraFleteCorto('ventaChkCobraFleteCorto','ventaKmCorto','ventaDestino','ventaKmLargo')">✓ Cobra flete corto</button>
       <input type="number" id="ventaPrecio" placeholder="Precio en destino">
+      <select id="ventaMoneda" onchange="toggleTipoCambio('ventaMoneda','ventaTipoCambio')">
+        <option value="ARS">$</option>
+        <option value="USD">USD</option>
+      </select>
+      <input type="number" id="ventaTipoCambio" placeholder="Tipo de Cambio" style="display:none;">
       <input type="number" id="ventaToneladas" placeholder="Toneladas">
       <input type="number" id="ventaKmCorto" placeholder="Flete Corto (KM)">
       <input type="number" id="ventaDescCorto" placeholder="Descuento Flete Corto (%)">
@@ -1284,14 +1296,17 @@
     function confirmarUsarPizarra() {
       const desc = parseFloat(document.getElementById('modalDescuento').value) || 0;
       const resultado = +(pizarraValorActual * (1 - desc / 100)).toFixed(2);
+      const esVenta = modoActivo === 'venta';
       // Mapear clave al valor del select
       const productos = { soja: 'SOJA', maiz: 'MAIZ', trigo: 'TRIGO', girasol: 'GIRASOL AO', sorgo: 'OTROS' };
       const productoSelect = productos[pizarraClaveActual];
-      if (productoSelect) document.getElementById('producto').value = productoSelect;
+      if (productoSelect) document.getElementById(esVenta ? 'ventaProducto' : 'producto').value = productoSelect;
       // Cargar en formulario como pesos
-      document.getElementById('moneda').value = 'ARS';
-      toggleTipoCambio();
-      document.getElementById('precioBruto').value = resultado;
+      const monedaId = esVenta ? 'ventaMoneda' : 'moneda';
+      const tcId = esVenta ? 'ventaTipoCambio' : 'tipoCambio';
+      document.getElementById(monedaId).value = 'ARS';
+      toggleTipoCambio(monedaId, tcId);
+      document.getElementById(esVenta ? 'ventaPrecio' : 'precioBruto').value = resultado;
       cerrarModalPizarra();
     }
 
@@ -1424,14 +1439,16 @@
     function usarTcEnFormulario(casa) {
       const d = tcDatos[casa];
       if (!d) return;
-      document.getElementById('moneda').value = 'USD';
-      toggleTipoCambio();
-      document.getElementById('tipoCambio').value = d.compra;
+      const monedaId = modoActivo === 'venta' ? 'ventaMoneda' : 'moneda';
+      const tcId = modoActivo === 'venta' ? 'ventaTipoCambio' : 'tipoCambio';
+      document.getElementById(monedaId).value = 'USD';
+      toggleTipoCambio(monedaId, tcId);
+      document.getElementById(tcId).value = d.compra;
     }
 
-    function toggleTipoCambio() {
-      const moneda = document.getElementById("moneda").value;
-      const tcInput = document.getElementById("tipoCambio");
+    function toggleTipoCambio(monedaId = 'moneda', tcId = 'tipoCambio') {
+      const moneda = document.getElementById(monedaId).value;
+      const tcInput = document.getElementById(tcId);
       tcInput.style.display = moneda === "USD" ? "block" : "none";
       if (moneda === "ARS") tcInput.value = "";
     }
@@ -3500,7 +3517,12 @@
     // "Confirmar borrador" y se cierra en bloque con "Cerrar negocio".
     // ══════════════════════════════════════════════════════════════════
 
+    // Qué pestaña está activa — lo usan los botones "Usar" de Pizarra BCR
+    // y Tipos de Cambio para saber si cargan en Compra o en Venta.
+    let modoActivo = 'compra';
+
     function cambiarModo(modo) {
+      modoActivo = modo;
       const esVenta = modo === 'venta';
       document.getElementById('modoCompra').classList.toggle('oculto-panel', esVenta);
       document.getElementById('modoVenta').classList.toggle('oculto-panel', !esVenta);
@@ -3593,7 +3615,9 @@
     let borradoresVentaPendientes = [];
 
     function calcularDerivadosVenta(b) {
-      const precioInput = parseFloat(b.precioInput) || 0;
+      const precioInputCrudo = parseFloat(b.precioInput) || 0;
+      const tipoCambio = parseFloat(b.tipoCambio) || 1;
+      const precioInput = b.moneda === 'USD' ? precioInputCrudo * tipoCambio : precioInputCrudo;
       const comisionPct = parseFloat(b.comisionPct) || 0;
       const kmCorto = parseInt(b.kmCorto) || 0;
       const kmLargo = parseInt(b.kmLargo) || 0;
@@ -3621,6 +3645,8 @@
         producto: document.getElementById('ventaProducto').value,
         origen: document.getElementById('ventaOrigen').value.trim(),
         destino: document.getElementById('ventaDestino').value,
+        moneda: document.getElementById('ventaMoneda').value,
+        tipoCambio: document.getElementById('ventaTipoCambio').value,
         precioInput: document.getElementById('ventaPrecio').value,
         toneladas: document.getElementById('ventaToneladas').value,
         kmCorto: document.getElementById('ventaKmCorto').value,
