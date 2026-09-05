@@ -3748,9 +3748,16 @@
 
       const comprasConLibre = compras.map((c) => {
         const alt = c.datos && c.datos.alternativas && c.datos.alternativas[0];
-        const toneladas = (alt && !alt.liquidaSaldo) ? (parseFloat(alt.toneladas) || 0) : 0;
+        const esLiquidaSaldo = !!(alt && alt.liquidaSaldo);
+        const toneladas = (alt && !esLiquidaSaldo) ? (parseFloat(alt.toneladas) || 0) : 0;
         const asignado = +(asignadoCompra[c.id] || 0).toFixed(2);
-        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre: +(toneladas - asignado).toFixed(2) };
+        // "Liquida saldo" en compra significa que ahí no se sabía cuántas
+        // tn tenía el negocio — pero eso se va sabiendo justamente al
+        // asignarlo a ventas. Por eso acá no hay un tope real ("libre"
+        // queda indeterminado) y el botón de Asignar no debe bloquearse
+        // por falta de libre, solo para este caso puntual.
+        const libre = esLiquidaSaldo ? null : +(toneladas - asignado).toFixed(2);
+        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre, esLiquidaSaldo };
       });
 
       const ventasConLibre = ventas.map((v) => {
@@ -3775,7 +3782,9 @@
       for (const c of datos.comprasConLibre) {
         if (!c.producto) continue;
         porCereal[c.producto] = porCereal[c.producto] || { comprado: 0, vendido: 0 };
-        porCereal[c.producto].comprado += c.toneladas;
+        // Si "liquida saldo" no hay un total conocido todavía — se suma lo
+        // que ya se le asignó (lo único real hasta ahora), no toneladas (0).
+        porCereal[c.producto].comprado += c.esLiquidaSaldo ? c.asignado : c.toneladas;
       }
       for (const v of datos.ventasConLibre) {
         if (!v.producto) continue;
@@ -3810,15 +3819,15 @@
           <td>${c.registro.cliente || '-'}</td>
           <td>${c.producto || '-'}</td>
           <td>${c.registro.numero_orden || '-'}</td>
-          <td>${c.toneladas.toLocaleString('es-AR')}</td>
+          <td>${c.esLiquidaSaldo ? 'COMPLETAR TONS (liquida saldo)' : c.toneladas.toLocaleString('es-AR')}</td>
           <td>${c.asignado.toLocaleString('es-AR')}</td>
-          <td class="pos-libre">${c.libre.toLocaleString('es-AR')}</td>
+          <td class="pos-libre">${c.esLiquidaSaldo ? 'A confirmar' : c.libre.toLocaleString('es-AR')}</td>
           <td></td>
         `;
         const btn = document.createElement('button');
         btn.textContent = '🔗 Asignar';
         btn.style.cssText = 'width:auto;padding:4px 8px;font-size:0.8em;';
-        btn.disabled = c.libre <= 0;
+        btn.disabled = !c.esLiquidaSaldo && c.libre <= 0;
         btn.onclick = () => abrirModalAsignar({ compraId: c.registro.id });
         tr.lastElementChild.appendChild(btn);
         tbody.appendChild(tr);
@@ -3905,12 +3914,12 @@
       const selVenta = document.getElementById('asignarVentaSel');
 
       const opcionesCompra = datosParaAsignar.comprasConLibre
-        .filter((c) => (compraFija ? c.registro.id === compraFija.registro.id : c.libre > 0 && (!productoFiltro || c.producto === productoFiltro)));
+        .filter((c) => (compraFija ? c.registro.id === compraFija.registro.id : (c.esLiquidaSaldo || c.libre > 0) && (!productoFiltro || c.producto === productoFiltro)));
       const opcionesVenta = datosParaAsignar.ventasConLibre
         .filter((v) => (ventaFija ? v.registro.id === ventaFija.registro.id : v.libre > 0 && (!productoFiltro || v.producto === productoFiltro)));
 
       selCompra.innerHTML = opcionesCompra.map((c) =>
-        `<option value="${c.registro.id}">${c.registro.cliente} · ${c.producto || '-'} · N° ${c.registro.numero_orden || '-'} · libre ${c.libre.toLocaleString('es-AR')}tn</option>`
+        `<option value="${c.registro.id}">${c.registro.cliente} · ${c.producto || '-'} · N° ${c.registro.numero_orden || '-'} · ${c.esLiquidaSaldo ? 'liquida saldo' : `libre ${c.libre.toLocaleString('es-AR')}tn`}</option>`
       ).join('') || '<option value="">Sin compras disponibles</option>';
       selVenta.innerHTML = opcionesVenta.map((v) =>
         `<option value="${v.registro.id}">${v.b.clienteVendedor || '-'} · ${v.producto || '-'} · N° ${v.registro.numero_orden || '-'} · libre ${v.libre.toLocaleString('es-AR')}tn</option>`
@@ -3930,7 +3939,10 @@
       const compra = datosParaAsignar.comprasConLibre.find((c) => c.registro.id === document.getElementById('asignarCompraSel').value);
       const venta = datosParaAsignar.ventasConLibre.find((v) => v.registro.id === document.getElementById('asignarVentaSel').value);
       if (compra && venta) {
-        document.getElementById('asignarToneladas').value = Math.max(0, Math.min(compra.libre, venta.libre));
+        // Si la compra es "liquida saldo" no hay un tope de su lado —
+        // se sugiere lo libre de la venta (lo único acotado acá).
+        const sugerido = compra.esLiquidaSaldo ? venta.libre : Math.min(compra.libre, venta.libre);
+        document.getElementById('asignarToneladas').value = Math.max(0, sugerido);
       }
     }
 
@@ -3949,7 +3961,7 @@
 
       const compra = datosParaAsignar && datosParaAsignar.comprasConLibre.find((c) => c.registro.id === compraId);
       const venta = datosParaAsignar && datosParaAsignar.ventasConLibre.find((v) => v.registro.id === ventaId);
-      if (compra && toneladas > compra.libre + 0.001) { msj.textContent = `Esa compra solo tiene ${compra.libre} tn libres.`; msj.style.color = '#ad1e19'; return; }
+      if (compra && !compra.esLiquidaSaldo && toneladas > compra.libre + 0.001) { msj.textContent = `Esa compra solo tiene ${compra.libre} tn libres.`; msj.style.color = '#ad1e19'; return; }
       if (venta && toneladas > venta.libre + 0.001) { msj.textContent = `Esa venta solo tiene ${venta.libre} tn libres.`; msj.style.color = '#ad1e19'; return; }
 
       const { data: { session } } = await window.supabaseClient.auth.getSession();
