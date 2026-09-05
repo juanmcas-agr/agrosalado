@@ -990,7 +990,10 @@
 
   <div id="modoVenta" class="oculto-panel">
     <div class="formulario">
-      <input type="text" id="ventaContratoCompra" placeholder="Contrato de compra asociado (opcional)" class="full">
+      <div class="campo-con-boton full">
+        <input type="text" id="ventaContratoCompra" placeholder="Contrato de compra asociado (opcional)">
+        <button type="button" onclick="abrirModalTraerCompra()" style="width:auto;">📂 Traer de compra</button>
+      </div>
       <input type="text" id="ventaCliente" placeholder="Cliente vendedor">
       <select id="ventaComprador" onchange="onCambioComprador()">
         <option value="">Comprador...</option>
@@ -1140,6 +1143,15 @@
       </div>
       <div id="listaNegociosVenta" style="display:flex;flex-direction:column;gap:8px;"></div>
       <button onclick="cerrarModalRecuperarVenta()" style="margin-top:16px;background:#888;">Cancelar</button>
+    </div>
+  </div>
+
+  <!-- Modal traer de compra (VENTA) -->
+  <div id="modalTraerCompra" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:420px;max-height:75vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">📂 Traer de un contrato de compra</div>
+      <div id="listaTraerCompra" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <button onclick="cerrarModalTraerCompra()" style="margin-top:16px;background:#888;">Cancelar</button>
     </div>
   </div>
 
@@ -3639,6 +3651,41 @@
       document.getElementById('ventaProducto').value = elegida.producto || 'SOJA';
     }
 
+    // Botón "📂 Traer de compra": igual que la cascada automática al
+    // cerrar una compra, pero a pedido — para cuando la venta se carga
+    // más adelante y no justo después de cerrar la compra.
+    async function abrirModalTraerCompra() {
+      const lista = document.getElementById('listaTraerCompra');
+      lista.innerHTML = 'Cargando…';
+      document.getElementById('modalTraerCompra').style.display = 'flex';
+
+      const { data, error } = await window.supabaseClient.from('negocios_historial')
+        .select('*').order('fecha_cierre', { ascending: false }).limit(100);
+      if (error) { lista.innerHTML = 'No se pudo cargar (¿sin conexión?).'; return; }
+      if (!data.length) { lista.innerHTML = '<div style="color:#888;">No hay negocios de compra cerrados.</div>'; return; }
+
+      lista.innerHTML = '';
+      data.forEach((registro) => {
+        const alt = (registro.datos && registro.datos.alternativas && registro.datos.alternativas[0]) || {};
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:8px;gap:8px;';
+        div.innerHTML = `<div><strong>${registro.cliente}</strong> <span style="color:#888;font-weight:normal;">(${alt.producto || '-'})</span><br><small>${formatearFechaHora(registro.created_at)} · N° ${registro.numero_orden || '-'}</small></div>`;
+        const btn = document.createElement('button');
+        btn.textContent = 'Traer';
+        btn.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;';
+        btn.onclick = () => {
+          precargarBorradorVentaDesdeCompra(alt, registro.numero_orden);
+          cerrarModalTraerCompra();
+        };
+        div.appendChild(btn);
+        lista.appendChild(div);
+      });
+    }
+
+    function cerrarModalTraerCompra() {
+      document.getElementById('modalTraerCompra').style.display = 'none';
+    }
+
     // ══════════════════════════════════════════════════════════════════
     // ── POSICIÓN: cuánto de cada compra/venta cerrada está asignado a
     // la otra punta, y cuánto queda libre — por contrato y por cereal.
@@ -4109,6 +4156,17 @@
           <td>${b.esFwd ? ('FWD' + (b.plazo ? ': ' + b.plazo : '')) : '-'}</td>
           <td class="ocultar-al-exportar"></td>
         `;
+        const btnEditar = document.createElement('button');
+        btnEditar.textContent = '✏️';
+        btnEditar.title = 'Editar (lo saca de la lista y lo carga en el formulario)';
+        btnEditar.style.cssText = 'width:auto;padding:4px 8px;font-size:0.85em;background:#a67c2e;';
+        btnEditar.onclick = () => {
+          borradoresVentaPendientes.splice(idx, 1);
+          renderTablaVentaPendientes();
+          cargarBorradorEnFormularioVenta(b);
+        };
+        tr.lastElementChild.appendChild(btnEditar);
+
         const btnBorrar = document.createElement('button');
         btnBorrar.textContent = '🗑️';
         btnBorrar.style.cssText = 'width:auto;padding:4px 8px;font-size:0.85em;';
