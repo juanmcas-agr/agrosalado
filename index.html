@@ -2902,6 +2902,12 @@
           ],
         });
       }
+
+      // Este mismo negocio puede tener contratos de venta asociados (ver
+      // "Contrato de compra asociado" en VENTA) — avisar y ofrecer
+      // anularlos también, para no dejarlos huérfanos.
+      await ofrecerAnularVentasAsociadas(numero);
+
       return true;
     }
 
@@ -3582,6 +3588,21 @@
       if (valorPrevio) select.value = valorPrevio;
     }
 
+    // Por si se rectifica una venta cerrada con un comprador que ya no
+    // está en la lista actual — así el <select> igual puede mostrarlo.
+    function asegurarOpcionComprador(nombre) {
+      const select = document.getElementById('ventaComprador');
+      if (!nombre) { select.value = ''; return; }
+      const existe = Array.from(select.options).some((o) => o.value === nombre);
+      if (!existe) {
+        const opt = document.createElement('option');
+        opt.value = nombre;
+        opt.textContent = nombre;
+        select.insertBefore(opt, select.querySelector('option[value="OTRO"]'));
+      }
+      select.value = nombre;
+    }
+
     async function cargarCompradores() {
       renderSelectComprador();
       const { data, error } = await window.supabaseClient.from('compradores').select('*').order('nombre');
@@ -3692,6 +3713,41 @@
       if (!parseFloat(b.toneladas)) faltantes.push('Toneladas');
       if (!b.plazo) faltantes.push(b.esFwd ? 'Período de entrega' : 'Plazo de Pago');
       return faltantes;
+    }
+
+    // Inversa de leerBorradorVentaDesdeFormulario: pinta un borrador en el
+    // formulario para revisarlo/corregirlo (usado por "Rectificar" sobre
+    // un contrato de venta ya cerrado). No lo suma a los pendientes —
+    // hace falta "Confirmar borrador" de nuevo antes de poder cerrarlo.
+    function cargarBorradorEnFormularioVenta(b) {
+      cambiarModo('venta');
+      document.getElementById('ventaContratoCompra').value = b.contratoCompra || '';
+      document.getElementById('ventaCliente').value = b.clienteVendedor || '';
+      asegurarOpcionComprador(b.comprador || '');
+      document.getElementById('ventaChkTipo2').checked = !!b.esTipo2;
+      document.getElementById('ventaCorredor').value = b.corredor || '';
+      const comisionStr = String(b.comisionPct ?? '0.5');
+      const esComisionFija = ['0.5', '0', '1', '2', '3'].includes(comisionStr);
+      document.getElementById('ventaComisionSel').value = esComisionFija ? comisionStr : 'otra';
+      onCambioComisionVenta();
+      if (!esComisionFija) document.getElementById('ventaComisionOtra').value = comisionStr;
+      document.getElementById('ventaProducto').value = b.producto || 'SOJA';
+      document.getElementById('ventaOrigen').value = b.origen || '';
+      asegurarOpcionDestino('ventaDestino', b.destino || '');
+      document.getElementById('ventaMoneda').value = b.moneda || 'ARS';
+      toggleTipoCambio('ventaMoneda', 'ventaTipoCambio');
+      document.getElementById('ventaTipoCambio').value = b.tipoCambio || '';
+      document.getElementById('ventaPrecio').value = b.precioInput || '';
+      document.getElementById('ventaToneladas').value = b.toneladas || '';
+      toggleCobraFleteCorto('ventaChkCobraFleteCorto', 'ventaKmCorto', 'ventaDestino', 'ventaKmLargo', b.cobraFleteCorto !== false);
+      document.getElementById('ventaKmCorto').value = b.kmCorto || '';
+      document.getElementById('ventaDescCorto').value = b.descCorto || '';
+      document.getElementById('ventaKmLargo').value = b.kmLargo || '';
+      document.getElementById('ventaDescLargo').value = b.descLargo || '';
+      toggleFwd('ventaFwdToggle', 'ventaPlazoPago', null, !!b.esFwd);
+      document.getElementById('ventaPlazoPago').value = b.plazo || '';
+      document.getElementById('ventaHumedad').value = b.humedad || 'SECO';
+      document.getElementById('ventaObservaciones').value = b.observaciones || '';
     }
 
     function renderTablaVentaPendientes() {
@@ -3870,6 +3926,22 @@
           btnEliminar.onclick = () => eliminarGuardadoVenta(registro);
           acciones.appendChild(btnEliminar);
         }
+
+        if (tab === 'cerrados') {
+          const btnRectificar = document.createElement('button');
+          btnRectificar.textContent = '🛠️';
+          btnRectificar.title = 'Rectificar (anula y lo carga para corregir)';
+          btnRectificar.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#a67c2e;';
+          btnRectificar.onclick = () => rectificarCerradoVenta(registro);
+          acciones.appendChild(btnRectificar);
+
+          const btnEliminarCerrado = document.createElement('button');
+          btnEliminarCerrado.textContent = '🗑️';
+          btnEliminarCerrado.title = 'Anular';
+          btnEliminarCerrado.style.cssText = 'width:auto;padding:6px 10px;font-size:0.85em;background:#ad1e19;';
+          btnEliminarCerrado.onclick = () => eliminarCerradoVenta(registro);
+          acciones.appendChild(btnEliminarCerrado);
+        }
         div.appendChild(acciones);
         lista.appendChild(div);
       });
@@ -3881,6 +3953,90 @@
       if (error) { alert('No se pudo eliminar: ' + error.message); return; }
       cacheGuardadosVenta = cacheGuardadosVenta.filter((r) => r.id !== registro.id);
       cambiarTabRecuperarVenta('guardados');
+    }
+
+    // Anula (borra) un contrato de venta cerrado y manda el mail de
+    // anulación — salvo que sea "tipo 2". Mismo criterio que
+    // anularNegocioCerrado() de compra, pero acá cada fila de
+    // negocios_venta_historial es un contrato independiente (no una
+    // tanda), así que se anula de a uno.
+    async function anularNegocioCerradoVenta(registro) {
+      const numero = registro.numero_orden || '-';
+      const b = (registro.datos && registro.datos.borrador) || {};
+      const esTipo2 = !!b.esTipo2;
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      const [nombreQuienAnula, nombreQuienCreo] = await Promise.all([
+        obtenerNombreUsuario(session && session.user.id),
+        obtenerNombreUsuario(registro.usuario_id),
+      ]);
+
+      const { error } = await window.supabaseClient.from('negocios_venta_historial').delete().eq('id', registro.id);
+      if (error) { alert('No se pudo anular: ' + error.message); return false; }
+
+      cacheCerradosVenta = cacheCerradosVenta.filter((r) => r.id !== registro.id);
+
+      if (!esTipo2) {
+        await enviarMailLiquidacion({
+          subject: `ANULACION ORDEN DE VENTA N° ${numero}`,
+          tituloAviso: '¡ANULACION! CONTRATO DE VENTA ANULADO',
+          cliente: registro.cliente_vendedor,
+          numeroOrden: numero,
+          lineasExtra: [
+            `Comprador: ${b.comprador || '-'}`,
+            `Cargado originalmente por: ${nombreQuienCreo || '-'}`,
+            `Anulado por: ${nombreQuienAnula || '-'}`,
+          ],
+        });
+      }
+      return true;
+    }
+
+    async function eliminarCerradoVenta(registro) {
+      const numero = registro.numero_orden || '-';
+      const b = (registro.datos && registro.datos.borrador) || {};
+      const esTipo2 = !!b.esTipo2;
+      const avisoMail = esTipo2 ? '' : '\n\nSe va a mandar un mail avisando la anulación.';
+      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el contrato de venta de "${registro.cliente_vendedor}" (N° ${numero})?${avisoMail}`)) return;
+      const ok = await anularNegocioCerradoVenta(registro);
+      if (ok) cambiarTabRecuperarVenta('cerrados');
+    }
+
+    // Anula el cerrado (con su mail de ANULACION) y lo carga en el
+    // formulario para corregirlo. A diferencia de compra (que recarga
+    // toda la tabla comparadora), acá se pinta el formulario y hay que
+    // "Confirmar borrador" de nuevo antes de poder cerrarlo.
+    async function rectificarCerradoVenta(registro) {
+      const numero = registro.numero_orden || '-';
+      const b = (registro.datos && registro.datos.borrador) || {};
+      const esTipo2 = !!b.esTipo2;
+      const avisoMail = esTipo2 ? 'No se manda ningún mail (negocio tipo 2).' : 'Se manda el mail de anulación.';
+      if (!confirm(`🛠️ Vas a ANULAR el contrato de venta de "${registro.cliente_vendedor}" (N° ${numero}) y cargarlo en el formulario para corregirlo.\n\n${avisoMail} Después lo confirmás como borrador y volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
+      const ok = await anularNegocioCerradoVenta(registro);
+      if (!ok) return;
+      cerrarModalRecuperarVenta();
+      cargarBorradorEnFormularioVenta(b);
+    }
+
+    // Un contrato de compra puede tener uno o varios contratos de venta
+    // asociados (por "Contrato de compra asociado" == numero_orden de la
+    // compra). Si se anula (o rectifica, que internamente también anula)
+    // esa compra, hay que avisar y ofrecer anular esos contratos de venta
+    // también — si no, quedarían huérfanos referenciando un negocio que
+    // ya no existe.
+    async function ofrecerAnularVentasAsociadas(numeroOrdenCompra) {
+      if (!numeroOrdenCompra || numeroOrdenCompra === '-') return;
+      const { data, error } = await window.supabaseClient.from('negocios_venta_historial')
+        .select('*').eq('datos->borrador->>contratoCompra', numeroOrdenCompra);
+      if (error || !data || !data.length) return;
+
+      const numeros = data.map((r) => r.numero_orden).join(', ');
+      if (!confirm(`Este negocio de compra tiene ${data.length} contrato(s) de venta asociado(s) (N° ${numeros}).\n\n¿Querés anularlos también?`)) return;
+
+      for (const ventaRegistro of data) {
+        await anularNegocioCerradoVenta(ventaRegistro);
+      }
+      alert('Contrato(s) de venta anulado(s).');
     }
 
     async function enviarMailVenta(filas, canvas) {
