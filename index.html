@@ -238,6 +238,17 @@
     .pos-tabla th:nth-child(-n+4), .pos-tabla td:nth-child(-n+4) { text-align: left; }
     .pos-tabla thead th { background: #cfe0d9; }
     .pos-tabla td.pos-libre { font-weight: bold; }
+    .pos-seccion-header {
+      font-weight: bold; margin: 14px 0 6px;
+      display: flex; justify-content: space-between; align-items: center;
+      flex-wrap: wrap; gap: 8px;
+    }
+    .pos-orden {
+      font-weight: normal; font-size: 0.8em;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .pos-orden select { width: auto; padding: 4px 6px; height: auto; font-size: 1em; }
+    .pos-orden button { width: auto; padding: 3px 8px; font-size: 1em; }
 
     /* Casillero sin texto para marcar un negocio "tipo 2" (interno, sin
        mail) — deliberadamente sin ninguna etiqueta visible ni recuadro
@@ -1081,7 +1092,29 @@
     <div style="font-weight:bold;font-size:1.1em;margin-bottom:8px;">📐 Posición por cereal</div>
     <div id="posResumenCereales" class="rep-resumen-grid"></div>
 
-    <div style="font-weight:bold;margin:14px 0 6px;">Compras cerradas</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0;background:white;padding:8px;border-radius:8px;">
+      <select id="posFiltroProducto" onchange="renderPosicionFiltrada()" style="width:auto;">
+        <option value="">Todos los cereales</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:4px;font-size:0.85em;cursor:pointer;">
+        <input type="checkbox" id="posSoloPendientes" checked onchange="renderPosicionFiltrada()">
+        Solo con saldo pendiente
+      </label>
+    </div>
+
+    <div class="pos-seccion-header">
+      <span>Compras cerradas</span>
+      <span class="pos-orden">
+        Ordenar por
+        <select id="posOrdenComprasCampo" onchange="renderPosicionFiltrada()">
+          <option value="fecha">Fecha</option>
+          <option value="cliente">Cliente</option>
+          <option value="toneladas">Toneladas</option>
+          <option value="libre">Libre</option>
+        </select>
+        <button type="button" id="posOrdenComprasDir" onclick="toggleOrdenPosicion('Compras')">↓</button>
+      </span>
+    </div>
     <div style="overflow-x:auto;">
       <table id="posTablaCompras" class="pos-tabla">
         <thead>
@@ -1091,7 +1124,20 @@
       </table>
     </div>
 
-    <div style="font-weight:bold;margin:14px 0 6px;">Ventas cerradas</div>
+    <div class="pos-seccion-header">
+      <span>Ventas cerradas</span>
+      <span class="pos-orden">
+        Ordenar por
+        <select id="posOrdenVentasCampo" onchange="renderPosicionFiltrada()">
+          <option value="fecha">Fecha</option>
+          <option value="clienteVendedor">Cliente vendedor</option>
+          <option value="comprador">Comprador</option>
+          <option value="toneladas">Toneladas</option>
+          <option value="libre">Libre</option>
+        </select>
+        <button type="button" id="posOrdenVentasDir" onclick="toggleOrdenPosicion('Ventas')">↓</button>
+      </span>
+    </div>
     <div style="overflow-x:auto;">
       <table id="posTablaVentas" class="pos-tabla">
         <thead>
@@ -1101,7 +1147,17 @@
       </table>
     </div>
 
-    <div style="font-weight:bold;margin:14px 0 6px;">Asignaciones</div>
+    <div class="pos-seccion-header">
+      <span>Asignaciones</span>
+      <span class="pos-orden">
+        Ordenar por
+        <select id="posOrdenAsignacionesCampo" onchange="renderPosicionFiltrada()">
+          <option value="fecha">Fecha</option>
+          <option value="toneladas">Toneladas</option>
+        </select>
+        <button type="button" id="posOrdenAsignacionesDir" onclick="toggleOrdenPosicion('Asignaciones')">↓</button>
+      </span>
+    </div>
     <div id="posListaAsignaciones" style="display:flex;flex-direction:column;gap:4px;"></div>
   </div>
   <!-- fin #modoPosicion -->
@@ -3783,12 +3839,7 @@
         // queda indeterminado) y el botón de Asignar no debe bloquearse
         // por falta de libre, solo para este caso puntual.
         const libre = esLiquidaSaldo ? null : +(toneladas - asignado).toFixed(2);
-        // Una vez "completada", el negocio deja de estar en liquidaSaldo
-        // (ya cuenta normal para libre/posición), pero sigue siendo
-        // editable — fueLiquidaSaldo queda marcado para siempre, a
-        // diferencia de un negocio que nunca fue "liquida saldo".
-        const puedeEditarToneladas = esLiquidaSaldo || !!(alt && alt.fueLiquidaSaldo);
-        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre, esLiquidaSaldo, puedeEditarToneladas };
+        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre, esLiquidaSaldo };
       });
 
       const ventasConLibre = ventas.map((v) => {
@@ -3835,9 +3886,79 @@
         </div>`;
       }).join('') : '<div style="color:#888;">No hay negocios cerrados todavía.</div>';
 
-      renderTablaPosCompras(datos.comprasConLibre);
-      renderTablaPosVentas(datos.ventasConLibre);
-      renderListaAsignaciones(datos);
+      // Desplegable de cereal: se arma con lo que hay en los datos, y se
+      // intenta mantener la selección previa si sigue siendo válida.
+      const selProducto = document.getElementById('posFiltroProducto');
+      const productoPrevio = selProducto.value;
+      const productos = [...new Set([...datos.comprasConLibre, ...datos.ventasConLibre].map((x) => x.producto).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+      selProducto.innerHTML = '<option value="">Todos los cereales</option>' + productos.map((p) => `<option value="${p}">${p}</option>`).join('');
+      if (productos.includes(productoPrevio)) selProducto.value = productoPrevio;
+
+      renderPosicionFiltrada();
+    }
+
+    // Orden actual de cada tabla/lista de Posición — se resetea al recargar
+    // la pestaña, no persiste entre sesiones (no se pidió tanto).
+    const posOrden = {
+      Compras: { campo: 'fecha', dir: 'desc' },
+      Ventas: { campo: 'fecha', dir: 'desc' },
+      Asignaciones: { campo: 'fecha', dir: 'desc' },
+    };
+
+    function toggleOrdenPosicion(tabla) {
+      posOrden[tabla].dir = posOrden[tabla].dir === 'desc' ? 'asc' : 'desc';
+      document.getElementById(`posOrden${tabla}Dir`).textContent = posOrden[tabla].dir === 'desc' ? '↓' : '↑';
+      renderPosicionFiltrada();
+    }
+
+    function compararPosicion(a, b, campo, dir) {
+      let va, vb;
+      if (campo === 'fecha') { va = a.registro.fecha_cierre || ''; vb = b.registro.fecha_cierre || ''; }
+      else if (campo === 'cliente') { va = (a.registro.cliente || '').toLowerCase(); vb = (b.registro.cliente || '').toLowerCase(); }
+      else if (campo === 'clienteVendedor') { va = (a.b.clienteVendedor || '').toLowerCase(); vb = (b.b.clienteVendedor || '').toLowerCase(); }
+      else if (campo === 'comprador') { va = (a.b.comprador || '').toLowerCase(); vb = (b.b.comprador || '').toLowerCase(); }
+      else if (campo === 'toneladas') { va = a.toneladas; vb = b.toneladas; }
+      else if (campo === 'libre') { va = a.libre == null ? -Infinity : a.libre; vb = b.libre == null ? -Infinity : b.libre; }
+      if (va < vb) return dir === 'asc' ? -1 : 1;
+      if (va > vb) return dir === 'asc' ? 1 : -1;
+      return 0;
+    }
+
+    // Re-renderiza las 3 secciones de Posición según el filtro de cereal,
+    // "solo pendientes" y el orden elegido — todo en memoria, sobre
+    // datosParaAsignar (ya cargado), sin volver a pedirle nada a Supabase.
+    function renderPosicionFiltrada() {
+      if (!datosParaAsignar) return;
+      const productoFiltro = document.getElementById('posFiltroProducto').value;
+      const soloPendientes = document.getElementById('posSoloPendientes').checked;
+
+      const compras = datosParaAsignar.comprasConLibre
+        .filter((c) => (!productoFiltro || c.producto === productoFiltro) && (!soloPendientes || c.esLiquidaSaldo || c.libre > 0))
+        .sort((a, b) => compararPosicion(a, b, posOrden.Compras.campo, posOrden.Compras.dir));
+      const ventas = datosParaAsignar.ventasConLibre
+        .filter((v) => (!productoFiltro || v.producto === productoFiltro) && (!soloPendientes || v.libre > 0))
+        .sort((a, b) => compararPosicion(a, b, posOrden.Ventas.campo, posOrden.Ventas.dir));
+
+      renderTablaPosCompras(compras);
+      renderTablaPosVentas(ventas);
+
+      const asignaciones = datosParaAsignar.asignaciones
+        .filter((a) => {
+          if (!productoFiltro) return true;
+          const compra = datosParaAsignar.comprasConLibre.find((c) => c.registro.id === a.compra_id);
+          const venta = datosParaAsignar.ventasConLibre.find((v) => v.registro.id === a.venta_id);
+          return (compra && compra.producto === productoFiltro) || (venta && venta.producto === productoFiltro);
+        })
+        .sort((x, y) => {
+          const campo = posOrden.Asignaciones.campo;
+          const dir = posOrden.Asignaciones.dir;
+          const vx = campo === 'toneladas' ? Number(x.toneladas) : (x.creado_at || '');
+          const vy = campo === 'toneladas' ? Number(y.toneladas) : (y.creado_at || '');
+          if (vx < vy) return dir === 'asc' ? -1 : 1;
+          if (vx > vy) return dir === 'asc' ? 1 : -1;
+          return 0;
+        });
+      renderListaAsignaciones({ ...datosParaAsignar, asignaciones });
     }
 
     function renderTablaPosCompras(lista) {
@@ -3855,20 +3976,20 @@
           <td class="pos-libre">${c.esLiquidaSaldo ? 'A confirmar' : c.libre.toLocaleString('es-AR')}</td>
           <td></td>
         `;
+        // La columna Toneladas se puede editar directamente para
+        // cualquier compra cerrada, no solo las que fueron "liquida
+        // saldo" — sirve para corregir un error de carga sin tener que
+        // ir a Recuperar negocio a rectificar todo el negocio.
         const tdToneladas = tr.children[4];
-        if (c.puedeEditarToneladas) {
-          tdToneladas.style.cssText = 'text-align:left;white-space:normal;';
-          tdToneladas.innerHTML = c.esLiquidaSaldo
-            ? '<span style="color:#888;">COMPLETAR TONS (liquida saldo)</span> '
-            : `<span>${c.toneladas.toLocaleString('es-AR')}</span> `;
-          const btnCompletar = document.createElement('button');
-          btnCompletar.textContent = c.esLiquidaSaldo ? '✏️ Completar' : '✏️ Editar';
-          btnCompletar.style.cssText = 'width:auto;padding:2px 6px;font-size:0.8em;';
-          btnCompletar.onclick = () => completarToneladasCompra(c.registro.id, c.toneladas);
-          tdToneladas.appendChild(btnCompletar);
-        } else {
-          tdToneladas.textContent = c.toneladas.toLocaleString('es-AR');
-        }
+        tdToneladas.style.cssText = 'text-align:left;white-space:normal;';
+        tdToneladas.innerHTML = c.esLiquidaSaldo
+          ? '<span style="color:#888;">COMPLETAR TONS (liquida saldo)</span> '
+          : `<span>${c.toneladas.toLocaleString('es-AR')}</span> `;
+        const btnCompletar = document.createElement('button');
+        btnCompletar.textContent = c.esLiquidaSaldo ? '✏️ Completar' : '✏️ Editar';
+        btnCompletar.style.cssText = 'width:auto;padding:2px 6px;font-size:0.8em;';
+        btnCompletar.onclick = () => completarToneladasCompra(c.registro.id, c.toneladas);
+        tdToneladas.appendChild(btnCompletar);
 
         const btn = document.createElement('button');
         btn.textContent = '🔗 Asignar';
@@ -3880,12 +4001,10 @@
       }
     }
 
-    // Resuelve (o corrige) las toneladas de un negocio de compra que en
-    // algún momento se cerró como "Liquida saldo" — directamente desde
-    // Posición. fueLiquidaSaldo queda marcado para siempre (aunque
-    // liquidaSaldo ya pase a false), así el dato sigue editable más
-    // adelante si hace falta corregirlo; un negocio que NUNCA fue
-    // "liquida saldo" no se puede tocar desde acá.
+    // Edita las toneladas de cualquier negocio de compra cerrado
+    // directamente desde Posición (sin ir a Recuperar negocio a
+    // rectificar todo el negocio). Si en algún momento fue "liquida
+    // saldo" (o lo era hasta ahora), esto también lo resuelve.
     async function completarToneladasCompra(compraId, valorActual) {
       const texto = prompt('¿Cuántas toneladas tiene este negocio?', valorActual != null ? String(valorActual) : '');
       if (texto == null) return;
@@ -3897,7 +4016,10 @@
       if (errorFetch || !data) { alert('No se pudo cargar el negocio: ' + (errorFetch ? errorFetch.message : '')); return; }
 
       const alt = (data.datos && data.datos.alternativas && data.datos.alternativas[0]) || {};
-      const nuevaAlt = { ...alt, toneladas: String(toneladas), liquidaSaldo: false, fueLiquidaSaldo: true };
+      // fueLiquidaSaldo queda marcado para siempre si alguna vez lo fue —
+      // no se marca en un negocio que nunca lo fue, solo se le corrigen
+      // las toneladas.
+      const nuevaAlt = { ...alt, toneladas: String(toneladas), liquidaSaldo: false, fueLiquidaSaldo: alt.fueLiquidaSaldo || !!alt.liquidaSaldo };
       const nuevosDatos = { ...data.datos, alternativas: [nuevaAlt] };
 
       const { error } = await window.supabaseClient.from('negocios_historial')
