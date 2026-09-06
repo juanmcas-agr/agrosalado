@@ -4602,63 +4602,32 @@
       cambiarTabRecuperarVenta('guardados');
     }
 
-    // Anula (borra) un contrato de venta cerrado y manda el mail de
-    // anulación — salvo que sea "tipo 2". Mismo criterio que
-    // anularNegocioCerrado() de compra, pero acá cada fila de
-    // negocios_venta_historial es un contrato independiente (no una
-    // tanda), así que se anula de a uno.
+    // Anula (borra) un contrato de venta cerrado. A diferencia de COMPRA,
+    // VENTA nunca manda mail por ninguna operación (ni al cerrar, ni al
+    // anular/rectificar) — se pidió expresamente así.
     async function anularNegocioCerradoVenta(registro) {
-      const numero = registro.numero_orden || '-';
-      const b = (registro.datos && registro.datos.borrador) || {};
-      const esTipo2 = !!b.esTipo2;
-
-      const { data: { session } } = await window.supabaseClient.auth.getSession();
-      const [nombreQuienAnula, nombreQuienCreo] = await Promise.all([
-        obtenerNombreUsuario(session && session.user.id),
-        obtenerNombreUsuario(registro.usuario_id),
-      ]);
-
       const { error } = await window.supabaseClient.from('negocios_venta_historial').delete().eq('id', registro.id);
       if (error) { alert('No se pudo anular: ' + error.message); return false; }
 
       cacheCerradosVenta = cacheCerradosVenta.filter((r) => r.id !== registro.id);
-
-      if (!esTipo2) {
-        await enviarMailLiquidacion({
-          subject: `ANULACION ORDEN DE VENTA N° ${numero}`,
-          tituloAviso: '¡ANULACION! CONTRATO DE VENTA ANULADO',
-          cliente: registro.cliente_vendedor,
-          numeroOrden: numero,
-          lineasExtra: [
-            `Comprador: ${b.comprador || '-'}`,
-            `Cargado originalmente por: ${nombreQuienCreo || '-'}`,
-            `Anulado por: ${nombreQuienAnula || '-'}`,
-          ],
-        });
-      }
       return true;
     }
 
     async function eliminarCerradoVenta(registro) {
       const numero = registro.numero_orden || '-';
-      const b = (registro.datos && registro.datos.borrador) || {};
-      const esTipo2 = !!b.esTipo2;
-      const avisoMail = esTipo2 ? '' : '\n\nSe va a mandar un mail avisando la anulación.';
-      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el contrato de venta de "${registro.cliente_vendedor}" (N° ${numero})?${avisoMail}`)) return;
+      if (!confirm(`⚠️ ¿Seguro que querés ANULAR el contrato de venta de "${registro.cliente_vendedor}" (N° ${numero})?`)) return;
       const ok = await anularNegocioCerradoVenta(registro);
       if (ok) cambiarTabRecuperarVenta('cerrados');
     }
 
-    // Anula el cerrado (con su mail de ANULACION) y lo carga en el
-    // formulario para corregirlo. A diferencia de compra (que recarga
-    // toda la tabla comparadora), acá se pinta el formulario y hay que
-    // "Confirmar borrador" de nuevo antes de poder cerrarlo.
+    // Anula el cerrado y lo carga en el formulario para corregirlo. A
+    // diferencia de compra (que recarga toda la tabla comparadora), acá
+    // se pinta el formulario y hay que "Confirmar borrador" de nuevo
+    // antes de poder cerrarlo.
     async function rectificarCerradoVenta(registro) {
       const numero = registro.numero_orden || '-';
       const b = (registro.datos && registro.datos.borrador) || {};
-      const esTipo2 = !!b.esTipo2;
-      const avisoMail = esTipo2 ? 'No se manda ningún mail (negocio tipo 2).' : 'Se manda el mail de anulación.';
-      if (!confirm(`🛠️ Vas a ANULAR el contrato de venta de "${registro.cliente_vendedor}" (N° ${numero}) y cargarlo en el formulario para corregirlo.\n\n${avisoMail} Después lo confirmás como borrador y volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
+      if (!confirm(`🛠️ Vas a ANULAR el contrato de venta de "${registro.cliente_vendedor}" (N° ${numero}) y cargarlo en el formulario para corregirlo.\n\nDespués lo confirmás como borrador y volvés a cerrar con un número nuevo. ¿Continuar?`)) return;
       const ok = await anularNegocioCerradoVenta(registro);
       if (!ok) return;
       cerrarModalRecuperarVenta();
