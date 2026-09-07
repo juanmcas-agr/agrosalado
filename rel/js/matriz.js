@@ -376,12 +376,12 @@ function puntosUltimosMeses(serieCompleta, meses) {
 function promedioUltimosMeses(serieCompleta, meses) {
   const puntos = puntosUltimosMeses(serieCompleta, meses);
   if (!puntos.length) return null;
-  return puntos.reduce((suma, p) => suma + p.valor, 0) / puntos.length;
+  return promedioDeSerie(puntos);
 }
 
-function maximoHistorico(serieCompleta) {
-  if (!serieCompleta.length) return null;
-  return Math.max(...serieCompleta.map((p) => p.valor));
+function promedioDeSerie(serie) {
+  if (!serie.length) return null;
+  return serie.reduce((suma, p) => suma + p.valor, 0) / serie.length;
 }
 
 // ── Alertas por ratio (percentil histórico y/o desvío % del promedio) ──
@@ -684,43 +684,34 @@ function formatearVariacionPct(pct) {
 }
 
 // Compara el valor spot (más reciente) contra el promedio del período
-// elegido en #drillSpotPeriodo (o el máximo histórico) — usa la serie
-// completa sin filtrar por período de visualización, para que "máximo
-// histórico" sea realmente histórico y no dependa del rango del gráfico.
+// elegido en #drillSpotPeriodo — todas las opciones son promedios (incluida
+// "Todo el histórico", que promedia toda la serie en vez de comparar contra
+// un pico puntual), así que la recomendación de compra/venta siempre se
+// puede ofrecer y es consistente al invertir la relación: "A÷B por encima
+// de su promedio" y "B÷A por debajo del suyo" describen la misma situación
+// real (con un máximo puntual esto no vale, porque ocurre en fechas
+// distintas para cada dirección — por eso se sacó esa opción).
 function renderSpotVsPromedio(serieCompleta, actual) {
   const periodo = el('drillSpotPeriodo').value;
   let referencia;
   let etiqueta;
-  let esPromedio;
   if (periodo === 'max') {
-    referencia = maximoHistorico(serieCompleta);
-    etiqueta = 'el máximo histórico';
-    esPromedio = false;
+    referencia = promedioDeSerie(serieCompleta);
+    etiqueta = 'el promedio de todo el histórico';
   } else {
     const meses = Number(periodo);
+    const ETIQUETAS = { 1: 'el promedio del último mes', 3: 'el promedio de los últimos 3 meses', 6: 'el promedio semestral', 12: 'el promedio anual', 24: 'el promedio de los últimos 24 meses', 36: 'el promedio de los últimos 36 meses' };
     referencia = promedioUltimosMeses(serieCompleta, meses);
-    etiqueta = meses === 1 ? 'el promedio del último mes' : meses === 6 ? 'el promedio semestral' : 'el promedio anual';
-    esPromedio = true;
+    etiqueta = ETIQUETAS[meses] || `el promedio de los últimos ${meses} meses`;
   }
   if (referencia == null) {
     el('drillSpotResultado').textContent = 'Sin datos suficientes para ese período.';
     return;
   }
   const variacion = calcularVariacionPct(actual, referencia);
-  // La recomendación de compra/venta solo se ofrece contra un PROMEDIO
-  // (mensual/semestral/anual), no contra el máximo histórico: un promedio
-  // es un punto de referencia estable, así que "A÷B por encima de su
-  // promedio" y "B÷A por debajo del suyo" casi siempre coinciden en la
-  // misma conclusión real. El máximo histórico, en cambio, es un pico
-  // puntual que ocurrió en una fecha distinta para cada dirección — comparar
-  // contra él podía dar la lectura contradictoria "conviene comprar" en las
-  // dos direcciones a la vez (bug reportado y confirmado).
-  const interpretacion = esPromedio
-    ? interpretarSpotVsPromedio(variacion, actual)
-    : '<div class="drill-spot-interpretacion">El máximo histórico es solo referencia — elegí "último mes", "semestral" o "anual" para ver una recomendación de compra/venta.</div>';
   el('drillSpotResultado').innerHTML = `
     Spot actual (${formatearRatio(actual)}) vs. ${etiqueta} (${formatearRatio(referencia)}): ${formatearVariacionPct(variacion)}
-    ${interpretacion}
+    ${interpretarSpotVsPromedio(variacion, actual)}
   `;
 }
 
