@@ -37,6 +37,64 @@ function construirMatriz(rows) {
   return matriz;
 }
 
+// Kilos promedio ponderado por celda establecimiento×categoría: pondera
+// el kilos_promedio_ponderado de cada fila de stock_actual (que ya viene
+// ponderado a nivel rodeo/titular) por sus propias cabezas — es la misma
+// identidad matemática que un promedio ponderado de promedios ponderados
+// (sum(cabezas×kg)/sum(cabezas) en cada nivel de agregación).
+function construirMatrizKilos(rows) {
+  const sumaKg = {};
+  const sumaCab = {};
+  for (const e of ESTABLECIMIENTOS) {
+    sumaKg[e.id] = {};
+    sumaCab[e.id] = {};
+    for (const c of CATEGORIAS) { sumaKg[e.id][c.id] = 0; sumaCab[e.id][c.id] = 0; }
+  }
+  for (const r of rows) {
+    if (!sumaCab[r.establecimiento] || r.kilos_promedio_ponderado == null || r.cabezas <= 0) continue;
+    sumaCab[r.establecimiento][r.categoria] += r.cabezas;
+    sumaKg[r.establecimiento][r.categoria] += r.cabezas * r.kilos_promedio_ponderado;
+  }
+  const matriz = {};
+  for (const e of ESTABLECIMIENTOS) {
+    matriz[e.id] = {};
+    for (const c of CATEGORIAS) {
+      matriz[e.id][c.id] = sumaCab[e.id][c.id] > 0 ? sumaKg[e.id][c.id] / sumaCab[e.id][c.id] : null;
+    }
+  }
+  return matriz;
+}
+
+function totalesKilosPorCategoria(rows) {
+  const sumaKg = {};
+  const sumaCab = {};
+  for (const c of CATEGORIAS) { sumaKg[c.id] = 0; sumaCab[c.id] = 0; }
+  for (const r of rows) {
+    if (r.kilos_promedio_ponderado == null || r.cabezas <= 0) continue;
+    sumaCab[r.categoria] = (sumaCab[r.categoria] || 0) + r.cabezas;
+    sumaKg[r.categoria] = (sumaKg[r.categoria] || 0) + r.cabezas * r.kilos_promedio_ponderado;
+  }
+  const resultado = {};
+  for (const c of CATEGORIAS) resultado[c.id] = sumaCab[c.id] > 0 ? sumaKg[c.id] / sumaCab[c.id] : null;
+  return resultado;
+}
+
+function formatearKilos(kg) {
+  return kg == null ? '—' : `${kg.toFixed(0)} kg`;
+}
+
+// Rodeos con stock (>0) en un establecimiento, sumando titulares — para el
+// detalle que se abre al tocar la fila en "Por establecimiento".
+function rodeosPorEstablecimiento(rows, establecimientoId) {
+  const acumulado = {};
+  for (const r of rows) {
+    if (r.establecimiento !== establecimientoId || !r.rodeo_id || r.cabezas <= 0) continue;
+    if (!acumulado[r.rodeo_id]) acumulado[r.rodeo_id] = { rodeo: r.rodeo, categoriaId: r.categoria, cabezas: 0 };
+    acumulado[r.rodeo_id].cabezas += r.cabezas;
+  }
+  return Object.values(acumulado).sort((a, b) => (a.rodeo || '').localeCompare(b.rodeo || ''));
+}
+
 async function obtenerStock() {
   const { data, error } = await supabase.from('stock_actual').select('*');
   if (!error) {
@@ -98,23 +156,27 @@ function renderGlobal(rows) {
   const totales = {};
   for (const c of CATEGORIAS) totales[c.id] = 0;
   for (const r of rows) totales[r.categoria] = (totales[r.categoria] || 0) + r.cabezas;
+  const kilos = totalesKilosPorCategoria(rows);
 
   const tbody = el('dash-global-tabla').querySelector('tbody');
   tbody.innerHTML = '';
   for (const c of CATEGORIAS) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td>`;
+    tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td><td class="kilos-cell">${formatearKilos(kilos[c.id])}</td>`;
     tbody.appendChild(tr);
   }
 
   const totalGeneral = Object.values(totales).reduce((a, b) => a + b, 0);
   const trTotal = document.createElement('tr');
   trTotal.classList.add('fila-total');
-  trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td>`;
+  trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td><td></td>`;
   tbody.appendChild(trTotal);
 }
 
-function renderPorEstablecimiento(matriz) {
+// rowsFiltradas: mismas filas (ya filtradas por vista de titularidad) que
+// se usaron para armar `matriz`, para poder abrir el detalle de rodeos de
+// cada establecimiento con la misma vista activa.
+function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   const tabla = el('dash-establecimientos-tabla');
   tabla.querySelector('thead').innerHTML =
     `<tr><th>Establecimiento</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
@@ -127,10 +189,30 @@ function renderPorEstablecimiento(matriz) {
   for (const e of ESTABLECIMIENTOS) {
     const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
     for (const c of CATEGORIAS) totalesPorCategoria[c.id] += matriz[e.id][c.id];
+
     const tr = document.createElement('tr');
+    tr.className = 'fila-clickeable';
     tr.innerHTML =
-      `<td>${e.nombre}</td>${CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}</td>`).join('')}<td><strong>${totalFila}</strong></td>`;
+      `<td>${e.nombre}</td>` +
+      CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}${matrizKilos[e.id][c.id] != null ? `<br><span class="kilos-cell">${formatearKilos(matrizKilos[e.id][c.id])}</span>` : ''}</td>`).join('') +
+      `<td><strong>${totalFila}</strong></td>`;
+
+    const trRodeos = document.createElement('tr');
+    trRodeos.className = 'fila-rodeos oculto';
+    const tdRodeos = document.createElement('td');
+    tdRodeos.colSpan = CATEGORIAS.length + 2;
+    const rodeos = rodeosPorEstablecimiento(rowsFiltradas, e.id);
+    tdRodeos.innerHTML = rodeos.length
+      ? `<strong>${rodeos.length} rodeo(s):</strong> ` + rodeos.map((r) => {
+          const cat = CATEGORIAS.find((c) => c.id === r.categoriaId);
+          return `${r.rodeo} (${cat ? cat.nombre : r.categoriaId}: ${r.cabezas})`;
+        }).join(' · ')
+      : 'Sin rodeos con stock en este establecimiento.';
+    trRodeos.appendChild(tdRodeos);
+
+    tr.addEventListener('click', () => trRodeos.classList.toggle('oculto'));
     tbody.appendChild(tr);
+    tbody.appendChild(trRodeos);
   }
 
   const totalGeneral = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
@@ -185,7 +267,63 @@ function renderTablaCategoria() {
 
 function renderTablaEstablecimiento() {
   const { vista, capitalizadorId } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
-  renderPorEstablecimiento(construirMatriz(filtrarPorVista(ultimasFilasStock, vista, capitalizadorId)));
+  const rows = filtrarPorVista(ultimasFilasStock, vista, capitalizadorId);
+  renderPorEstablecimiento(construirMatriz(rows), construirMatrizKilos(rows), rows);
+}
+
+function formatearFechaDMY(fecha) {
+  const [y, m, d] = fecha.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+// "Todos los establecimientos" desagregado (una fila por establecimiento,
+// misma matriz que "Por establecimiento") e integrado (fila Total al pie)
+// en la misma tabla; un establecimiento puntual muestra solo sus categorías.
+function renderTablaFecha(rows, establecimientoId, fecha) {
+  const tabla = el('dash-fecha-tabla');
+  tabla.classList.remove('oculto');
+  const tbody = tabla.querySelector('tbody');
+  tbody.innerHTML = '';
+
+  if (establecimientoId) {
+    const nombreEst = ESTABLECIMIENTOS.find((e) => e.id === establecimientoId)?.nombre || establecimientoId;
+    tabla.querySelector('thead').innerHTML =
+      `<tr><th colspan="2">${nombreEst} al ${formatearFechaDMY(fecha)}</th></tr><tr><th>Categoría</th><th>Cabezas</th></tr>`;
+    const totales = {};
+    for (const c of CATEGORIAS) totales[c.id] = 0;
+    for (const r of rows) totales[r.categoria] = (totales[r.categoria] || 0) + r.cabezas;
+    let totalGeneral = 0;
+    for (const c of CATEGORIAS) {
+      totalGeneral += totales[c.id];
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td>`;
+      tbody.appendChild(tr);
+    }
+    const trTotal = document.createElement('tr');
+    trTotal.className = 'fila-total';
+    trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td>`;
+    tbody.appendChild(trTotal);
+    return;
+  }
+
+  const matriz = construirMatriz(rows);
+  tabla.querySelector('thead').innerHTML =
+    `<tr><th colspan="${CATEGORIAS.length + 2}">Todos los establecimientos al ${formatearFechaDMY(fecha)}</th></tr>` +
+    `<tr><th>Establecimiento</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
+  const totalesPorCategoria = {};
+  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
+  for (const e of ESTABLECIMIENTOS) {
+    const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
+    for (const c of CATEGORIAS) totalesPorCategoria[c.id] += matriz[e.id][c.id];
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${e.nombre}</td>${CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}</td>`).join('')}<td><strong>${totalFila}</strong></td>`;
+    tbody.appendChild(tr);
+  }
+  const totalGeneral = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
+  const trTotal = document.createElement('tr');
+  trTotal.className = 'fila-total';
+  trTotal.innerHTML = `<td><strong>Total</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
+  tbody.appendChild(trTotal);
 }
 
 function poblarSelectFecha() {
@@ -210,8 +348,23 @@ export async function refrescarDashboard() {
   renderTablaEstablecimiento();
 }
 
-function exportarStockActual() {
-  exportarMatrizStock(construirMatriz(ultimasFilasStock), 'stock_actual', 'Stock actual');
+async function verStockAFecha() {
+  const fecha = el('dash-fecha').value;
+  const mensaje = el('dash-fecha-mensaje');
+  if (!fecha) {
+    mensaje.textContent = 'Elegí una fecha.';
+    mensaje.className = 'error';
+    return;
+  }
+  const establecimientoId = el('dash-fecha-establecimiento').value || null;
+  try {
+    const rows = await calcularStockAFecha(fecha, establecimientoId);
+    renderTablaFecha(rows, establecimientoId, fecha);
+    mensaje.textContent = '';
+  } catch (error) {
+    mensaje.textContent = `No se pudo calcular el stock a esa fecha (¿sin conexión?): ${error.message}`;
+    mensaje.className = 'error';
+  }
 }
 
 async function exportarStockAFecha() {
@@ -239,8 +392,8 @@ export async function initDashboard() {
   inicializarSelectorVista('dash-categoria-vista', 'dash-categoria-cap-wrap', 'dash-categoria-cap-select', renderTablaCategoria);
   inicializarSelectorVista('dash-establecimiento-vista', 'dash-establecimiento-cap-wrap', 'dash-establecimiento-cap-select', renderTablaEstablecimiento);
   el('dash-actualizar').addEventListener('click', refrescarDashboard);
-  el('dash-exportar').addEventListener('click', exportarStockActual);
   poblarSelectFecha();
+  el('dash-fecha-ver').addEventListener('click', verStockAFecha);
   el('dash-fecha-exportar').addEventListener('click', exportarStockAFecha);
   refrescarDashboard();
 }

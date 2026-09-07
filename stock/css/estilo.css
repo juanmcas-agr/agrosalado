@@ -409,6 +409,11 @@ button:active { filter: brightness(0.9); }
 }
 .tabla tr.anulado { color: #999; text-decoration: line-through; }
 .tabla tr.fila-total td { background: #e9ecef; border-top: 2px solid #ccc; }
+.tabla tr.fila-clickeable { cursor: pointer; }
+.tabla tr.fila-clickeable:hover td { background: #f5f5f5; }
+.tabla tr.fila-rodeos td { background: #fafafa; white-space: normal; }
+.tabla .kilos-cell { color: #666; font-size: 0.85em; }
+.ayuda { font-size: 0.85em; color: #666; margin: 4px 0 8px; }
 
 /* separación entre los botones de vista (Grupo/Agro/Doña/Capitalizadores)
    y la tabla que les sigue */

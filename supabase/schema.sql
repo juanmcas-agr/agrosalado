@@ -293,13 +293,13 @@ create trigger trg_bloquear_created_at
 
 create view movimiento_lineas as
   select id, fecha, establecimiento_destino as establecimiento, categoria_destino as categoria,
-         coalesce(titular_destino, 'agro_salado') as titular,
+         coalesce(titular_destino, 'agro_salado') as titular, rodeo_id,
          cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
   where not anulado and establecimiento_destino is not null
   union all
   select id, fecha, establecimiento_origen as establecimiento, categoria_origen as categoria,
-         coalesce(titular_origen, 'agro_salado') as titular,
+         coalesce(titular_origen, 'agro_salado') as titular, rodeo_id,
          -cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
   where not anulado and establecimiento_origen is not null;
@@ -308,10 +308,22 @@ create view movimiento_lineas as
 -- en los totales. Si corresponde, se pueden corregir cargando un
 -- "Cambio de titularidad" para pasarlos al titular real.
 
+-- Se agrupa hasta el nivel de rodeo (no solo establecimiento/categoría/
+-- titular): dashboard.js sigue sumando cabezas por establecimiento+
+-- categoría igual que antes (las filas de más son transparentes para ese
+-- cálculo), y ahora también puede desagregar por rodeo y mostrar kilos
+-- promedio ponderado (sum(cabezas×kilos)/sum(cabezas) de los movimientos
+-- que componen el stock, no un dato cargado aparte).
 create view stock_actual as
-  select establecimiento, categoria, titular, sum(delta_cabezas) as cabezas
-  from movimiento_lineas
-  group by establecimiento, categoria, titular;
+  select
+    ml.establecimiento, ml.categoria, ml.titular, ml.rodeo_id, r.codigo as rodeo,
+    sum(ml.delta_cabezas) as cabezas,
+    case when sum(ml.delta_cabezas) > 0
+      then round(sum(ml.delta_cabezas * ml.kilos_promedio) / sum(ml.delta_cabezas), 2)
+      else null end as kilos_promedio_ponderado
+  from movimiento_lineas ml
+  left join rodeos r on r.id = ml.rodeo_id
+  group by ml.establecimiento, ml.categoria, ml.titular, ml.rodeo_id, r.codigo;
 
 -- ─── Vista de historial (con etiquetas legibles para la UI) ─────────────
 

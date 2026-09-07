@@ -140,7 +140,6 @@
       <h2>Stock actual</h2>
       <div id="dash-estado" class="mensaje"></div>
       <button id="dash-actualizar" class="boton-secundario">Actualizar</button>
-      <button id="dash-exportar" class="boton-secundario">Exportar stock actual (Excel)</button>
 
       <div class="resumen-titularidad">
         <div><span>Agro Salado</span><strong id="dash-total-agro">0</strong></div>
@@ -156,11 +155,12 @@
         <select id="dash-categoria-cap-select"></select>
       </div>
       <table id="dash-global-tabla" class="tabla">
-        <thead><tr><th>Categoría</th><th>Cabezas</th></tr></thead>
+        <thead><tr><th>Categoría</th><th>Cabezas</th><th>Kg prom.</th></tr></thead>
         <tbody></tbody>
       </table>
 
       <h3>Por establecimiento</h3>
+      <p class="ayuda">Tocá un establecimiento para ver sus rodeos.</p>
       <div id="dash-establecimiento-vista"></div>
       <div id="dash-establecimiento-cap-wrap" class="oculto" style="margin:8px 0;">
         <select id="dash-establecimiento-cap-select"></select>
@@ -172,13 +172,20 @@
         </table>
       </div>
 
-      <h3>Exportar stock a una fecha</h3>
+      <h3>Stock a una fecha</h3>
       <div class="filtros">
         <label>Fecha <input id="dash-fecha" type="date"></label>
         <select id="dash-fecha-establecimiento"></select>
+        <button id="dash-fecha-ver" class="boton-secundario">Ver</button>
         <button id="dash-fecha-exportar" class="boton-secundario">Exportar Excel</button>
       </div>
       <div id="dash-fecha-mensaje" class="mensaje"></div>
+      <div class="tabla-scroll">
+        <table id="dash-fecha-tabla" class="tabla oculto">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ─── HISTORIAL ─── -->
