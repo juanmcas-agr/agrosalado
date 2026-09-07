@@ -716,7 +716,7 @@ function renderSpotVsPromedio(serieCompleta, actual) {
   // contra él podía dar la lectura contradictoria "conviene comprar" en las
   // dos direcciones a la vez (bug reportado y confirmado).
   const interpretacion = esPromedio
-    ? interpretarSpotVsPromedio(variacion)
+    ? interpretarSpotVsPromedio(variacion, actual)
     : '<div class="drill-spot-interpretacion">El máximo histórico es solo referencia — elegí "último mes", "semestral" o "anual" para ver una recomendación de compra/venta.</div>';
   el('drillSpotResultado').innerHTML = `
     Spot actual (${formatearRatio(actual)}) vs. ${etiqueta} (${formatearRatio(referencia)}): ${formatearVariacionPct(variacion)}
@@ -724,21 +724,38 @@ function renderSpotVsPromedio(serieCompleta, actual) {
   `;
 }
 
-// Traduce el % de spot vs. promedio a una lectura simple: un ratio A÷B por
-// encima de su promedio significa que A compra más B que de costumbre —
-// A está relativamente caro frente a B — y viceversa cuando está por
-// debajo. Sirve para cualquier par de productos.
-function interpretarSpotVsPromedio(variacion) {
+// La parte después de la "/" en `unidad` (ej. "$/tn" -> "tn", "$/kg + IVA"
+// -> "kg") — permite decir "1 tn de Maíz equivale a X kg de Novillo" en vez
+// de hablar solo en abstracto del "ratio". $ Pesos no tiene `unidad`
+// (es sintético) así que ahí se omite esa frase.
+function unidadFisica(producto) {
+  if (!producto.unidad) return null;
+  const partes = producto.unidad.split('/');
+  if (partes.length < 2) return null;
+  return partes[1].replace(/\s*\+\s*iva/i, '').trim();
+}
+
+// Traduce el % de spot vs. promedio a una lectura simple, con los números
+// reales del par que se está mirando: un ratio A÷B por encima de su
+// promedio significa que A compra más B que de costumbre — A está
+// relativamente caro frente a B — y viceversa cuando está por debajo.
+// Sirve para cualquier par de productos.
+function interpretarSpotVsPromedio(variacion, actual) {
   if (variacion == null) return '';
-  const nombreA = porId(drillActualA).nombre;
-  const nombreB = porId(drillActualB).nombre;
+  const prodA = porId(drillActualA);
+  const prodB = porId(drillActualB);
+  const { nombre: nombreA } = prodA;
+  const { nombre: nombreB } = prodB;
+  const uA = unidadFisica(prodA);
+  const uB = unidadFisica(prodB);
+  const equivalencia = uA && uB ? `1 ${uA} de ${nombreA} equivale hoy a ${formatearRatio(actual)} ${uB} de ${nombreB}. ` : '';
   if (Math.abs(variacion) < 3) {
-    return `<div class="drill-spot-interpretacion">En línea con el promedio — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
+    return `<div class="drill-spot-interpretacion">${equivalencia}En línea con el promedio — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
   }
   if (variacion > 0) {
-    return `<div class="drill-spot-interpretacion">${nombreA} está ${variacion.toFixed(0)}% por encima de su promedio frente a ${nombreB}: convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
+    return `<div class="drill-spot-interpretacion">${equivalencia}Eso es ${variacion.toFixed(0)}% más que el promedio: ${nombreA} está comprando más ${nombreB} que de costumbre → relativamente caro → convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
   }
-  return `<div class="drill-spot-interpretacion">${nombreA} está ${Math.abs(variacion).toFixed(0)}% por debajo de su promedio frente a ${nombreB}: convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
+  return `<div class="drill-spot-interpretacion">${equivalencia}Eso es ${Math.abs(variacion).toFixed(0)}% menos que el promedio: ${nombreA} está comprando menos ${nombreB} que de costumbre → relativamente barato → convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
 }
 
 // ── Panel de configuración de alerta (dentro del drill-down) ──
