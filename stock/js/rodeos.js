@@ -57,3 +57,54 @@ export async function stockDelRodeo(rodeoId) {
   if (error) throw error;
   return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
 }
+
+// ─── Feed lot: corral + ciclo ───
+// fecha/kilos de INGRESO salen del propio movimiento que trae el rodeo a
+// feed lot (no se vuelven a tipear); fecha estimada de salida y kilos
+// objetivo son el único dato nuevo que se pide en ese momento.
+export async function registrarEntradaFeedLot({ rodeoId, corral, fecha, kilosIngreso, fechaEstimadaSalida, kilosSalidaObjetivo }) {
+  const { error: errorCorral } = await supabase.from('rodeos').update({ corral }).eq('id', rodeoId);
+  if (errorCorral) throw errorCorral;
+  const { error } = await supabase.from('feed_lot_ciclos').insert({
+    rodeo_id: rodeoId,
+    fecha_ingreso: fecha,
+    kilos_ingreso: kilosIngreso,
+    fecha_estimada_salida: fechaEstimadaSalida || null,
+    kilos_salida_objetivo: kilosSalidaObjetivo || null,
+  });
+  if (error) throw error;
+}
+
+// Se llama cuando un rodeo deja feed lot (traslado a otro establecimiento,
+// o una salida — venta/faena/mortandad — desde feed lot): cierra el ciclo
+// abierto con la fecha/kilos reales del propio movimiento, y limpia el
+// corral (ya no está físicamente ahí).
+export async function registrarSalidaFeedLot({ rodeoId, fecha, kilosSalida }) {
+  const { error: errorCorral } = await supabase.from('rodeos').update({ corral: null }).eq('id', rodeoId);
+  if (errorCorral) throw errorCorral;
+  const { error } = await supabase
+    .from('feed_lot_ciclos')
+    .update({ fecha_salida_real: fecha, kilos_salida_real: kilosSalida, activo: false })
+    .eq('rodeo_id', rodeoId)
+    .eq('activo', true);
+  if (error) throw error;
+}
+
+// Corral + ciclo activo por rodeo, para mostrar en el dashboard al mirar
+// el stock de feed lot ("¿en qué corral está, cuándo sale?").
+export async function cargarInfoFeedLot() {
+  const [{ data: rodeosFeedLot, error: errorRodeos }, { data: ciclos, error: errorCiclos }] = await Promise.all([
+    supabase.from('rodeos').select('id, corral').eq('establecimiento_id', 'feed_lot'),
+    supabase.from('feed_lot_ciclos').select('rodeo_id, fecha_estimada_salida, kilos_salida_objetivo').eq('activo', true),
+  ]);
+  const info = {};
+  if (!errorRodeos) {
+    for (const r of rodeosFeedLot) info[r.id] = { corral: r.corral };
+  }
+  if (!errorCiclos) {
+    for (const c of ciclos) {
+      info[c.rodeo_id] = { ...(info[c.rodeo_id] || {}), fechaEstimadaSalida: c.fecha_estimada_salida, kilosSalidaObjetivo: c.kilos_salida_objetivo };
+    }
+  }
+  return info;
+}

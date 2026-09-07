@@ -5,7 +5,7 @@ import {
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
-import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo } from './rodeos.js';
+import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
 const CAMPOS = [
@@ -218,6 +218,36 @@ function poblarGrupos() {
   crearGrupoBotones('mov-categoria-destino', CATEGORIAS);
   inicializarTitular('origen');
   inicializarTitular('destino');
+  crearGrupoBotones('mov-feedlot-corral', [
+    { id: '1', nombre: 'Corral 1' }, { id: '2', nombre: 'Corral 2' },
+    { id: '3', nombre: 'Corral 3' }, { id: '4', nombre: 'Corral 4' },
+  ]);
+}
+
+// ─── Feed lot: corral + ciclo (fecha estimada de salida, kilos objetivo) ───
+// Entrada = traslado QUE LLEVA a feed_lot (desde otro lado); salida =
+// traslado que SACA de feed_lot, o cualquier venta/faena/mortandad cuyo
+// origen es feed_lot. Para 'traslado' el establecimiento_destino es un
+// campo elegido directo (no duplicado), así que se puede leer en vivo acá
+// sin esperar a armarFila().
+const TIPOS_SALIDA_STOCK = ['venta_gordo', 'venta_vaca_prenada', 'venta_invernada', 'faena_conserva', 'mortandad'];
+
+function calcularEstadoFeedLot() {
+  const tipo = obtenerSeleccion('mov-tipo');
+  const cfg = TIPOS_MOVIMIENTO[tipo];
+  if (!cfg) return { entrada: false, salida: false };
+  const origen = cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null;
+  const destino = cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null;
+  const entrada = tipo === 'traslado' && destino === 'feed_lot' && origen !== 'feed_lot';
+  const salida =
+    (tipo === 'traslado' && origen === 'feed_lot' && destino !== 'feed_lot') ||
+    (TIPOS_SALIDA_STOCK.includes(tipo) && origen === 'feed_lot');
+  return { entrada, salida };
+}
+
+function actualizarBloqueFeedLot() {
+  const { entrada } = calcularEstadoFeedLot();
+  el('mov-feedlot-entrada').classList.toggle('oculto', !entrada);
 }
 
 function actualizarCamposVisibles() {
@@ -237,6 +267,7 @@ function actualizarCamposVisibles() {
     cfg.categoriasPermitidas ? CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id)) : CATEGORIAS
   );
   actualizarSelectsRodeo();
+  actualizarBloqueFeedLot();
 }
 
 function activarAccesoRapidoFeedLot() {
@@ -264,6 +295,11 @@ function leerFormulario() {
     rodeo_id: el('mov-rodeo').value,
     rodeo_destino: cfg.campos.includes('rodeo_destino') ? el('mov-rodeo-destino').value : null,
     observaciones: el('mov-observaciones').value.trim() || null,
+    feedlotEntrada: calcularEstadoFeedLot().entrada,
+    feedlotSalida: calcularEstadoFeedLot().salida,
+    feedlotCorral: obtenerSeleccion('mov-feedlot-corral'),
+    feedlotFechaSalida: el('mov-feedlot-fecha-salida').value || null,
+    feedlotKilosObjetivo: el('mov-feedlot-kilos-objetivo').value || null,
   };
 }
 
@@ -291,6 +327,10 @@ function validar(datos) {
     } else if (datos.rodeo_destino && datos.rodeo_destino === datos.rodeo_id) {
       errores.push('El rodeo destino tiene que ser distinto del rodeo de origen.');
     }
+  }
+
+  if (datos.feedlotEntrada && !datos.feedlotCorral) {
+    errores.push('Elegí a qué corral entra el rodeo en feed lot.');
   }
 
   const cabezas = Number(datos.cantidad_cabezas);
@@ -377,8 +417,12 @@ function resetFormulario() {
   el('mov-rodeo-nuevo-nombre').value = '';
   el('mov-rodeo-destino-nuevo-wrap').classList.add('oculto');
   el('mov-rodeo-destino-nuevo-nombre').value = '';
+  limpiarSeleccion('mov-feedlot-corral');
+  el('mov-feedlot-fecha-salida').value = '';
+  el('mov-feedlot-kilos-objetivo').value = '';
   // establecerSeleccion dispara 'cambio' -> actualizarCamposVisibles() ->
-  // actualizarSelectsRodeo(), que ya reconstruye los selects vacíos.
+  // actualizarSelectsRodeo()/actualizarBloqueFeedLot(), que ya reconstruyen
+  // los selects vacíos y ocultan el bloque de feed lot.
   establecerSeleccion('mov-tipo', primerTipoPermitido());
 }
 
@@ -424,6 +468,30 @@ async function onSubmit(evento) {
   const fila = armarFila(datos);
   await encolarMovimiento(fila);
 
+  // Best-effort: el movimiento en sí ya quedó guardado (offline-first vía
+  // outbox); el corral/ciclo de feed lot es metadata complementaria, no
+  // bloquea ni se reintenta si falla (ej. sin conexión en este instante).
+  if (datos.feedlotEntrada) {
+    try {
+      await registrarEntradaFeedLot({
+        rodeoId: datos.rodeo_id,
+        corral: datos.feedlotCorral,
+        fecha: datos.fecha,
+        kilosIngreso: Number(datos.kilos_promedio),
+        fechaEstimadaSalida: datos.feedlotFechaSalida,
+        kilosSalidaObjetivo: datos.feedlotKilosObjetivo,
+      });
+    } catch (error) {
+      console.warn('No se pudo registrar la entrada a feed lot:', error);
+    }
+  } else if (datos.feedlotSalida) {
+    try {
+      await registrarSalidaFeedLot({ rodeoId: datos.rodeo_id, fecha: datos.fecha, kilosSalida: Number(datos.kilos_promedio) });
+    } catch (error) {
+      console.warn('No se pudo registrar la salida de feed lot:', error);
+    }
+  }
+
   mostrarToast('✅ MOVIMIENTO REGISTRADO');
   if (advertencias.length) {
     mostrarMensaje(`Se sincroniza automáticamente. (${advertencias.join(' ')})`, 'advertencia');
@@ -441,7 +509,7 @@ export async function initMovimientos() {
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
-    el(id).addEventListener('cambio', actualizarSelectsRodeo);
+    el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); });
   }
   establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
