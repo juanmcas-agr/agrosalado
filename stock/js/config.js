@@ -17,11 +17,12 @@ export const ESTABLECIMIENTOS = [
 
 // Espejo de la tabla categorias.
 export const CATEGORIAS = [
-  { id: 'macho', nombre: 'Macho' },
-  { id: 'hembra', nombre: 'Hembra' },
-  { id: 'vaquillona_reposicion', nombre: 'Vaquillona reposición' },
-  { id: 'vaca_servicio_primavera', nombre: 'Vaca servicio de primavera' },
-  { id: 'vaca_servicio_invierno', nombre: 'Vaca servicio de invierno' },
+  { id: 'ternero', nombre: 'Ternero' },
+  { id: 'ternera', nombre: 'Ternera' },
+  { id: 'vaquillona', nombre: 'Vaquillona' },
+  { id: 'novillito', nombre: 'Novillito' },
+  { id: 'novillo', nombre: 'Novillo' },
+  { id: 'torito', nombre: 'Torito' },
   { id: 'toro', nombre: 'Toro' },
 ];
 
@@ -36,7 +37,7 @@ export const TIPOS_MOVIMIENTO = {
   paricion: {
     nombre: 'Parición', clase: 'entrada',
     campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
-    categoriasPermitidas: ['macho', 'hembra'],
+    categoriasPermitidas: ['ternero', 'ternera'],
   },
   venta_gordo: {
     nombre: 'Venta de gordo', clase: 'salida',

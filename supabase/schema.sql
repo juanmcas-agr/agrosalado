@@ -24,12 +24,13 @@ create table categorias (
 );
 
 insert into categorias (id, nombre, orden) values
-  ('macho', 'Macho', 1),
-  ('hembra', 'Hembra', 2),
-  ('vaquillona_reposicion', 'Vaquillona reposición', 3),
-  ('vaca_servicio_primavera', 'Vaca servicio de primavera', 4),
-  ('vaca_servicio_invierno', 'Vaca servicio de invierno', 5),
-  ('toro', 'Toro', 6);
+  ('ternero', 'Ternero', 1),
+  ('ternera', 'Ternera', 2),
+  ('vaquillona', 'Vaquillona', 3),
+  ('novillito', 'Novillito', 4),
+  ('novillo', 'Novillo', 5),
+  ('torito', 'Torito', 6),
+  ('toro', 'Toro', 7);
 
 create table titulares (
   id text primary key,
