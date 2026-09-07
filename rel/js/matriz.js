@@ -51,6 +51,31 @@ let indicePorTipo = {};
 let configPorPar = {};
 let cargado = false;
 
+// Supabase/PostgREST limita cada respuesta a 1000 filas por default — con
+// más de un año de histórico diario × 13 productos ya se supera esa cifra.
+// Sin paginar, `.order('fecha', {ascending:true})` devuelve solo las 1000
+// filas más VIEJAS y corta ahí, haciendo que "la fecha más reciente"
+// parezca congelada muy atrás en el tiempo (bug real detectado en
+// producción). Se pagina con `.range()` hasta agotar los resultados.
+const TAMANO_PAGINA = 1000;
+
+async function fetchTodasLasFilas(tabla, columnas, ordenarPor) {
+  let desde = 0;
+  let todas = [];
+  while (true) {
+    const { data, error } = await supabase
+      .from(tabla)
+      .select(columnas)
+      .order(ordenarPor, { ascending: true })
+      .range(desde, desde + TAMANO_PAGINA - 1);
+    if (error) return { data: null, error };
+    todas = todas.concat(data);
+    if (data.length < TAMANO_PAGINA) break;
+    desde += TAMANO_PAGINA;
+  }
+  return { data: todas, error: null };
+}
+
 async function cargarHistorialCompleto() {
   if (cargado) return;
   const [
@@ -58,8 +83,8 @@ async function cargarHistorialCompleto() {
     { data: indices, error: errorIndices },
     { data: configs, error: errorConfigs },
   ] = await Promise.all([
-    supabase.from('precios_relativos_historial').select('producto_id, fecha, valor_nativo').order('fecha', { ascending: true }),
-    supabase.from('precios_relativos_indices').select('tipo, fecha, indice').order('fecha', { ascending: true }),
+    fetchTodasLasFilas('precios_relativos_historial', 'producto_id, fecha, valor_nativo', 'fecha'),
+    fetchTodasLasFilas('precios_relativos_indices', 'tipo, fecha, indice', 'fecha'),
     supabase.from('precios_relativos_ratios_config').select('*'),
   ]);
   if (errorHistorial) {
