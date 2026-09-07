@@ -55,6 +55,14 @@
       </div>
       <div id="actualizarAhoraMensaje" class="mensaje"></div>
       <p style="font-size:0.85em;color:#666;margin-top:0;">Tocá cualquier celda para ver el histórico de ese ratio.</p>
+      <div class="matriz-controles">
+        <div class="drill-modo-wrap">
+          <button type="button" class="matriz-modo-btn activo" data-modo="instantanea">Instantánea</button>
+          <button type="button" class="matriz-modo-btn" data-modo="promedio_mensual">Promedio mensual</button>
+        </div>
+        <input type="date" id="matrizFechaInput">
+        <input type="month" id="matrizMesInput" class="oculto">
+      </div>
       <div class="matriz-scroll">
         <table id="matrizTabla" class="matriz-tabla"></table>
       </div>

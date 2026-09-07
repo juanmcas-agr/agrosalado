@@ -46,13 +46,16 @@ async function obtenerInfoProducto(productoId) {
   };
 }
 
-async function guardarValor(producto, valor, msjEl) {
+function fechaHoy() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+async function guardarValor(producto, valor, fecha, msjEl) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { msjEl.textContent = 'No hay sesión activa.'; msjEl.className = 'carga-item-mensaje error'; return false; }
 
-  const hoy = new Date().toISOString().slice(0, 10);
   const { error } = await supabase.from('precios_relativos_historial').upsert(
-    { producto_id: producto.id, fecha: hoy, valor_nativo: valor, origen_dato: 'manual', usuario_id: session.user.id },
+    { producto_id: producto.id, fecha, valor_nativo: valor, origen_dato: 'manual', usuario_id: session.user.id },
     { onConflict: 'producto_id,fecha' }
   );
   if (error) {
@@ -80,7 +83,8 @@ function renderFilaProducto(producto, info) {
     </div>
     <div class="carga-item-aviso-texto">${enAviso ? '⚠️ ' : ''}${textoAviso}</div>
     <div class="carga-item-form">
-      <input type="number" step="0.01" class="carga-input" value="${info.ultimoValor ? info.ultimoValor.valor_nativo : ''}" placeholder="Valor de hoy">
+      <input type="number" step="0.01" class="carga-input" value="${info.ultimoValor ? info.ultimoValor.valor_nativo : ''}" placeholder="Valor">
+      <input type="date" class="carga-fecha" value="${fechaHoy()}" max="${fechaHoy()}">
       <button type="button" class="carga-guardar-btn">Guardar</button>
     </div>
     <div class="carga-item-mensaje"></div>
@@ -88,6 +92,7 @@ function renderFilaProducto(producto, info) {
 
   div.querySelector('.carga-guardar-btn').addEventListener('click', async () => {
     const input = div.querySelector('.carga-input');
+    const fechaInput = div.querySelector('.carga-fecha');
     const msj = div.querySelector('.carga-item-mensaje');
     const valor = parseFloat(input.value);
     if (!valor || valor <= 0) {
@@ -95,7 +100,12 @@ function renderFilaProducto(producto, info) {
       msj.className = 'carga-item-mensaje error';
       return;
     }
-    const ok = await guardarValor(producto, valor, msj);
+    if (!fechaInput.value) {
+      msj.textContent = 'Elegí una fecha.';
+      msj.className = 'carga-item-mensaje error';
+      return;
+    }
+    const ok = await guardarValor(producto, valor, fechaInput.value, msj);
     if (ok) {
       const infoNueva = await obtenerInfoProducto(producto.id);
       div.replaceWith(renderFilaProducto(producto, infoNueva));

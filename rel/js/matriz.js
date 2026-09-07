@@ -161,6 +161,40 @@ function ratioAsOf(idA, idB, fechaLimite) {
   return a / b;
 }
 
+// Promedio del valor nativo de un producto dentro de un mes ('YYYY-MM').
+// Si ese mes no tiene ningún dato propio (típico en productos que se
+// cargan cada tanto, no todos los días), cae al último valor conocido
+// hasta el último día de ese mes — mismo criterio "arrastre" que el resto
+// de la matriz, para no dejar la celda vacía.
+function promedioNativoDelMes(productoId, anioMes) {
+  if (productoId === ID_PESOS) return 1;
+  const serie = historialPorProducto[productoId] || [];
+  const puntosDelMes = serie.filter((p) => p.fecha.slice(0, 7) === anioMes);
+  if (puntosDelMes.length) {
+    return puntosDelMes.reduce((suma, p) => suma + p.valorNativo, 0) / puntosDelMes.length;
+  }
+  const punto = valorAsOf(productoId, `${anioMes}-31`);
+  return punto ? punto.valorNativo : null;
+}
+
+function valorArsPromedioMensual(productoId, anioMes) {
+  const producto = porId(productoId);
+  if (!producto) return null;
+  const nativo = promedioNativoDelMes(productoId, anioMes);
+  if (nativo == null) return null;
+  if (producto.monedaNativa === 'ARS') return nativo;
+  const dolarProm = promedioNativoDelMes('dolar_bna', anioMes);
+  if (dolarProm == null) return null;
+  return nativo * dolarProm;
+}
+
+function ratioPromedioMensual(idA, idB, anioMes) {
+  const a = valorArsPromedioMensual(idA, anioMes);
+  const b = valorArsPromedioMensual(idB, anioMes);
+  if (a == null || b == null || b === 0) return null;
+  return a / b;
+}
+
 function fechaMasReciente() {
   let max = null;
   for (const serie of Object.values(historialPorProducto)) {
@@ -183,6 +217,18 @@ function formatearFecha(iso) {
   return `${d}/${m}/${y}`;
 }
 
+// ── Modo de la matriz: instantánea a una fecha, o promedio de un mes ──
+let matrizModo = 'instantanea'; // 'instantanea' | 'promedio_mensual'
+let matrizFechaSeleccionada = null; // 'YYYY-MM-DD', solo instantánea
+let matrizMesSeleccionado = null; // 'YYYY-MM', solo promedio_mensual
+
+function formatearMes(anioMes) {
+  if (!anioMes) return '-';
+  const [y, m] = anioMes.split('-');
+  const NOMBRES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  return `${NOMBRES[Number(m) - 1]} ${y}`;
+}
+
 function renderMatriz() {
   const fechaHoy = fechaMasReciente();
   const tabla = el('matrizTabla');
@@ -190,6 +236,22 @@ function renderMatriz() {
     tabla.innerHTML = '<caption>Todavía no hay datos cargados en $Rel.</caption>';
     return;
   }
+  if (!matrizFechaSeleccionada) matrizFechaSeleccionada = fechaHoy;
+  if (!matrizMesSeleccionado) matrizMesSeleccionado = fechaHoy.slice(0, 7);
+  el('matrizFechaInput').max = fechaHoy;
+  el('matrizFechaInput').value = matrizFechaSeleccionada;
+  el('matrizMesInput').max = fechaHoy.slice(0, 7);
+  el('matrizMesInput').value = matrizMesSeleccionado;
+
+  const esInstantanea = matrizModo === 'instantanea';
+  const fechaReferencia = esInstantanea ? matrizFechaSeleccionada : matrizMesSeleccionado;
+  const calcularRatio = esInstantanea
+    ? (a, b) => ratioAsOf(a, b, matrizFechaSeleccionada)
+    : (a, b) => ratioPromedioMensual(a, b, matrizMesSeleccionado);
+  // Las alertas reflejan el estado de HOY, no el de la fecha que se esté
+  // mirando — para no confundir "está en rojo" con "estaba en rojo ese
+  // día". Solo se muestran cuando la vista coincide con la más reciente.
+  const mostrarAlertas = esInstantanea && matrizFechaSeleccionada === fechaHoy;
 
   const productos = productosVisibles();
   let theadHtml = '<thead><tr><th></th>';
@@ -204,8 +266,8 @@ function renderMatriz() {
         tbodyHtml += '<td class="celda-diagonal">—</td>';
         continue;
       }
-      const v = ratioAsOf(filaProd.id, colProd.id, fechaHoy);
-      const alerta = estadoAlertaParaPar(filaProd.id, colProd.id);
+      const v = calcularRatio(filaProd.id, colProd.id);
+      const alerta = mostrarAlertas ? estadoAlertaParaPar(filaProd.id, colProd.id) : null;
       const claseAlerta = alerta?.estado === 'caro' ? ' celda-alerta-caro' : alerta?.estado === 'barato' ? ' celda-alerta-barato' : '';
       const icono = alerta?.estado === 'caro' ? ' 🔴' : alerta?.estado === 'barato' ? ' 🟢' : '';
       tbodyHtml += `<td class="celda-ratio${claseAlerta}" data-a="${filaProd.id}" data-b="${colProd.id}">${formatearRatio(v)}${icono}</td>`;
@@ -214,7 +276,10 @@ function renderMatriz() {
   }
   tbodyHtml += '</tbody>';
 
-  tabla.innerHTML = `<caption>Datos al ${formatearFecha(fechaHoy)}. Fila ÷ columna — dividí por "$ Pesos" o "U$ BNA" para ver el precio nominal en pesos o dólares.</caption>${theadHtml}${tbodyHtml}`;
+  const leyendaFecha = esInstantanea
+    ? `Datos al ${formatearFecha(matrizFechaSeleccionada)}`
+    : `Promedio de ${formatearMes(matrizMesSeleccionado)}`;
+  tabla.innerHTML = `<caption>${leyendaFecha}. Fila ÷ columna — dividí por "$ Pesos" o "U$ BNA" para ver el precio nominal en pesos o dólares.</caption>${theadHtml}${tbodyHtml}`;
 
   tabla.querySelectorAll('.celda-ratio').forEach((celda) => {
     celda.addEventListener('click', () => abrirDrillDown(celda.dataset.a, celda.dataset.b));
@@ -555,6 +620,24 @@ export async function initMatriz() {
   });
   el('drillCerrar').addEventListener('click', cerrarDrillDown);
   el('modalDrillDownFondo').addEventListener('click', cerrarDrillDown);
+
+  document.querySelectorAll('.matriz-modo-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      matrizModo = btn.dataset.modo;
+      document.querySelectorAll('.matriz-modo-btn').forEach((b) => b.classList.toggle('activo', b === btn));
+      el('matrizFechaInput').classList.toggle('oculto', matrizModo !== 'instantanea');
+      el('matrizMesInput').classList.toggle('oculto', matrizModo !== 'promedio_mensual');
+      renderMatriz();
+    });
+  });
+  el('matrizFechaInput').addEventListener('change', (evento) => {
+    if (evento.target.value) matrizFechaSeleccionada = evento.target.value;
+    renderMatriz();
+  });
+  el('matrizMesInput').addEventListener('change', (evento) => {
+    if (evento.target.value) matrizMesSeleccionado = evento.target.value;
+    renderMatriz();
+  });
 
   el('alertaToggleBtn').addEventListener('click', () => {
     el('alertaPanel').classList.toggle('oculto');
