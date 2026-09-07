@@ -1150,7 +1150,7 @@
     <div style="overflow-x:auto;">
       <table id="posTablaVentas" class="pos-tabla">
         <thead>
-          <tr><th>Fecha</th><th>Cliente vendedor</th><th>Comprador</th><th>Producto</th><th>N° orden</th><th>Toneladas</th><th>Asignado</th><th>Libre</th><th></th></tr>
+          <tr><th>Fecha</th><th>Cliente vendedor</th><th>Comprador</th><th>Producto</th><th>N° orden</th><th>N° cto corredor</th><th>Toneladas</th><th>Asignado</th><th>Libre</th><th></th></tr>
         </thead>
         <tbody></tbody>
       </table>
@@ -4234,6 +4234,7 @@
           <td>${v.b.comprador || '-'}</td>
           <td>${v.producto || '-'}</td>
           <td>${v.registro.numero_orden || '-'}</td>
+          <td>${v.b.numeroContratoCorredor || '-'}</td>
           <td>${v.toneladas.toLocaleString('es-AR')}</td>
           <td>${v.asignado.toLocaleString('es-AR')}</td>
           <td class="pos-libre">${v.libre.toLocaleString('es-AR')}</td>
