@@ -46,11 +46,24 @@
 
     <!-- ─── MATRIZ ─── -->
     <section id="pantalla-matriz" data-screen="matriz" class="oculto">
-      <h2>Precios relativos</h2>
+      <div class="carga-nav">
+        <h2 style="margin:0;">Precios relativos</h2>
+        <a href="#carga" class="boton-secundario boton-link">✏️ Cargar precios manuales</a>
+      </div>
       <p style="font-size:0.85em;color:#666;margin-top:0;">Tocá cualquier celda para ver el histórico de ese ratio.</p>
       <div class="matriz-scroll">
         <table id="matrizTabla" class="matriz-tabla"></table>
       </div>
+    </section>
+
+    <!-- ─── CARGA MANUAL ─── -->
+    <section id="pantalla-carga" data-screen="carga" class="oculto">
+      <div class="carga-nav">
+        <h2 style="margin:0;">Cargar precios manuales</h2>
+        <a href="#matriz" class="boton-secundario boton-link">← Volver a la matriz</a>
+      </div>
+      <p style="font-size:0.85em;color:#666;margin-top:0;">Estos productos no tienen fuente pública automática — se cargan a mano. Si un día no se carga nada, el sistema repite el último valor solo, pero acá abajo vas a ver hace cuántos días que nadie lo confirma.</p>
+      <div id="cargaLista"></div>
     </section>
   </div>
 

@@ -1,10 +1,8 @@
-// Por ahora una sola pantalla (la matriz de ratios). Se arma como router de
-// hash desde ya, mismo criterio que Hacienda (stock/js/router.js), para no
-// tener que reestructurar cuando se agreguen más pantallas (carga manual,
-// etc.) en los próximos milestones.
+// Router de hash, mismo criterio que Hacienda (stock/js/router.js).
 import { initMatriz, refrescarMatriz } from './matriz.js';
+import { refrescarCarga } from './carga.js';
 
-const PANTALLAS = ['matriz'];
+const PANTALLAS = ['matriz', 'carga'];
 
 function el(id) {
   return document.getElementById(id);
@@ -23,6 +21,7 @@ function renderRoute() {
   }
 
   if (pantalla === 'matriz') refrescarMatriz();
+  if (pantalla === 'carga') refrescarCarga();
 }
 
 export function initRouter() {
