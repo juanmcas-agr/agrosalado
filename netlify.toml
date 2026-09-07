@@ -26,3 +26,7 @@
 # del mes anterior entre el día 12 y el 15).
 [functions."indices-inflacion"]
   schedule = "0 12 15 * *"
+
+# Viernes 10:00 hora Argentina = 13:00 UTC.
+[functions."recordatorio-semanal-precios"]
+  schedule = "0 13 * * 5"
