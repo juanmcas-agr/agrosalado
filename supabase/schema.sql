@@ -606,6 +606,134 @@ on conflict do nothing;
 --   alter table destinatarios_negocio add column if not exists telefono text;
 --   alter table destinatarios_negocio add column if not exists recibe_whatsapp boolean not null default false;
 
+-- ─── $Rel: Precios Relativos ───────────────────────────────────────────
+
+alter table perfiles add column if not exists acceso_precios_relativos boolean not null default false;
+alter table destinatarios_negocio add column if not exists recibe_alertas_precios boolean not null default false;
+
+-- Catálogo de los productos trackeados. Espejado en rel/js/config.js (mismo
+-- patrón que ESTABLECIMIENTOS/CATEGORIAS en stock/js/config.js) para que la
+-- app renderice sin depender de la red al abrir.
+create table precios_relativos_productos (
+  id text primary key,
+  nombre text not null,
+  moneda_nativa text not null check (moneda_nativa in ('ARS','USD')),
+  unidad text not null,
+  origen text not null check (origen in ('automatico','manual')),
+  fuente text,
+  orden integer not null default 0,
+  activo boolean not null default true
+);
+
+alter table precios_relativos_productos enable row level security;
+
+create policy precios_relativos_productos_select on precios_relativos_productos for select to authenticated
+  using (true);
+create policy precios_relativos_productos_insert on precios_relativos_productos for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy precios_relativos_productos_update on precios_relativos_productos for update to authenticated
+  using (rol_actual() = 'owner');
+create policy precios_relativos_productos_delete on precios_relativos_productos for delete to authenticated
+  using (rol_actual() = 'owner');
+
+insert into precios_relativos_productos (id, nombre, moneda_nativa, unidad, origen, fuente, orden) values
+  ('dolar_bna', 'Dólar Banco Nación', 'ARS', '$/USD', 'automatico', 'tc.js (ArgentinaDatos, oficial)', 1),
+  ('dolar_blue', 'Dólar Blue', 'ARS', '$/USD', 'automatico', 'tc.js (ArgentinaDatos, blue)', 2),
+  ('soja_ros', 'Soja Rosario', 'ARS', '$/tn', 'automatico', 'pizarra.js (BCR)', 10),
+  ('maiz_ros', 'Maíz Rosario', 'ARS', '$/tn', 'automatico', 'pizarra.js (BCR)', 11),
+  ('trigo_ros', 'Trigo Rosario', 'ARS', '$/tn', 'automatico', 'pizarra.js (BCR)', 12),
+  ('girasol_ros', 'Girasol Rosario', 'ARS', '$/tn', 'automatico', 'pizarra.js (BCR)', 13),
+  ('gasoil_g2', 'Gas oil Grado 2', 'ARS', '$/litro', 'automatico', 'scraper-gasoil.js (datos.energia.gob.ar, Pilar/San Pedro)', 20),
+  ('novillo', 'Novillo', 'ARS', '$/kg vivo', 'automatico', 'scraper-novillo.js (Mercado Agroganadero)', 30),
+  ('ternero', 'Ternero', 'ARS', '$/kg + IVA', 'automatico', 'scraper-invernada.js (deCampoaCampo)', 31),
+  ('vaca_prenada', 'Vaca preñada', 'ARS', '$/cabeza + IVA', 'automatico', 'scraper-invernada.js (deCampoaCampo)', 32),
+  ('map', 'MAP', 'USD', 'USD/tn', 'manual', 'carga manual', 40),
+  ('urea', 'UREA', 'USD', 'USD/tn', 'manual', 'carga manual', 41),
+  ('glifosato_48', 'Glifosato liq. 48%', 'USD', 'USD/litro', 'manual', 'carga manual', 42)
+on conflict do nothing;
+
+-- Serie histórica: un valor por producto por día, en su moneda nativa.
+-- origen_dato distingue scraper automático, carga humana real, o arrastre
+-- (LOCF) cuando un producto manual no tuvo carga ese día.
+create table precios_relativos_historial (
+  id uuid primary key default gen_random_uuid(),
+  producto_id text not null references precios_relativos_productos(id),
+  fecha date not null,
+  valor_nativo numeric not null check (valor_nativo > 0),
+  origen_dato text not null check (origen_dato in ('scraper','manual','arrastre')),
+  usuario_id uuid references auth.users(id),
+  creado_at timestamptz not null default now(),
+  unique (producto_id, fecha)
+);
+create index precios_relativos_historial_fecha_idx on precios_relativos_historial (fecha);
+
+alter table precios_relativos_historial enable row level security;
+
+create policy precios_relativos_historial_select on precios_relativos_historial for select to authenticated
+  using (true);
+create policy precios_relativos_historial_insert on precios_relativos_historial for insert to authenticated
+  with check (rol_actual() in ('encargado','administrativo','owner'));
+create policy precios_relativos_historial_update on precios_relativos_historial for update to authenticated
+  using (rol_actual() in ('administrativo','owner'));
+create policy precios_relativos_historial_delete on precios_relativos_historial for delete to authenticated
+  using (rol_actual() = 'owner');
+-- Nota: las funciones scheduled (scrapers, snapshot diario, arrastre,
+-- backfill) usan SUPABASE_SERVICE_ROLE_KEY y bypassean estas policies —
+-- estas solo gobiernan la carga manual desde el cliente.
+
+-- Índices de inflación para moneda constante. tipo='ARS' → IPC INDEC,
+-- tipo='USD' → CPI EEUU (serie CPIAUCSL, FRED). Base=100 en el mes de
+-- referencia que se elija al popular la tabla.
+create table precios_relativos_indices (
+  id uuid primary key default gen_random_uuid(),
+  tipo text not null check (tipo in ('ARS','USD')),
+  fecha date not null,
+  indice numeric not null,
+  creado_at timestamptz not null default now(),
+  unique (tipo, fecha)
+);
+
+alter table precios_relativos_indices enable row level security;
+
+create policy precios_relativos_indices_select on precios_relativos_indices for select to authenticated
+  using (true);
+create policy precios_relativos_indices_insert on precios_relativos_indices for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy precios_relativos_indices_update on precios_relativos_indices for update to authenticated
+  using (rol_actual() = 'owner');
+
+-- Ratios favoritos/alertas: solo hay fila cuando alguien marca un par como
+-- favorito y/o le customiza la alerta. Sin fila = se usan los defaults
+-- globales de rel/js/config.js. Compartido por todo el equipo, sin
+-- personalización por usuario (no hay precedente de eso en el proyecto).
+create table precios_relativos_ratios_config (
+  id uuid primary key default gen_random_uuid(),
+  producto_a_id text not null references precios_relativos_productos(id),
+  producto_b_id text not null references precios_relativos_productos(id),
+  favorito boolean not null default false,
+  alerta_activa boolean not null default false,
+  metodo text not null default 'desvio' check (metodo in ('percentil','desvio','ambos')),
+  ventana_meses integer not null default 24,
+  base text not null default 'nominal_ars' check (base in ('nominal_ars','nominal_usd','real_ars','real_usd')),
+  umbral_desvio_pct numeric default 15,
+  umbral_percentil_bajo numeric default 10,
+  umbral_percentil_alto numeric default 90,
+  creado_at timestamptz not null default now(),
+  check (producto_a_id < producto_b_id),
+  unique (producto_a_id, producto_b_id)
+);
+
+alter table precios_relativos_ratios_config enable row level security;
+
+create policy precios_relativos_ratios_config_select on precios_relativos_ratios_config for select to authenticated
+  using (true);
+create policy precios_relativos_ratios_config_insert on precios_relativos_ratios_config for insert to authenticated
+  with check (rol_actual() in ('encargado','administrativo','owner'));
+create policy precios_relativos_ratios_config_update on precios_relativos_ratios_config for update to authenticated
+  using (rol_actual() in ('encargado','administrativo','owner'));
+create policy precios_relativos_ratios_config_delete on precios_relativos_ratios_config for delete to authenticated
+  using (rol_actual() in ('encargado','administrativo','owner'));
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:
