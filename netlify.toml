@@ -8,3 +8,15 @@
 # 22:00 hora Argentina (UTC-3) = 01:00 UTC del día siguiente.
 [functions."cierre-diario-precios-relativos"]
   schedule = "0 1 * * *"
+
+# 21:00 hora Argentina = 00:00 UTC del día siguiente.
+[functions."scraper-novillo"]
+  schedule = "0 0 * * *"
+
+# 21:15 hora Argentina = 00:15 UTC del día siguiente.
+[functions."scraper-invernada"]
+  schedule = "15 0 * * *"
+
+# 21:30 hora Argentina = 00:30 UTC del día siguiente.
+[functions."scraper-gasoil"]
+  schedule = "30 0 * * *"
