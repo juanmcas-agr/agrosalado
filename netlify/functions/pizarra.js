@@ -14,11 +14,18 @@ exports.handler = async function() {
   const granos = {};
   const filas = { Soja: 'soja', 'Maíz': 'maiz', Trigo: 'trigo', Girasol: 'girasol', Sorgo: 'sorgo' };
 
+  // El precio de cada grano se busca DENTRO de su propia fila <tr>...</tr>,
+  // nunca más allá — si un grano no cotiza ese día la pizarra pone "S/C" en
+  // vez de un precio, y sin este límite el regex seguía buscando y terminaba
+  // agarrando el precio del grano siguiente en la tabla (bug real: Girasol
+  // "S/C" devolvía el precio de Trigo).
   for (const [nombre, clave] of Object.entries(filas)) {
-    const regex = new RegExp(`${nombre}[^$]*\\$\\s*([\\d.,]+)`, 'i');
-    const match = html.match(regex);
-    if (match) {
-      granos[clave] = match[1].replace(/\./g, '').replace(',', '.');
+    const filaRegex = new RegExp(`<tr>\\s*<td>${nombre}<\\/td>[\\s\\S]*?<\\/tr>`, 'i');
+    const fila = html.match(filaRegex);
+    if (!fila) continue;
+    const precio = fila[0].match(/\$\s*([\d.,]+)/);
+    if (precio) {
+      granos[clave] = precio[1].replace(/\./g, '').replace(',', '.');
     }
   }
 
