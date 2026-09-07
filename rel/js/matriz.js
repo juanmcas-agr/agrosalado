@@ -5,15 +5,12 @@ import { supabase } from './supabaseClient.js';
 import { getEstado } from './auth.js';
 import { PRODUCTOS } from './config.js';
 
-// Funciones Netlify que traen datos de fuentes automáticas — se invocan
-// también por GET (el cron ya las corre solo de noche; esto es para no
-// tener que esperar ni escribir la URL a mano).
-const FUNCIONES_ACTUALIZABLES = [
-  'cierre-diario-precios-relativos',
-  'scraper-gasoil',
-  'scraper-novillo',
-  'scraper-invernada',
-];
+// Los scrapers/cierre diario (cierre-diario-precios-relativos, scraper-*)
+// tienen "schedule" en netlify.toml, y Netlify bloquea con 403 cualquier
+// invocación pública por HTTP una vez que un archivo tiene eso — no se los
+// puede llamar directo. Por eso este botón pega a un endpoint aparte, sin
+// schedule, que internamente corre la misma lógica compartida.
+const FUNCION_ACTUALIZAR = 'actualizar-precios-relativos';
 
 function el(id) {
   return document.getElementById(id);
@@ -318,24 +315,20 @@ async function actualizarAhora() {
   msj.textContent = 'Actualizando…';
   msj.className = 'mensaje';
 
-  const resultados = await Promise.all(
-    FUNCIONES_ACTUALIZABLES.map(async (nombre) => {
-      try {
-        const res = await fetch(`/.netlify/functions/${nombre}`);
-        return { nombre, ok: res.ok };
-      } catch (error) {
-        return { nombre, ok: false };
-      }
-    })
-  );
-
-  const fallidas = resultados.filter((r) => !r.ok);
-  if (fallidas.length) {
-    msj.textContent = `⚠️ No se pudo actualizar: ${fallidas.map((f) => f.nombre).join(', ')}. El resto sí se actualizó.`;
+  try {
+    const res = await fetch(`/.netlify/functions/${FUNCION_ACTUALIZAR}`);
+    const datos = await res.json();
+    const fallidas = Object.entries(datos).filter(([, r]) => r && r.ok === false).map(([nombre]) => nombre);
+    if (fallidas.length) {
+      msj.textContent = `⚠️ No se pudo actualizar: ${fallidas.join(', ')}. El resto sí se actualizó.`;
+      msj.className = 'mensaje advertencia';
+    } else {
+      msj.textContent = '✅ Datos actualizados.';
+      msj.className = 'mensaje ok';
+    }
+  } catch (error) {
+    msj.textContent = '⚠️ No se pudo actualizar: ' + error.message;
     msj.className = 'mensaje advertencia';
-  } else {
-    msj.textContent = '✅ Datos actualizados.';
-    msj.className = 'mensaje ok';
   }
 
   boton.disabled = false;
