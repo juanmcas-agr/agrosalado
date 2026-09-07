@@ -776,14 +776,18 @@ create policy flete_simulaciones_update on flete_simulaciones for update to auth
 create policy flete_simulaciones_delete on flete_simulaciones for delete to authenticated
   using (rol_actual() = 'owner');
 
--- Costo real de flete por rubro ($/KM) — una sola fila fija (id='default'),
--- que se actualiza (upsert) desde la pestaña FLETE cuando Juan carga datos
--- nuevos. Los rubros son los que categoriza la publicación de "Costos del
--- Transporte de Larga Distancia": mano de obra, combustibles, neumáticos,
+-- Costo real de flete por rubro ($/KM) — historial (no una sola fila fija):
+-- cada "Guardar rubros" inserta una fila nueva, para poder comparar en el
+-- tiempo qué tan competitiva es la tarifa (guarda el total en ARS y, si
+-- hay cotización de dólar disponible en ese momento, también en USD). La
+-- pestaña FLETE siempre precarga el último registro como default. Los
+-- rubros son los que categoriza la publicación de "Costos del Transporte
+-- de Larga Distancia": mano de obra, combustibles, neumáticos,
 -- mantenimiento, material rodante, patentes y registros, seguros, gastos
 -- generales y costos financieros.
-create table flete_costos_rubro (
-  id text primary key default 'default',
+create table flete_costos_rubro_historial (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
   mano_obra numeric not null default 0,
   combustibles numeric not null default 0,
   neumaticos numeric not null default 0,
@@ -793,16 +797,19 @@ create table flete_costos_rubro (
   seguros numeric not null default 0,
   gastos_generales numeric not null default 0,
   costos_financieros numeric not null default 0,
-  actualizado_at timestamptz not null default now()
+  total_ars numeric not null,
+  dolar_bna numeric,
+  total_usd numeric,
+  creado_at timestamptz not null default now()
 );
 
-alter table flete_costos_rubro enable row level security;
+alter table flete_costos_rubro_historial enable row level security;
 
-create policy flete_costos_rubro_select on flete_costos_rubro for select to authenticated
+create policy flete_costos_rubro_historial_select on flete_costos_rubro_historial for select to authenticated
   using (rol_actual() = 'owner');
-create policy flete_costos_rubro_insert on flete_costos_rubro for insert to authenticated
-  with check (rol_actual() = 'owner');
-create policy flete_costos_rubro_update on flete_costos_rubro for update to authenticated
+create policy flete_costos_rubro_historial_insert on flete_costos_rubro_historial for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy flete_costos_rubro_historial_delete on flete_costos_rubro_historial for delete to authenticated
   using (rol_actual() = 'owner');
 
 -- ─── Después de correr este script ──────────────────────────────────────

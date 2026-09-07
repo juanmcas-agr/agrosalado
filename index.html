@@ -1181,28 +1181,26 @@
   <div id="modoFlete" class="oculto-panel">
     <div style="font-weight:bold;font-size:1.1em;margin-bottom:8px;">🚚 Simulador de Flete (privado)</div>
     <div style="font-size:0.85em;color:#666;margin-bottom:10px;">
-      Solo vos ves esta pestaña — no dispara mails ni afecta nada de COMPRA/VENTA. Traé una alternativa con el botón 🚚 en COMPRA y despues corregí a mano lo que haga falta (ej. si el precio pactado con el productor es el de otra alternativa) — todos los valores de la tabla son editables.
+      Solo vos ves esta pestaña — no dispara mails ni afecta nada de COMPRA/VENTA. Traé una alternativa con el botón 🚚 en COMPRA y despues corregí a mano lo que haga falta (ej. si el precio pactado con el productor es el de otra alternativa). Cliente es de solo lectura; el resto se edita tocando el campo.
     </div>
 
     <div style="background:white;border-radius:8px;padding:10px;margin-bottom:12px;">
       <div style="font-weight:bold;margin-bottom:6px;">⚙️ Costo real de flete por rubro ($/KM)</div>
       <div id="fleteRubrosForm" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
-      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;">
+      <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <button type="button" onclick="guardarRubrosFlete()">💾 Guardar rubros</button>
-        <span style="font-size:0.85em;">Total: <strong id="fleteRubrosTotal">-</strong> por km</span>
+        <span style="font-size:0.85em;">Total: <strong id="fleteRubrosTotalArs">-</strong> /km <span id="fleteRubrosTotalUsd" style="color:#666;"></span></span>
       </div>
+    </div>
+
+    <div style="margin-bottom:8px;">
+      <button type="button" onclick="vaciarTablaFlete()">🧹 Vaciar tabla</button>
     </div>
 
     <div style="overflow-x:auto;">
       <table id="tablaFlete" class="pos-tabla">
         <thead>
-          <tr>
-            <th>Cliente</th><th>Producto</th><th>Destino</th>
-            <th>Precio Bruto</th><th>Precio a Productor</th>
-            <th>Flete Corto $</th><th>Flete Largo $</th>
-            <th>Costo Flete</th><th>Detalle</th>
-            <th>Costo Flete $</th><th>Ganancia Agro</th><th></th>
-          </tr>
+          <tr id="fleteHeaderRow"><th></th></tr>
         </thead>
         <tbody id="tablaFleteBody"></tbody>
       </table>
@@ -2965,9 +2963,12 @@
     let fleteFilas = [];
 
     // Rubros de "Costos del Transporte de Larga Distancia" (FADEEAC) — el
-    // modo 'rubros' de cada fila usa el TOTAL $/KM de esta config × sus
-    // propios km_corto+km_largo. Una sola fila compartida (id='default'):
-    // se actualiza acá cuando Juan tenga datos nuevos, no por simulación.
+    // modo 'rubros' de cada fila usa el TOTAL $/KM del último registro
+    // guardado × sus propios km_corto+km_largo. Es un historial (no una
+    // fila fija): cada "Guardar rubros" agrega un registro nuevo, así se
+    // puede comparar en el tiempo qué tan competitiva es la tarifa — se
+    // guarda en ARS y, si hay cotización de dólar cargada en la pizarra,
+    // también el equivalente en USD.
     const RUBROS_FLETE = [
       ['mano_obra', 'Mano de obra'],
       ['combustibles', 'Combustibles'],
@@ -2986,13 +2987,13 @@
     }
 
     async function cargarFlete() {
-      const [{ data: filas, error: errorFilas }, { data: config, error: errorConfig }] = await Promise.all([
+      const [{ data: filas, error: errorFilas }, { data: historialRubros, error: errorRubros }] = await Promise.all([
         window.supabaseClient.from('flete_simulaciones').select('*').order('creado_at', { ascending: false }),
-        window.supabaseClient.from('flete_costos_rubro').select('*').eq('id', 'default').maybeSingle(),
+        window.supabaseClient.from('flete_costos_rubro_historial').select('*').order('creado_at', { ascending: false }).limit(1),
       ]);
       if (errorFilas) { console.error('No se pudieron cargar las simulaciones de flete:', errorFilas); return; }
       fleteFilas = filas || [];
-      if (!errorConfig && config) fleteRubros = config;
+      if (!errorRubros && historialRubros && historialRubros.length) fleteRubros = historialRubros[0];
       renderConfigRubrosFlete();
       renderFlete();
     }
@@ -3005,24 +3006,46 @@
           <input type="number" step="0.01" id="fleteRubro_${clave}" value="${fleteRubros[clave] || 0}" style="width:100px;">
         </label>
       `).join('');
-      document.getElementById('fleteRubrosTotal').textContent = formatoNumero(totalRubrosPorKm());
+      document.getElementById('fleteRubrosTotalArs').textContent = formatoNumero(totalRubrosPorKm());
+      document.getElementById('fleteRubrosTotalUsd').textContent = fleteRubros.total_usd
+        ? `(USD ${fleteRubros.total_usd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /km al TC ${fleteRubros.dolar_bna})`
+        : '';
+    }
+
+    // Dólar de referencia: reusa tcDatos (ya cargado por cargarTC() al
+    // abrir la app) para no pegarle a la API de nuevo — mismo criterio que
+    // usarTcEnFormulario(). Si todavía no cargó, intenta una vez más.
+    async function dolarBnaActual() {
+      if (!tcDatos.oficial) await cargarTC();
+      const d = tcDatos.oficial;
+      if (!d) return null;
+      const compra = parseFloat(d.compra) || 0;
+      const venta = parseFloat(d.venta) || 0;
+      return compra && venta ? (compra + venta) / 2 : venta || compra || null;
     }
 
     async function guardarRubrosFlete() {
-      const nuevo = { id: 'default' };
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) return;
+      const nuevo = { usuario_id: session.user.id };
       for (const [clave] of RUBROS_FLETE) {
         nuevo[clave] = parseFloat(document.getElementById('fleteRubro_' + clave).value) || 0;
       }
-      const { error } = await window.supabaseClient.from('flete_costos_rubro').upsert(nuevo);
+      nuevo.total_ars = +RUBROS_FLETE.reduce((suma, [clave]) => suma + nuevo[clave], 0).toFixed(2);
+      const dolar = await dolarBnaActual();
+      nuevo.dolar_bna = dolar;
+      nuevo.total_usd = dolar ? +(nuevo.total_ars / dolar).toFixed(4) : null;
+
+      const { error } = await window.supabaseClient.from('flete_costos_rubro_historial').insert(nuevo);
       if (error) { alert('No se pudo guardar: ' + error.message); return; }
       fleteRubros = nuevo;
-      document.getElementById('fleteRubrosTotal').textContent = formatoNumero(totalRubrosPorKm());
+      renderConfigRubrosFlete();
       renderFlete(); // recalcula las filas que estén en modo 'rubros'
     }
 
     // Foto de los rubros usados en este momento para una fila en modo
     // 'rubros' — así el número guardado no cambia solo si más adelante se
-    // actualiza flete_costos_rubro (ver comentario de componentes_costo).
+    // guarda un registro nuevo en flete_costos_rubro_historial.
     function snapshotComponentesCosto(fila) {
       const kmTotal = (Number(fila.km_corto) || 0) + (Number(fila.km_largo) || 0);
       const porKm = totalRubrosPorKm();
@@ -3038,46 +3061,55 @@
       return tarifa * (Number(f.costo_flete_pct) || 0) / 100;
     }
 
+    // Tabla "a lo largo" (una columna por simulación, como tablaNegocios de
+    // COMPRA/VENTA) en vez de una fila ancha por simulación — más cómodo en
+    // el celular. Cliente es de solo lectura (viene de la alternativa de
+    // origen, no tiene sentido renombrarlo acá); todo lo demás es editable.
+    function inputTextoFlete(f, campo, ancho) {
+      return `<input type="text" value="${f[campo] || ''}" style="width:${ancho}px;" data-id="${f.id}" data-campo="${campo}" onchange="actualizarCampoFlete(this)">`;
+    }
+    function inputNumeroFlete(f, campo, ancho) {
+      return `<input type="number" value="${f[campo] ?? ''}" style="width:${ancho}px;" data-id="${f.id}" data-campo="${campo}" onchange="actualizarCampoFlete(this)">`;
+    }
+
     function renderFlete() {
+      const theadRow = document.getElementById('fleteHeaderRow');
       const tbody = document.getElementById('tablaFleteBody');
       if (!fleteFilas.length) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#888;">Todavía no trajiste ninguna alternativa. Andá a COMPRA y tocá el botón 🚚 de la que quieras comparar.</td></tr>';
+        theadRow.innerHTML = '<th></th>';
+        tbody.innerHTML = '<tr><td style="text-align:center;color:#888;padding:14px;">Todavía no trajiste ninguna alternativa. Andá a COMPRA y tocá el botón 🚚 de la que quieras comparar.</td></tr>';
         return;
       }
-      tbody.innerHTML = '';
-      for (const f of fleteFilas) {
-        const modo = f.modo_costo || 'pct';
-        const costoFlete = costoFleteDeFila(f);
-        const ganancia = (Number(f.precio_bruto) || 0) - (Number(f.precio_productor) || 0) - costoFlete;
-        const inputTexto = (campo, valor, ancho) =>
-          `<input type="text" value="${valor || ''}" style="width:${ancho}px;" data-id="${f.id}" data-campo="${campo}" onchange="actualizarCampoFlete(this)">`;
-        const inputNumero = (campo, valor, ancho) =>
-          `<input type="number" value="${valor ?? ''}" style="width:${ancho}px;" data-id="${f.id}" data-campo="${campo}" onchange="actualizarCampoFlete(this)">`;
-        const detalle = modo === 'rubros'
-          ? `KM corto ${inputNumero('km_corto', f.km_corto, 55)}<br>KM largo ${inputNumero('km_largo', f.km_largo, 55)}`
-          : `${inputNumero('costo_flete_pct', f.costo_flete_pct, 55)}%`;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${inputTexto('cliente', f.cliente, 110)}</td>
-          <td>${inputTexto('producto', f.producto, 80)}</td>
-          <td>${inputTexto('destino', f.destino, 100)}</td>
-          <td>${inputNumero('precio_bruto', f.precio_bruto, 100)}</td>
-          <td>${inputNumero('precio_productor', f.precio_productor, 100)}</td>
-          <td>${inputNumero('flete_corto', f.flete_corto, 90)}</td>
-          <td>${inputNumero('flete_largo', f.flete_largo, 90)}</td>
-          <td>
-            <select data-id="${f.id}" onchange="cambiarModoCostoFlete(this)">
-              <option value="pct" ${modo === 'pct' ? 'selected' : ''}>% de tarifa</option>
-              <option value="rubros" ${modo === 'rubros' ? 'selected' : ''}>Costo real $/km</option>
-            </select>
-          </td>
-          <td>${detalle}</td>
-          <td>${formatoNumero(costoFlete)}</td>
-          <td><strong>${formatoNumero(ganancia)}</strong></td>
-          <td><button type="button" data-id="${f.id}" onclick="eliminarFilaFlete(this.dataset.id)">🗑️</button></td>
-        `;
-        tbody.appendChild(tr);
-      }
+
+      theadRow.innerHTML = '<th></th>' + fleteFilas.map((f, i) =>
+        `<th>Simulación ${i + 1}<br><button type="button" data-id="${f.id}" onclick="eliminarFilaFlete(this.dataset.id)" style="margin-top:4px;">🗑️</button></th>`
+      ).join('');
+
+      const filasTabla = [
+        ['Cliente', f => f.cliente || '-'],
+        ['Producto', f => inputTextoFlete(f, 'producto', 80)],
+        ['Destino', f => inputTextoFlete(f, 'destino', 100)],
+        ['Precio Bruto', f => inputNumeroFlete(f, 'precio_bruto', 100)],
+        ['Precio a Productor', f => inputNumeroFlete(f, 'precio_productor', 100)],
+        ['KM Flete Corto', f => inputNumeroFlete(f, 'km_corto', 70)],
+        ['Flete Corto $', f => inputNumeroFlete(f, 'flete_corto', 90)],
+        ['KM Flete Largo', f => inputNumeroFlete(f, 'km_largo', 70)],
+        ['Flete Largo $', f => inputNumeroFlete(f, 'flete_largo', 90)],
+        ['Modo de Costo', f => `
+          <select data-id="${f.id}" onchange="cambiarModoCostoFlete(this)">
+            <option value="pct" ${(f.modo_costo || 'pct') === 'pct' ? 'selected' : ''}>% de tarifa</option>
+            <option value="rubros" ${f.modo_costo === 'rubros' ? 'selected' : ''}>Costo real $/km</option>
+          </select>`],
+        ['Costo Flete %', f => (f.modo_costo === 'rubros')
+          ? '<span style="color:#888;font-size:0.85em;">usa el costo real por km de arriba</span>'
+          : inputNumeroFlete(f, 'costo_flete_pct', 55) + '%'],
+        ['Costo Flete $', f => formatoNumero(costoFleteDeFila(f))],
+        ['Ganancia Agro', f => `<strong>${formatoNumero((Number(f.precio_bruto) || 0) - (Number(f.precio_productor) || 0) - costoFleteDeFila(f))}</strong>`],
+      ];
+
+      tbody.innerHTML = filasTabla.map(([etiqueta, celda]) =>
+        `<tr><td><strong>${etiqueta}</strong></td>${fleteFilas.map(f => `<td>${celda(f)}</td>`).join('')}</tr>`
+      ).join('');
     }
 
     const CAMPOS_TEXTO_FLETE = ['cliente', 'producto', 'destino'];
@@ -3090,7 +3122,17 @@
       if (!fila) return;
       fila[campo] = valor;
       const cambios = { [campo]: valor };
-      // Si se toca el km en modo 'rubros', re-congelar la foto de costos.
+      // Cargar KM trae solo el flete corto/largo automáticamente (misma
+      // tarifa por km que usa COMPRA/VENTA) — se puede seguir corrigiendo
+      // a mano después si hace falta.
+      if (campo === 'km_corto') {
+        fila.flete_corto = +obtenerTarifaPorKm(parseInt(valor) || 0).toFixed(2);
+        cambios.flete_corto = fila.flete_corto;
+      }
+      if (campo === 'km_largo') {
+        fila.flete_largo = +obtenerTarifaPorKm(parseInt(valor) || 0).toFixed(2);
+        cambios.flete_largo = fila.flete_largo;
+      }
       if ((campo === 'km_corto' || campo === 'km_largo') && fila.modo_costo === 'rubros') {
         cambios.componentes_costo = snapshotComponentesCosto(fila);
       }
@@ -3117,6 +3159,16 @@
       const { error } = await window.supabaseClient.from('flete_simulaciones').delete().eq('id', id);
       if (error) { alert('No se pudo eliminar: ' + error.message); return; }
       fleteFilas = fleteFilas.filter(f => f.id !== id);
+      renderFlete();
+    }
+
+    async function vaciarTablaFlete() {
+      if (!fleteFilas.length) return;
+      if (!confirm('¿Vaciar todas las simulaciones de Flete? No se puede deshacer.')) return;
+      const ids = fleteFilas.map(f => f.id);
+      const { error } = await window.supabaseClient.from('flete_simulaciones').delete().in('id', ids);
+      if (error) { alert('No se pudo vaciar: ' + error.message); return; }
+      fleteFilas = [];
       renderFlete();
     }
 
