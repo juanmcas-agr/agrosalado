@@ -758,6 +758,8 @@ create table flete_simulaciones (
   km_largo numeric,
   flete_corto numeric,
   flete_largo numeric,
+  desc_corto numeric not null default 0,
+  desc_largo numeric not null default 0,
   modo_costo text not null default 'pct' check (modo_costo in ('pct', 'rubros')),
   costo_flete_pct numeric not null default 75,
   componentes_costo jsonb,
@@ -788,7 +790,11 @@ create policy flete_simulaciones_delete on flete_simulaciones for delete to auth
 create table flete_costos_rubro_historial (
   id uuid primary key default gen_random_uuid(),
   usuario_id uuid not null references auth.users(id),
-  mano_obra numeric not null default 0,
+  -- Mano de obra puede cargarse como valor fijo ($/km) o como % de la
+  -- tarifa pagada de cada viaje (default: 16% de la tarifa) — a diferencia
+  -- del resto de los rubros, que siempre son $/km fijo.
+  mano_obra_modo text not null default 'pct' check (mano_obra_modo in ('fijo', 'pct')),
+  mano_obra numeric not null default 16,
   combustibles numeric not null default 0,
   neumaticos numeric not null default 0,
   mantenimiento numeric not null default 0,

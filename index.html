@@ -2954,6 +2954,8 @@
         km_largo: kmLargo || null,
         flete_corto: +fleteCorto.toFixed(2),
         flete_largo: +fleteLargo.toFixed(2),
+        desc_corto: descCorto,
+        desc_largo: descLargo,
       });
       if (error) { alert('No se pudo traer a Flete: ' + error.message); return; }
       alert('✅ Traída a la pestaña 🚚 FLETE.');
@@ -2969,8 +2971,12 @@
     // puede comparar en el tiempo qué tan competitiva es la tarifa — se
     // guarda en ARS y, si hay cotización de dólar cargada en la pizarra,
     // también el equivalente en USD.
-    const RUBROS_FLETE = [
-      ['mano_obra', 'Mano de obra'],
+    //
+    // Mano de obra es distinta al resto: no siempre es un $/km fijo, se
+    // suele pactar como % de la tarifa pagada de cada viaje (default 16%)
+    // — por eso se calcula por fila (necesita la tarifa de ESA fila), a
+    // diferencia de los demás rubros que son un $/km fijo y compartido.
+    const RUBROS_FLETE_FIJOS = [
       ['combustibles', 'Combustibles'],
       ['neumaticos', 'Neumáticos'],
       ['mantenimiento', 'Mantenimiento'],
@@ -2982,8 +2988,15 @@
     ];
     let fleteRubros = {};
 
-    function totalRubrosPorKm() {
-      return RUBROS_FLETE.reduce((suma, [clave]) => suma + (Number(fleteRubros[clave]) || 0), 0);
+    function totalRubrosFijosPorKm() {
+      return RUBROS_FLETE_FIJOS.reduce((suma, [clave]) => suma + (Number(fleteRubros[clave]) || 0), 0);
+    }
+
+    // kmTotal y tarifaFila son de la fila de FLETE que se esté calculando.
+    function montoManoObra(kmTotal, tarifaFila) {
+      const valor = Number(fleteRubros.mano_obra) || 0;
+      if ((fleteRubros.mano_obra_modo || 'pct') === 'fijo') return valor * kmTotal;
+      return tarifaFila * valor / 100;
     }
 
     async function cargarFlete() {
@@ -3000,15 +3013,35 @@
 
     function renderConfigRubrosFlete() {
       const cont = document.getElementById('fleteRubrosForm');
-      cont.innerHTML = RUBROS_FLETE.map(([clave, etiqueta]) => `
+      const manoObraModo = fleteRubros.mano_obra_modo || 'pct';
+      const manoObraValor = fleteRubros.mano_obra ?? 16;
+      const manoObraHtml = `
+        <label style="display:flex;flex-direction:column;font-size:0.75em;">
+          Mano de obra
+          <select id="fleteManoObraModo" style="margin-bottom:2px;" onchange="document.getElementById('fleteManoObraSufijo').textContent = this.value === 'pct' ? '% de la tarifa' : '$/km';">
+            <option value="pct" ${manoObraModo === 'pct' ? 'selected' : ''}>% de la tarifa pagada</option>
+            <option value="fijo" ${manoObraModo === 'fijo' ? 'selected' : ''}>Valor fijo</option>
+          </select>
+          <div style="display:flex;align-items:center;gap:4px;">
+            <input type="number" step="0.01" id="fleteRubro_mano_obra" value="${manoObraValor}" style="width:70px;">
+            <span id="fleteManoObraSufijo" style="font-size:0.85em;color:#666;">${manoObraModo === 'pct' ? '% de la tarifa' : '$/km'}</span>
+          </div>
+        </label>`;
+      const restoHtml = RUBROS_FLETE_FIJOS.map(([clave, etiqueta]) => `
         <label style="display:flex;flex-direction:column;font-size:0.75em;">
           ${etiqueta}
           <input type="number" step="0.01" id="fleteRubro_${clave}" value="${fleteRubros[clave] || 0}" style="width:100px;">
         </label>
       `).join('');
-      document.getElementById('fleteRubrosTotalArs').textContent = formatoNumero(totalRubrosPorKm());
+      cont.innerHTML = manoObraHtml + restoHtml;
+
+      const totalFijo = totalRubrosFijosPorKm();
+      const notaManoObra = manoObraModo === 'fijo'
+        ? formatoNumero(totalFijo + manoObraValor)
+        : `${formatoNumero(totalFijo)} + mano de obra: ${manoObraValor}% de la tarifa de cada viaje`;
+      document.getElementById('fleteRubrosTotalArs').textContent = notaManoObra;
       document.getElementById('fleteRubrosTotalUsd').textContent = fleteRubros.total_usd
-        ? `(USD ${fleteRubros.total_usd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /km al TC ${fleteRubros.dolar_bna})`
+        ? `(rubros fijos: USD ${fleteRubros.total_usd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /km al TC ${fleteRubros.dolar_bna})`
         : '';
     }
 
@@ -3028,10 +3061,16 @@
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       if (!session) return;
       const nuevo = { usuario_id: session.user.id };
-      for (const [clave] of RUBROS_FLETE) {
+      for (const [clave] of RUBROS_FLETE_FIJOS) {
         nuevo[clave] = parseFloat(document.getElementById('fleteRubro_' + clave).value) || 0;
       }
-      nuevo.total_ars = +RUBROS_FLETE.reduce((suma, [clave]) => suma + nuevo[clave], 0).toFixed(2);
+      nuevo.mano_obra_modo = document.getElementById('fleteManoObraModo').value;
+      nuevo.mano_obra = parseFloat(document.getElementById('fleteRubro_mano_obra').value) || 0;
+      // total_ars es solo la suma de los rubros de $/km fijo — si mano de
+      // obra está en modo "% de la tarifa", no es un $/km fijo y no se
+      // puede sumar acá (se calcula por viaje, ver montoManoObra()).
+      const totalFijo = +RUBROS_FLETE_FIJOS.reduce((suma, [clave]) => suma + nuevo[clave], 0).toFixed(2);
+      nuevo.total_ars = nuevo.mano_obra_modo === 'fijo' ? +(totalFijo + nuevo.mano_obra).toFixed(2) : totalFijo;
       const dolar = await dolarBnaActual();
       nuevo.dolar_bna = dolar;
       nuevo.total_usd = dolar ? +(nuevo.total_ars / dolar).toFixed(4) : null;
@@ -3048,14 +3087,24 @@
     // guarda un registro nuevo en flete_costos_rubro_historial.
     function snapshotComponentesCosto(fila) {
       const kmTotal = (Number(fila.km_corto) || 0) + (Number(fila.km_largo) || 0);
-      const porKm = totalRubrosPorKm();
-      return { ...fleteRubros, total_por_km: porKm, km_total: kmTotal, costo_total: +(porKm * kmTotal).toFixed(2) };
+      const tarifaFila = (Number(fila.flete_corto) || 0) + (Number(fila.flete_largo) || 0);
+      const fijoPorKm = totalRubrosFijosPorKm();
+      const manoObra = montoManoObra(kmTotal, tarifaFila);
+      return {
+        ...fleteRubros,
+        km_total: kmTotal,
+        tarifa_fila: tarifaFila,
+        fijo_por_km: fijoPorKm,
+        mano_obra_monto: +manoObra.toFixed(2),
+        costo_total: +(fijoPorKm * kmTotal + manoObra).toFixed(2),
+      };
     }
 
     function costoFleteDeFila(f) {
       if (f.modo_costo === 'rubros') {
         const kmTotal = (Number(f.km_corto) || 0) + (Number(f.km_largo) || 0);
-        return totalRubrosPorKm() * kmTotal;
+        const tarifaFila = (Number(f.flete_corto) || 0) + (Number(f.flete_largo) || 0);
+        return totalRubrosFijosPorKm() * kmTotal + montoManoObra(kmTotal, tarifaFila);
       }
       const tarifa = (Number(f.flete_corto) || 0) + (Number(f.flete_largo) || 0);
       return tarifa * (Number(f.costo_flete_pct) || 0) / 100;
@@ -3092,9 +3141,9 @@
         ['Precio Bruto', f => inputNumeroFlete(f, 'precio_bruto', 100)],
         ['Precio a Productor', f => inputNumeroFlete(f, 'precio_productor', 100)],
         ['KM Flete Corto', f => inputNumeroFlete(f, 'km_corto', 70)],
-        ['Flete Corto $', f => inputNumeroFlete(f, 'flete_corto', 90)],
+        ['Flete Corto $', f => celdaFleteConDescuento(f, 'flete_corto', 'desc_corto')],
         ['KM Flete Largo', f => inputNumeroFlete(f, 'km_largo', 70)],
-        ['Flete Largo $', f => inputNumeroFlete(f, 'flete_largo', 90)],
+        ['Flete Largo $', f => celdaFleteConDescuento(f, 'flete_largo', 'desc_largo')],
         ['Modo de Costo', f => `
           <select data-id="${f.id}" onchange="cambiarModoCostoFlete(this)">
             <option value="pct" ${(f.modo_costo || 'pct') === 'pct' ? 'selected' : ''}>% de tarifa</option>
@@ -3114,6 +3163,50 @@
 
     const CAMPOS_TEXTO_FLETE = ['cliente', 'producto', 'destino'];
 
+    // Flete Corto $ / Flete Largo $ no se tipean directo — se recalculan
+    // siempre desde la tarifa por km con un % de bonificación, mismo
+    // criterio que "Flete Corto"/"Flete Largo" en COMPRA/VENTA.
+    function recalcularFleteDeFila(fila) {
+      fila.flete_corto = +(obtenerTarifaPorKm(parseInt(fila.km_corto) || 0) * (1 - (Number(fila.desc_corto) || 0) / 100)).toFixed(2);
+      fila.flete_largo = +(obtenerTarifaPorKm(parseInt(fila.km_largo) || 0) * (1 - (Number(fila.desc_largo) || 0) / 100)).toFixed(2);
+    }
+
+    // Celda clickeable tipo COMPRA: muestra el $ (con "(-X%)" si hay
+    // bonificación) y al tocarla abre un input de "Descuento %".
+    let fleteEditandoDesc = null; // { id, campo: 'desc_corto' | 'desc_largo' }
+
+    function celdaFleteConDescuento(f, campoFlete, campoDesc) {
+      if (fleteEditandoDesc && fleteEditandoDesc.id === f.id && fleteEditandoDesc.campo === campoDesc) {
+        return `<input type="number" placeholder="Descuento %" value="${f[campoDesc] || 0}" style="width:80px;" data-id="${f.id}" data-campo="${campoDesc}" onchange="confirmarDescuentoFlete(this)">`;
+      }
+      const desc = Number(f[campoDesc]) || 0;
+      const sufijo = desc > 0 ? `<br><small>(-${desc}%)</small>` : '';
+      return `<span class="editable" style="cursor:pointer;text-decoration:underline dotted;" data-id="${f.id}" data-campo="${campoDesc}" onclick="abrirEditorDescuentoFlete(this)">${formatoNumero(Number(f[campoFlete]) || 0)}${sufijo}</span>`;
+    }
+
+    function abrirEditorDescuentoFlete(span) {
+      fleteEditandoDesc = { id: span.dataset.id, campo: span.dataset.campo };
+      renderFlete();
+      const input = document.querySelector(`input[data-id="${fleteEditandoDesc.id}"][data-campo="${fleteEditandoDesc.campo}"]`);
+      if (input) { input.focus(); input.select(); }
+    }
+
+    async function confirmarDescuentoFlete(input) {
+      const id = input.dataset.id;
+      const campo = input.dataset.campo;
+      const valor = parseFloat(input.value) || 0;
+      const fila = fleteFilas.find(f => f.id === id);
+      fleteEditandoDesc = null;
+      if (!fila) { renderFlete(); return; }
+      fila[campo] = valor;
+      recalcularFleteDeFila(fila);
+      const cambios = { [campo]: valor, flete_corto: fila.flete_corto, flete_largo: fila.flete_largo };
+      if (fila.modo_costo === 'rubros') cambios.componentes_costo = snapshotComponentesCosto(fila);
+      renderFlete();
+      const { error } = await window.supabaseClient.from('flete_simulaciones').update(cambios).eq('id', id);
+      if (error) alert('No se pudo guardar: ' + error.message);
+    }
+
     async function actualizarCampoFlete(input) {
       const id = input.dataset.id;
       const campo = input.dataset.campo;
@@ -3122,15 +3215,11 @@
       if (!fila) return;
       fila[campo] = valor;
       const cambios = { [campo]: valor };
-      // Cargar KM trae solo el flete corto/largo automáticamente (misma
-      // tarifa por km que usa COMPRA/VENTA) — se puede seguir corrigiendo
-      // a mano después si hace falta.
-      if (campo === 'km_corto') {
-        fila.flete_corto = +obtenerTarifaPorKm(parseInt(valor) || 0).toFixed(2);
+      // Cargar KM recalcula el flete corto/largo con la bonificación % que
+      // ya tenga cargada esa fila (misma tarifa por km que COMPRA/VENTA).
+      if (campo === 'km_corto' || campo === 'km_largo') {
+        recalcularFleteDeFila(fila);
         cambios.flete_corto = fila.flete_corto;
-      }
-      if (campo === 'km_largo') {
-        fila.flete_largo = +obtenerTarifaPorKm(parseInt(valor) || 0).toFixed(2);
         cambios.flete_largo = fila.flete_largo;
       }
       if ((campo === 'km_corto' || campo === 'km_largo') && fila.modo_costo === 'rubros') {
