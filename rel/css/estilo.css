@@ -353,7 +353,8 @@ button:active { filter: brightness(0.9); }
   width: 100%; max-width: 640px; max-height: 85vh; overflow-y: auto;
   box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
-.modal-drill-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.modal-drill-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap: 8px; }
+.modal-drill-header-botones { display: flex; gap: 8px; flex-shrink: 0; }
 .modal-drill-header h3 { margin: 0; font-size: 1em; color: #1d5236; }
 .drill-periodos { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
 .drill-periodo-btn {

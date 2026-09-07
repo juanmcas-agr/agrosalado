@@ -851,6 +851,14 @@ function cerrarDrillDown() {
   el('modalDrillDown').classList.remove('abierto');
 }
 
+// Muestra la misma relación al revés (ej. Novillo÷Trigo -> Trigo÷Novillo)
+// sin cerrar el modal — conserva el período/rango/modo elegidos.
+function invertirDrillDown() {
+  [drillActualA, drillActualB] = [drillActualB, drillActualA];
+  renderDrillDown();
+  renderAlertaPanel();
+}
+
 // Dispara las funciones de scraping/snapshot manualmente, sin esperar al
 // cron nocturno — mismo resultado que dejar que corran solas, solo que
 // ahora mismo. Cada una guarda directo en la base con service role, así
@@ -913,6 +921,7 @@ export async function initMatriz() {
   el('drillCerrar').addEventListener('click', cerrarDrillDown);
   el('modalDrillDownFondo').addEventListener('click', cerrarDrillDown);
   el('drillSpotPeriodo').addEventListener('change', renderDrillDown);
+  el('drillInvertir').addEventListener('click', invertirDrillDown);
 
   document.querySelectorAll('.matriz-modo-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
