@@ -306,7 +306,7 @@ function renderMatriz() {
   const leyendaFecha = esInstantanea
     ? `Datos al ${formatearFecha(matrizFechaSeleccionada)}`
     : `Promedio de ${formatearMes(matrizMesSeleccionado)}`;
-  tabla.innerHTML = `<caption>${leyendaFecha}. Fila ÷ columna — dividí por "$ Pesos" o "U$ BNA" para ver el precio nominal en pesos o dólares.</caption>${theadHtml}${tbodyHtml}`;
+  tabla.innerHTML = `<caption>${leyendaFecha}.</caption>${theadHtml}${tbodyHtml}`;
 
   tabla.querySelectorAll('.celda-ratio').forEach((celda) => {
     celda.addEventListener('click', () => abrirDrillDown(celda.dataset.a, celda.dataset.b));
