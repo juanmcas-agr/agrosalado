@@ -1,0 +1,233 @@
+* { box-sizing: border-box; }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f2f2f2;
+  color: #2c3e50;
+}
+
+/* Fondo fijo real (background-attachment:fixed no funciona en iOS Safari) */
+.fondo-fijo {
+  position: fixed; inset: 0; z-index: -1;
+  background: linear-gradient(rgba(242,242,242,0.55), rgba(242,242,242,0.55)),
+              url('/assets/fondo-login.jpg') center top/cover no-repeat;
+}
+
+/* Layout en columna (en vez de position:fixed, poco confiable en iOS
+   Safari/PWA instalada) para que la barra inferior quede siempre pegada
+   abajo sin que el scroll la tape ni la desplace. */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  height: 100dvh;
+}
+.app-scroll {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 12px;
+}
+
+/* ── TAB BAR INFERIOR (Granos / Hacienda / Pos. Granaria / $Rel) ── */
+.tab-bar-inferior {
+  flex-shrink: 0;
+  display: flex;
+  background: white;
+  box-shadow: 0 -1px 6px rgba(0,0,0,0.12);
+  z-index: 500;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.tab-bar-inferior button {
+  flex: 1;
+  width: auto;
+  background: white;
+  color: #6c757d;
+  border: none;
+  border-radius: 0;
+  padding: 8px 4px 7px;
+  font-size: 0.75em;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+.tab-bar-inferior button .tab-icono { font-size: 1.3em; }
+.tab-bar-inferior button.activo { color: #8a5a34; font-weight: bold; }
+.tab-bar-inferior button:disabled { cursor: default; }
+
+/* ── Panel de Configuración ── */
+.tab-bar-inferior button.tab-config {
+  flex: 0 0 44px;
+  color: #adb5bd;
+}
+.tab-bar-inferior button.tab-config svg { width: 22px; height: 22px; }
+
+.toast {
+  position: fixed; left: 50%; bottom: 90px;
+  transform: translate(-50%, 10px);
+  background: #2c3e50; color: white;
+  padding: 10px 18px; border-radius: 20px;
+  font-size: 0.9em; font-weight: bold;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  z-index: 950; pointer-events: none;
+  opacity: 0; transition: opacity 0.25s ease, transform 0.25s ease;
+}
+.toast.visible { opacity: 1; transform: translate(-50%, 0); }
+
+h1, h2, h3 { color: #2c3e50; }
+h1 { text-align: center; font-size: 1.4em; }
+h2 { font-size: 1.15em; margin: 14px 0 8px; }
+h3 { font-size: 1em; margin: 14px 0 6px; }
+
+.oculto { display: none !important; }
+
+/* ─── formularios ─── */
+.formulario {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+  background: white;
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  margin-bottom: 14px;
+}
+
+.formulario label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+}
+
+.formulario input,
+.formulario select,
+.formulario textarea {
+  font-size: 16px; /* evita zoom en iPhone */
+  height: 44px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  width: 100%;
+  max-width: 100%;
+  background: white;
+  -webkit-appearance: none;
+  appearance: none;
+  box-sizing: border-box;
+}
+
+.formulario select { -webkit-appearance: auto; appearance: auto; }
+
+.formulario input[type="date"] {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.formulario textarea { height: auto; }
+
+.formulario input:focus,
+.formulario select:focus,
+.formulario textarea:focus {
+  outline: none;
+  border-color: #8a5a34;
+  box-shadow: 0 0 0 2px rgba(138,90,52,0.15);
+}
+
+.formulario .full { grid-column: 1 / -1; }
+
+.campo-password { position: relative; }
+.campo-password input { padding-right: 46px; }
+.boton-mostrar-clave {
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: transparent; color: #555;
+  border: none; padding: 0; font-size: 1.25em;
+  cursor: pointer;
+}
+
+button {
+  background-color: #8a5a34; color: white;
+  border: none; cursor: pointer;
+  border-radius: 6px; padding: 12px;
+  font-size: 1em;
+}
+button:active { filter: brightness(0.9); }
+
+.boton-secundario {
+  background-color: #6c757d;
+  margin-bottom: 10px;
+}
+
+/* ─── mensajes / banners ─── */
+.mensaje { font-size: 0.9em; min-height: 1.2em; margin: 4px 0; }
+.mensaje.error { color: #ad1e19; font-weight: bold; }
+.mensaje.ok { color: #1e7e34; font-weight: bold; }
+.mensaje.advertencia { color: #8a6100; font-weight: bold; }
+
+/* ─── versión ─── */
+.version-footer {
+  position: fixed;
+  left: 6px;
+  bottom: 58px;
+  font-size: 0.7em;
+  color: #999;
+  z-index: 100;
+  pointer-events: none;
+}
+
+/* ─── login ─── */
+.pantalla-login {
+  position: fixed; inset: 0;
+  z-index: 50;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px;
+  padding: 20px;
+  background: linear-gradient(rgba(242,242,242,0.85), rgba(242,242,242,0.85)),
+              url('/assets/fondo-login.jpg') center/cover no-repeat;
+}
+.pantalla-login .login-logo { width: 100%; max-width: 220px; height: auto; display: block; }
+.pantalla-login .formulario { width: 100%; max-width: 320px; box-shadow: 0 2px 12px rgba(0,0,0,0.15); }
+
+/* ─── layout general de la app ─── */
+.encabezado {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+.encabezado .titulo-app {
+  margin: 0;
+  font-size: 1.5em;
+  letter-spacing: 0.04em;
+  color: #1d5236;
+}
+.encabezado-rincon {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+}
+.encabezado-rincon #usuario-nombre {
+  font-size: 0.7em;
+  color: #888;
+}
+
+/* ─── placeholder de pantalla en construcción (M2) ─── */
+.en-construccion {
+  background: white;
+  border-radius: 8px;
+  padding: 30px 16px;
+  text-align: center;
+  color: #888;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}

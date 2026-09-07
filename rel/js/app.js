@@ -1,8 +1,4 @@
 import { initAuth, onAuthChange, iniciarSesion, cerrarSesion, getEstado } from './auth.js';
-import { initSync, onSyncChange, reintentarErrores } from './sync.js';
-import { initMovimientos } from './movimientos.js';
-import { initDashboard } from './dashboard.js';
-import { initHistorial } from './historial.js';
 import { initRouter } from './router.js';
 
 function el(id) {
@@ -11,48 +7,10 @@ function el(id) {
 
 let appIniciada = false;
 
-function iniciarPantallasDeLaApp(rol) {
+function iniciarPantallasDeLaApp() {
   if (appIniciada) return;
   appIniciada = true;
-  initMovimientos();
-  initDashboard();
-  initHistorial();
-  initRouter(rol);
-}
-
-function actualizarBannerSync({ pendientes, conError }) {
-  const banner = el('sync-estado');
-  if (conError) {
-    banner.textContent = `${conError} movimiento(s) con error de sincronización. Tocá para reintentar.`;
-    banner.className = 'banner-sync error clickeable';
-  } else if (pendientes) {
-    banner.textContent = `${pendientes} movimiento(s) pendiente(s) de sincronizar...`;
-    banner.className = 'banner-sync advertencia';
-  } else {
-    banner.textContent = 'Todo sincronizado.';
-    banner.className = 'banner-sync ok';
-  }
-}
-
-let reintentando = false;
-
-function wireSyncBanner() {
-  el('sync-estado').addEventListener('click', async () => {
-    if (reintentando) return;
-    reintentando = true;
-    const banner = el('sync-estado');
-    const original = banner.textContent;
-    banner.textContent = 'Reintentando...';
-    try {
-      const erroresRestantes = await reintentarErrores();
-      if (erroresRestantes.length) {
-        alert('Todavía no se pudieron sincronizar. Error de Supabase:\n\n' + erroresRestantes.join('\n'));
-      }
-    } finally {
-      reintentando = false;
-      if (banner.textContent === 'Reintentando...') banner.textContent = original;
-    }
-  });
+  initRouter();
 }
 
 function mostrarLogin(mensajeError) {
@@ -68,7 +26,7 @@ function mostrarApp(perfil) {
   el('pantalla-login').classList.add('oculto');
   el('app-shell').classList.remove('oculto');
   el('usuario-nombre').textContent = `${perfil.nombre_completo} (${perfil.rol})`;
-  iniciarPantallasDeLaApp(perfil.rol);
+  iniciarPantallasDeLaApp();
 }
 
 function wireTabBar() {
@@ -80,20 +38,20 @@ function wireTabBar() {
     }
     window.location.href = '/';
   });
+  el('tabbar-hacienda').addEventListener('click', () => {
+    const perfil = getEstado().perfil;
+    if (perfil?.rol !== 'owner' && !perfil?.acceso_hacienda) {
+      alert('No tenés permisos para acceder a Hacienda.');
+      return;
+    }
+    window.location.href = '/stock/';
+  });
   el('tabbar-posgranaria').addEventListener('click', () => {
     if (getEstado().perfil?.rol !== 'owner') {
       alert('No tenés permisos para acceder a Pos. Granaria.');
       return;
     }
     alert('Pos. Granaria: próximamente 🚧');
-  });
-  el('tabbar-rel').addEventListener('click', () => {
-    const perfil = getEstado().perfil;
-    if (perfil?.rol !== 'owner' && !perfil?.acceso_precios_relativos) {
-      alert('No tenés permisos para acceder a $Rel.');
-      return;
-    }
-    window.location.href = '/rel/';
   });
 }
 
@@ -144,10 +102,10 @@ function wireAuth() {
       return;
     }
     // Un owner siempre tiene acceso total; para el resto hace falta el
-    // tilde explícito de "Acceso a Hacienda" (Configuración > Administrar
+    // tilde explícito de "Acceso a $Rel" (Configuración > Administrar
     // usuarios, en Granos).
-    if (estado.perfil.rol !== 'owner' && estado.perfil.acceso_hacienda === false) {
-      mostrarLogin('No tenés acceso a Hacienda. Contactá al administrador.');
+    if (estado.perfil.rol !== 'owner' && estado.perfil.acceso_precios_relativos === false) {
+      mostrarLogin('No tenés acceso a $Rel. Contactá al administrador.');
       return;
     }
     mostrarApp(estado.perfil);
@@ -155,8 +113,8 @@ function wireAuth() {
 }
 
 async function main() {
-  // Versión única compartida con Granos: /version.json en la raíz del sitio
-  // (funciona igual desde /stock/ porque es una ruta absoluta).
+  // Versión única compartida con Granos/Hacienda: /version.json en la raíz
+  // del sitio (funciona igual desde /rel/ porque es una ruta absoluta).
   fetch('/version.json').then((r) => r.json()).then((d) => {
     el('version-footer').textContent = `v.${d.version}`;
   }).catch(() => {});
@@ -164,10 +122,7 @@ async function main() {
   wireLogin();
   wireMostrarClave();
   wireAuth();
-  wireSyncBanner();
-  onSyncChange(actualizarBannerSync);
   await initAuth();
-  initSync();
 }
 
 main();

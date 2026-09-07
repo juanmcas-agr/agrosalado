@@ -12,6 +12,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["http-server", ".", "-p", "8081", "-c-1"],
       "port": 8081
+    },
+    {
+      "name": "rel-app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "rel", "-p", "8082", "-c-1"],
+      "port": 8082
     }
   ]
 }

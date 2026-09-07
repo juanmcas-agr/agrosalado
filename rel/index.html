@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGROSALADO $Rel</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="AGROSALADO $Rel">
+  <link rel="apple-touch-icon" href="/assets/icon-512.png">
+  <link rel="icon" href="/assets/icon-64.png">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+
+  <div class="fondo-fijo"></div>
+
+  <div id="version-footer" class="version-footer"></div>
+
+  <div class="app-layout">
+  <div class="app-scroll">
+
+  <!-- ─── LOGIN ─── -->
+  <section id="pantalla-login" class="pantalla-login">
+    <img src="/assets/logo-full.png" alt="AGROSALADO" class="login-logo">
+    <form id="login-form" class="formulario">
+      <input id="login-email" type="email" placeholder="Email" required autocomplete="username">
+      <div class="campo-password">
+        <input id="login-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+        <button type="button" id="login-mostrar-clave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
+      </div>
+      <button type="submit">Ingresar</button>
+      <div id="login-mensaje" class="mensaje"></div>
+    </form>
+  </section>
+
+  <!-- ─── APP ─── -->
+  <div id="app-shell" class="oculto">
+    <header class="encabezado">
+      <h1 class="titulo-app">$REL</h1>
+      <div class="encabezado-rincon">
+        <button id="logout-boton" class="boton-secundario">Salir</button>
+        <span id="usuario-nombre"></span>
+      </div>
+    </header>
+
+    <!-- ─── MATRIZ (placeholder — se completa en M5) ─── -->
+    <section id="pantalla-matriz" data-screen="matriz" class="oculto">
+      <h2>Precios relativos</h2>
+      <div class="en-construccion">En construcción — la matriz de precios llega en la próxima etapa.</div>
+    </section>
+  </div>
+
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <nav class="tab-bar-inferior">
+    <button type="button" id="tabbar-granos"><span class="tab-icono">🌾</span> Granos</button>
+    <button type="button" id="tabbar-hacienda"><span class="tab-icono">🐄</span> Hacienda</button>
+    <button type="button" id="tabbar-posgranaria"><span class="tab-icono">📈</span> Pos. Granaria</button>
+    <button type="button" class="activo" disabled><span class="tab-icono">💹</span> $Rel</button>
+  </nav>
+
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
