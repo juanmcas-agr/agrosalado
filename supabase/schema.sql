@@ -73,6 +73,57 @@ insert into tipos_movimiento
   ('cambio_titular',      'Cambio de titularidad',              'interna', true,  true,  true,  true,  true,  true,  10),
   ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  false, true,  11);
 
+-- ─── Rodeos ─────────────────────────────────────────────────────────────
+-- Un rodeo es el grupo real de animales que se trackea como unidad (nace,
+-- engorda, se mueve de establecimiento, va a feed lot, se vende). Toda la
+-- reforma de Hacienda (rodeos/feed lot/trabajo de manga) gira en torno a
+-- esto — a partir de ahora todo movimiento de stock exige un rodeo_id.
+
+-- Secuencia del código del rodeo, POR AÑO (reinicia a 01 cada año nuevo).
+-- Función atómica (security definer) para que dos altas simultáneas no
+-- puedan pisarse el mismo número — mismo criterio que
+-- siguiente_numero_orden() de Granos, pero parametrizada por año en vez
+-- de una sequence global.
+create table rodeo_secuencias (
+  anio int primary key,
+  ultimo int not null default 0
+);
+
+create or replace function siguiente_secuencia_rodeo(p_anio int) returns int
+language plpgsql security definer as $$
+declare
+  v_valor int;
+begin
+  insert into rodeo_secuencias (anio, ultimo) values (p_anio, 1)
+  on conflict (anio) do update set ultimo = rodeo_secuencias.ultimo + 1
+  returning ultimo into v_valor;
+  return v_valor;
+end;
+$$;
+
+grant execute on function siguiente_secuencia_rodeo(int) to authenticated;
+
+create table rodeos (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  anio int not null,
+  secuencia int not null,
+  codigo text not null unique,           -- ej. "Vaquillona San Miguel 202601"
+  categoria_id text not null references categorias(id),
+  establecimiento_id text not null references establecimientos(id),
+  corral text check (corral in ('1', '2', '3', '4')),  -- solo aplica en feed_lot
+  fecha_creacion date not null default current_date,
+  activo boolean not null default true,  -- false cuando el rodeo se vació del todo
+  creado_por uuid not null references auth.users(id),
+  creado_at timestamptz not null default now()
+);
+
+alter table rodeos enable row level security;
+
+create policy rodeos_select on rodeos for select to authenticated using (true);
+create policy rodeos_insert on rodeos for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner') and creado_por = auth.uid());
+
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
 create table perfiles (
@@ -103,7 +154,7 @@ create table movimientos (
   cantidad_cabezas integer not null check (cantidad_cabezas > 0),
   kilos_promedio numeric(6,2) not null check (kilos_promedio > 0),
   usuario_id uuid not null references auth.users(id),
-  rodeo text,
+  rodeo_id uuid not null references rodeos(id),
   observaciones text,
   created_at timestamptz not null default now(),
   anulado boolean not null default false,
@@ -274,7 +325,8 @@ create view historial_movimientos as
     m.categoria_destino, cd.nombre as categoria_destino_nombre,
     m.titular_origen, tio.nombre as titular_origen_nombre,
     m.titular_destino, tid.nombre as titular_destino_nombre,
-    m.cantidad_cabezas, m.kilos_promedio, m.rodeo, m.observaciones,
+    m.cantidad_cabezas, m.kilos_promedio,
+    m.rodeo_id, r.codigo as rodeo, m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo
   from movimientos m
@@ -285,6 +337,7 @@ create view historial_movimientos as
   left join categorias cd on cd.id = m.categoria_destino
   left join titulares tio on tio.id = m.titular_origen
   left join titulares tid on tid.id = m.titular_destino
+  left join rodeos r on r.id = m.rodeo_id
   left join perfiles p on p.user_id = m.usuario_id
   order by m.fecha desc, m.created_at desc;
 

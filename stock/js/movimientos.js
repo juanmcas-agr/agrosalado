@@ -5,6 +5,7 @@ import {
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
+import { cargarRodeos, rodeosDe, crearRodeo } from './rodeos.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
 const CAMPOS = [
@@ -103,6 +104,83 @@ function limpiarTitular(prefijo) {
   el(`mov-titular-${prefijo}-cap`).value = '';
 }
 
+// ─── rodeo: obligatorio, se filtra por la categoría/establecimiento
+// "relevante" del tipo de movimiento actual ───
+
+// Para la mayoría de los tipos solo hay un lado (origen O destino) por
+// campo; para los que tienen los dos (traslado, cambio_categoria,
+// cambio_titular) el rodeo se identifica por el lado ORIGEN, porque es
+// el rodeo que ya existe y se está moviendo/modificando — el destino se
+// duplica del origen (ver duplicar*EnDestino en config.js).
+function campoRelevante(cfg, base) {
+  return cfg.campos.includes(`${base}_origen`) ? 'origen' : 'destino';
+}
+
+function poblarSelectRodeos() {
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (!cfg) return;
+  const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
+  const establecimientoId = obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
+
+  const select = el('mov-rodeo');
+  const valorPrevio = select.value;
+  select.innerHTML = '';
+  const opcionVacia = document.createElement('option');
+  opcionVacia.value = '';
+  opcionVacia.textContent = 'Elegir...';
+  select.appendChild(opcionVacia);
+
+  if (categoriaId && establecimientoId) {
+    for (const r of rodeosDe(establecimientoId, categoriaId)) {
+      const opt = document.createElement('option');
+      opt.value = r.id;
+      opt.textContent = r.codigo;
+      select.appendChild(opt);
+    }
+  }
+  const opcionNueva = document.createElement('option');
+  opcionNueva.value = '__nuevo__';
+  opcionNueva.textContent = '+ Crear rodeo nuevo...';
+  select.appendChild(opcionNueva);
+
+  if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+}
+
+function inicializarRodeo() {
+  el('mov-rodeo').addEventListener('change', () => {
+    const esNuevo = el('mov-rodeo').value === '__nuevo__';
+    el('mov-rodeo-nuevo-wrap').classList.toggle('oculto', !esNuevo);
+    if (esNuevo) el('mov-rodeo-nuevo-fecha').value = new Date().toISOString().slice(0, 10);
+  });
+
+  el('mov-rodeo-nuevo-crear').addEventListener('click', async () => {
+    const nombre = el('mov-rodeo-nuevo-nombre').value.trim();
+    if (!nombre) { alert('Ingresá un nombre para el rodeo.'); return; }
+    const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+    const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
+    const establecimientoId = obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
+    if (!categoriaId || !establecimientoId) {
+      alert('Elegí primero categoría y establecimiento para poder crear el rodeo.');
+      return;
+    }
+    try {
+      const nuevo = await crearRodeo({
+        nombre,
+        categoriaId,
+        establecimientoId,
+        fechaCreacion: el('mov-rodeo-nuevo-fecha').value || undefined,
+        usuarioId: getEstado().session.user.id,
+      });
+      poblarSelectRodeos();
+      el('mov-rodeo').value = nuevo.id;
+      el('mov-rodeo-nuevo-wrap').classList.add('oculto');
+      el('mov-rodeo-nuevo-nombre').value = '';
+    } catch (error) {
+      alert('No se pudo crear el rodeo: ' + error.message);
+    }
+  });
+}
+
 // ─── formulario ───
 
 function poblarGrupos() {
@@ -132,6 +210,7 @@ function actualizarCamposVisibles() {
     'mov-categoria-destino',
     cfg.categoriasPermitidas ? CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id)) : CATEGORIAS
   );
+  poblarSelectRodeos();
 }
 
 function activarAccesoRapidoFeedLot() {
@@ -156,7 +235,7 @@ function leerFormulario() {
     titular_destino: cfg.campos.includes('titular_destino') ? obtenerTitular('destino') : null,
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
-    rodeo: el('mov-rodeo').value.trim() || null,
+    rodeo_id: el('mov-rodeo').value,
     observaciones: el('mov-observaciones').value.trim() || null,
   };
 }
@@ -174,6 +253,10 @@ function validar(datos) {
 
   for (const campo of datos.cfg.campos) {
     if (!datos[campo]) errores.push('Falta completar un campo obligatorio.');
+  }
+
+  if (!datos.rodeo_id || datos.rodeo_id === '__nuevo__') {
+    errores.push('Elegí un rodeo (o creá uno nuevo con "+ Crear rodeo nuevo...").');
   }
 
   const cabezas = Number(datos.cantidad_cabezas);
@@ -220,7 +303,7 @@ function armarFila(datos) {
     cantidad_cabezas: Number(datos.cantidad_cabezas),
     kilos_promedio: Number(datos.kilos_promedio),
     usuario_id: getEstado().session.user.id,
-    rodeo: datos.rodeo,
+    rodeo_id: datos.rodeo_id,
     observaciones: datos.observaciones,
   };
 }
@@ -248,7 +331,6 @@ function mostrarToast(texto, duracionMs) {
 function resetFormulario() {
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
-  el('mov-rodeo').value = '';
   el('mov-observaciones').value = '';
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('mov-establecimiento-origen');
@@ -256,6 +338,10 @@ function resetFormulario() {
   limpiarSeleccion('mov-categoria-origen');
   limpiarTitular('origen');
   limpiarTitular('destino');
+  el('mov-rodeo-nuevo-wrap').classList.add('oculto');
+  el('mov-rodeo-nuevo-nombre').value = '';
+  // establecerSeleccion dispara 'cambio' -> actualizarCamposVisibles() ->
+  // poblarSelectRodeos(), que ya reconstruye #mov-rodeo vacío.
   establecerSeleccion('mov-tipo', primerTipoPermitido());
 }
 
@@ -282,10 +368,14 @@ async function onSubmit(evento) {
 }
 
 export async function initMovimientos() {
-  await cargarTitulares();
+  await Promise.all([cargarTitulares(), cargarRodeos()]);
   poblarGrupos();
+  inicializarRodeo();
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
+  for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
+    el(id).addEventListener('cambio', poblarSelectRodeos);
+  }
   establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);

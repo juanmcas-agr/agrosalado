@@ -112,9 +112,19 @@
           <input id="mov-kilos" type="number" min="1" step="0.1" required>
         </label>
 
-        <label>Rodeo (opcional)
-          <input id="mov-rodeo" type="text">
-        </label>
+        <div class="campo-grupo full">
+          <div class="etiqueta-grupo">Rodeo</div>
+          <select id="mov-rodeo" required></select>
+          <div id="mov-rodeo-nuevo-wrap" class="oculto" style="margin-top:8px;">
+            <label>Nombre del rodeo nuevo
+              <input id="mov-rodeo-nuevo-nombre" type="text" placeholder="Ej: Vaquillona San Miguel">
+            </label>
+            <label>Fecha de creación
+              <input id="mov-rodeo-nuevo-fecha" type="date">
+            </label>
+            <button type="button" id="mov-rodeo-nuevo-crear" class="boton-secundario">Crear rodeo</button>
+          </div>
+        </div>
 
         <label class="full">Observaciones (opcional)
           <textarea id="mov-observaciones" rows="2"></textarea>
