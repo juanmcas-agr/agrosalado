@@ -44,11 +44,35 @@
       </div>
     </header>
 
-    <!-- ─── MATRIZ (placeholder — se completa en M5) ─── -->
+    <!-- ─── MATRIZ ─── -->
     <section id="pantalla-matriz" data-screen="matriz" class="oculto">
       <h2>Precios relativos</h2>
-      <div class="en-construccion">En construcción — la matriz de precios llega en la próxima etapa.</div>
+      <p style="font-size:0.85em;color:#666;margin-top:0;">Tocá cualquier celda para ver el histórico de ese ratio.</p>
+      <div class="matriz-scroll">
+        <table id="matrizTabla" class="matriz-tabla"></table>
+      </div>
     </section>
+  </div>
+
+  <!-- Modal de histórico de un ratio (drill-down) -->
+  <div id="modalDrillDownFondo" class="modal-fondo"></div>
+  <div id="modalDrillDown" class="modal-drill">
+    <div class="modal-drill-contenido">
+      <div class="modal-drill-header">
+        <h3 id="drillTitulo"></h3>
+        <button type="button" id="drillCerrar" class="boton-secundario" style="width:auto;padding:6px 12px;">Cerrar</button>
+      </div>
+      <div class="drill-periodos">
+        <button type="button" class="drill-periodo-btn" data-meses="3">3m</button>
+        <button type="button" class="drill-periodo-btn" data-meses="6">6m</button>
+        <button type="button" class="drill-periodo-btn" data-meses="12">12m</button>
+        <button type="button" class="drill-periodo-btn activo" data-meses="24">24m</button>
+        <button type="button" class="drill-periodo-btn" data-meses="36">36m</button>
+        <button type="button" class="drill-periodo-btn" data-meses="">Todo</button>
+      </div>
+      <div id="drillGrafico"></div>
+      <div id="drillResumen" class="drill-resumen"></div>
+    </div>
   </div>
 
   </div>
