@@ -734,6 +734,42 @@ create policy precios_relativos_ratios_config_update on precios_relativos_ratios
 create policy precios_relativos_ratios_config_delete on precios_relativos_ratios_config for delete to authenticated
   using (rol_actual() in ('encargado','administrativo','owner'));
 
+-- Simulaciones de FLETE (pestaña privada de Granos, solo owner): compara
+-- para una misma alternativa de compra/venta cuánto le queda al acopio
+-- según a qué destino despache realmente, manteniendo fijo el precio ya
+-- pactado con el productor. costo_flete_pct hoy es una estimación simple
+-- (% de la tarifa corto+largo ya calculada); componentes_costo queda
+-- reservado para cuando se cargue el costo real desglosado (combustible,
+-- peajes, chofer...) sin necesitar otra migración.
+create table flete_simulaciones (
+  id uuid primary key default gen_random_uuid(),
+  usuario_id uuid not null references auth.users(id),
+  origen_codigo text,
+  origen_modo text check (origen_modo in ('compra', 'venta', 'manual')),
+  cliente text,
+  producto text,
+  destino text,
+  precio_bruto numeric,
+  precio_productor numeric,
+  flete_corto numeric,
+  flete_largo numeric,
+  costo_flete_pct numeric not null default 75,
+  componentes_costo jsonb,
+  notas text,
+  creado_at timestamptz not null default now()
+);
+
+alter table flete_simulaciones enable row level security;
+
+create policy flete_simulaciones_select on flete_simulaciones for select to authenticated
+  using (rol_actual() = 'owner');
+create policy flete_simulaciones_insert on flete_simulaciones for insert to authenticated
+  with check (rol_actual() = 'owner' and usuario_id = auth.uid());
+create policy flete_simulaciones_update on flete_simulaciones for update to authenticated
+  using (rol_actual() = 'owner');
+create policy flete_simulaciones_delete on flete_simulaciones for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:

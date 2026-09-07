@@ -778,7 +778,13 @@
         return;
       }
       perfilActual = perfil;
+      // El script clásico de más abajo (agregarAlternativa, abrirPanelConfig)
+      // no es un módulo — no puede ver el `perfilActual` de este scope, así
+      // que se espeja en window (mismo patrón que window.supabaseClient).
+      window.perfilActual = perfil;
       overlay.classList.add('oculto');
+      // La pestaña FLETE es un simulador privado, solo para el owner.
+      document.getElementById('tabFlete').classList.toggle('oculto-panel', perfilActual.rol !== 'owner');
     }
 
     form.addEventListener('submit', async (evento) => {
@@ -897,6 +903,7 @@
     <button type="button" id="tabCompra" class="tab-modo activo" onclick="cambiarModo('compra')">COMPRA</button>
     <button type="button" id="tabVenta" class="tab-modo" onclick="cambiarModo('venta')">VENTA<span id="badgeVentaSinCorredor" class="badge-alerta" style="display:none;" title="Contratos sin N° de corredor asignado" onclick="event.stopPropagation(); cambiarModo('venta'); abrirModalCorredoresPendientes();"></span></button>
     <button type="button" id="tabPosicion" class="tab-modo" onclick="cambiarModo('posicion')">POSICIÓN</button>
+    <button type="button" id="tabFlete" class="tab-modo oculto-panel" onclick="cambiarModo('flete')">🚚 FLETE</button>
   </div>
 
   <div id="modoCompra">
@@ -1170,6 +1177,27 @@
     <div id="posListaAsignaciones" style="display:flex;flex-direction:column;gap:4px;"></div>
   </div>
   <!-- fin #modoPosicion -->
+
+  <div id="modoFlete" class="oculto-panel">
+    <div style="font-weight:bold;font-size:1.1em;margin-bottom:8px;">🚚 Simulador de Flete (privado)</div>
+    <div style="font-size:0.85em;color:#666;margin-bottom:10px;">
+      Solo vos ves esta pestaña — no dispara mails ni afecta nada de COMPRA/VENTA. Sirve para comparar cuánto te queda a vos según a qué destino despaches en la práctica, manteniendo fijo el precio ya pactado con el productor. Traé una alternativa con el botón 🚚 en COMPRA, y ajustá el % de costo de flete de cada fila.
+    </div>
+    <div style="overflow-x:auto;">
+      <table id="tablaFlete" class="pos-tabla">
+        <thead>
+          <tr>
+            <th>Cliente</th><th>Producto</th><th>Destino</th>
+            <th>Precio Bruto</th><th>Precio a Productor</th>
+            <th>Tarifa (corto+largo)</th><th>Costo Flete %</th>
+            <th>Costo Flete $</th><th>Ganancia Agro</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="tablaFleteBody"></tbody>
+      </table>
+    </div>
+  </div>
+  <!-- fin #modoFlete -->
 
   <!-- Modal asignar compra ↔ venta -->
   <div id="modalAsignar" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
@@ -1972,7 +2000,7 @@
       // solo puede hacer un owner (ya validado server-side en las
       // funciones admin-*.js) — acá además se ocultan esas secciones para
       // el resto, que ni siquiera debería verlas.
-      const esOwnerActual = perfilActual && perfilActual.rol === 'owner';
+      const esOwnerActual = window.perfilActual && window.perfilActual.rol === 'owner';
       document.querySelector('.panel-menu-item[data-seccion="crear"]').classList.toggle('oculto-panel', !esOwnerActual);
       document.querySelector('.panel-menu-item[data-seccion="administrar"]').classList.toggle('oculto-panel', !esOwnerActual);
       document.getElementById('seccionCrear').classList.toggle('oculto-panel', !esOwnerActual);
@@ -2787,6 +2815,15 @@
         }
       });
       tdSel.appendChild(checkbox);
+      if (window.perfilActual && window.perfilActual.rol === 'owner') {
+        const botonFlete = document.createElement('button');
+        botonFlete.type = 'button';
+        botonFlete.textContent = '🚚';
+        botonFlete.title = 'Traer a la pestaña FLETE (privado, no dispara mails)';
+        botonFlete.style.cssText = 'margin-left:6px;padding:2px 6px;';
+        botonFlete.onclick = (evento) => { evento.stopPropagation(); traerAlternativaAFlete(ci); };
+        tdSel.appendChild(botonFlete);
+      }
       filaSeleccion.appendChild(tdSel);
       actualizarSeleccionable(ci);
 
@@ -2868,6 +2905,101 @@
         ...parsePlazoCelda(textoDe(FILA.plazo)),
         observaciones: textoDe(FILA.observaciones),
       };
+    }
+
+    // ── Pestaña FLETE (privada, solo owner, sin mails) ──
+    // Copia una alternativa de COMPRA a una fila nueva de flete_simulaciones,
+    // recalculando los mismos números que ya se muestran en la columna (no
+    // lee el texto formateado de las celdas, para no arrastrar errores de
+    // parseo de "$ 547.135,00"). No toca tablaNegocios ni dispara ningún mail
+    // — es una simulación aparte para ver cuánto le queda al acopio según a
+    // qué destino despache, con el precio al productor ya fijo.
+    async function traerAlternativaAFlete(ci) {
+      const v = leerAlternativaDesdeColumna(ci);
+      const tipoCambio = parseFloat(v.tipoCambio) || 1;
+      const precioInput = parseFloat(v.precioInput) || 0;
+      const precioBruto = v.moneda === 'USD' ? +(precioInput * tipoCambio) : precioInput;
+      const comisionPct = parseFloat(v.comisionPct) || 0;
+      const kmCorto = parseInt(v.kmCorto) || 0;
+      const kmLargo = parseInt(v.kmLargo) || 0;
+      const descCorto = parseFloat(v.descCorto) || 0;
+      const descLargo = parseFloat(v.descLargo) || 0;
+      const fleteCorto = obtenerTarifaPorKm(kmCorto) * (1 - descCorto / 100);
+      const fleteLargo = obtenerTarifaPorKm(kmLargo) * (1 - descLargo / 100);
+      const comision = +(precioBruto * (comisionPct / 100)).toFixed(2);
+      const precioProductor = +(precioBruto - comision - fleteCorto - fleteLargo).toFixed(2);
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) return;
+      const { error } = await window.supabaseClient.from('flete_simulaciones').insert({
+        usuario_id: session.user.id,
+        origen_codigo: v.codigo,
+        origen_modo: 'compra',
+        cliente: v.cliente || null,
+        producto: v.producto || null,
+        destino: v.destino || null,
+        precio_bruto: precioBruto,
+        precio_productor: precioProductor,
+        flete_corto: +fleteCorto.toFixed(2),
+        flete_largo: +fleteLargo.toFixed(2),
+      });
+      if (error) { alert('No se pudo traer a Flete: ' + error.message); return; }
+      alert('✅ Traída a la pestaña 🚚 FLETE.');
+      if (modoActivo === 'flete') cargarFlete();
+    }
+
+    let fleteFilas = [];
+
+    async function cargarFlete() {
+      const { data, error } = await window.supabaseClient.from('flete_simulaciones').select('*').order('creado_at', { ascending: false });
+      if (error) { console.error('No se pudieron cargar las simulaciones de flete:', error); return; }
+      fleteFilas = data || [];
+      renderFlete();
+    }
+
+    function renderFlete() {
+      const tbody = document.getElementById('tablaFleteBody');
+      if (!fleteFilas.length) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#888;">Todavía no trajiste ninguna alternativa. Andá a COMPRA y tocá el botón 🚚 de la que quieras comparar.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = '';
+      for (const f of fleteFilas) {
+        const tarifa = (Number(f.flete_corto) || 0) + (Number(f.flete_largo) || 0);
+        const costoFlete = tarifa * (Number(f.costo_flete_pct) || 0) / 100;
+        const ganancia = (Number(f.precio_bruto) || 0) - (Number(f.precio_productor) || 0) - costoFlete;
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${f.cliente || '-'}</td>
+          <td>${f.producto || '-'}</td>
+          <td>${f.destino || '-'}</td>
+          <td>${formatoNumero(Number(f.precio_bruto) || 0)}</td>
+          <td>${formatoNumero(Number(f.precio_productor) || 0)}</td>
+          <td>${formatoNumero(tarifa)}</td>
+          <td><input type="number" value="${f.costo_flete_pct}" style="width:70px;" data-id="${f.id}" onchange="actualizarCostoFletePct(this.dataset.id, this.value)"></td>
+          <td>${formatoNumero(costoFlete)}</td>
+          <td><strong>${formatoNumero(ganancia)}</strong></td>
+          <td><button type="button" data-id="${f.id}" onclick="eliminarFilaFlete(this.dataset.id)">🗑️</button></td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    async function actualizarCostoFletePct(id, valor) {
+      const pct = parseFloat(valor) || 0;
+      const fila = fleteFilas.find(f => f.id === id);
+      if (fila) fila.costo_flete_pct = pct;
+      renderFlete();
+      const { error } = await window.supabaseClient.from('flete_simulaciones').update({ costo_flete_pct: pct }).eq('id', id);
+      if (error) alert('No se pudo guardar el % de costo de flete: ' + error.message);
+    }
+
+    async function eliminarFilaFlete(id) {
+      if (!confirm('¿Eliminar esta simulación de Flete?')) return;
+      const { error } = await window.supabaseClient.from('flete_simulaciones').delete().eq('id', id);
+      if (error) { alert('No se pudo eliminar: ' + error.message); return; }
+      fleteFilas = fleteFilas.filter(f => f.id !== id);
+      renderFlete();
     }
 
     function leerTodasLasAlternativas() {
@@ -3745,12 +3877,15 @@
       document.getElementById('modoCompra').classList.toggle('oculto-panel', modo !== 'compra');
       document.getElementById('modoVenta').classList.toggle('oculto-panel', modo !== 'venta');
       document.getElementById('modoPosicion').classList.toggle('oculto-panel', modo !== 'posicion');
+      document.getElementById('modoFlete').classList.toggle('oculto-panel', modo !== 'flete');
       document.getElementById('tabCompra').classList.toggle('activo', modo === 'compra');
       document.getElementById('tabVenta').classList.toggle('activo-venta', modo === 'venta');
       document.getElementById('tabPosicion').classList.toggle('activo-posicion', modo === 'posicion');
+      document.getElementById('tabFlete').classList.toggle('activo', modo === 'flete');
       document.body.classList.toggle('venta-activa', modo === 'venta');
       document.body.classList.toggle('posicion-activa', modo === 'posicion');
       if (modo === 'posicion') cargarPosicion();
+      if (modo === 'flete') cargarFlete();
     }
 
     // Id real (uuid) de la compra vinculada al borrador que se está
