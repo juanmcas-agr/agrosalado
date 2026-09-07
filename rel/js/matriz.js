@@ -691,46 +691,54 @@ function renderSpotVsPromedio(serieCompleta, actual) {
   const periodo = el('drillSpotPeriodo').value;
   let referencia;
   let etiqueta;
-  let ventana;
+  let esPromedio;
   if (periodo === 'max') {
     referencia = maximoHistorico(serieCompleta);
     etiqueta = 'el máximo histórico';
-    ventana = serieCompleta;
+    esPromedio = false;
   } else {
     const meses = Number(periodo);
-    ventana = puntosUltimosMeses(serieCompleta, meses);
     referencia = promedioUltimosMeses(serieCompleta, meses);
     etiqueta = meses === 1 ? 'el promedio del último mes' : meses === 6 ? 'el promedio semestral' : 'el promedio anual';
+    esPromedio = true;
   }
   if (referencia == null) {
     el('drillSpotResultado').textContent = 'Sin datos suficientes para ese período.';
     return;
   }
   const variacion = calcularVariacionPct(actual, referencia);
+  // La recomendación de compra/venta solo se ofrece contra un PROMEDIO
+  // (mensual/semestral/anual), no contra el máximo histórico: un promedio
+  // es un punto de referencia estable, así que "A÷B por encima de su
+  // promedio" y "B÷A por debajo del suyo" casi siempre coinciden en la
+  // misma conclusión real. El máximo histórico, en cambio, es un pico
+  // puntual que ocurrió en una fecha distinta para cada dirección — comparar
+  // contra él podía dar la lectura contradictoria "conviene comprar" en las
+  // dos direcciones a la vez (bug reportado y confirmado).
+  const interpretacion = esPromedio
+    ? interpretarSpotVsPromedio(variacion)
+    : '<div class="drill-spot-interpretacion">El máximo histórico es solo referencia — elegí "último mes", "semestral" o "anual" para ver una recomendación de compra/venta.</div>';
   el('drillSpotResultado').innerHTML = `
     Spot actual (${formatearRatio(actual)}) vs. ${etiqueta} (${formatearRatio(referencia)}): ${formatearVariacionPct(variacion)}
-    ${interpretarSpotVsPromedio(percentilActual(ventana))}
+    ${interpretacion}
   `;
 }
 
-// La recomendación de compra/venta se basa en el PERCENTIL de hoy dentro de
-// esa misma ventana, no en el % crudo de distancia al promedio/máximo — el
-// percentil es la única medida simétrica al invertir la relación
-// (percentil(A÷B) es siempre 100-percentil(B÷A) en la misma ventana). Con
-// el % crudo, A÷B y B÷A comparan cada una contra SU PROPIO máximo/promedio
-// (que ocurre en fechas distintas), y podían dar lecturas contradictorias
-// —las dos direcciones "convenía comprar"— que es lo que se reportó.
-function interpretarSpotVsPromedio(percentil) {
-  if (percentil == null) return '';
+// Traduce el % de spot vs. promedio a una lectura simple: un ratio A÷B por
+// encima de su promedio significa que A compra más B que de costumbre —
+// A está relativamente caro frente a B — y viceversa cuando está por
+// debajo. Sirve para cualquier par de productos.
+function interpretarSpotVsPromedio(variacion) {
+  if (variacion == null) return '';
   const nombreA = porId(drillActualA).nombre;
   const nombreB = porId(drillActualB).nombre;
-  if (percentil >= 45 && percentil <= 55) {
-    return `<div class="drill-spot-interpretacion">En línea con ese período — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
+  if (Math.abs(variacion) < 3) {
+    return `<div class="drill-spot-interpretacion">En línea con el promedio — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
   }
-  if (percentil > 55) {
-    return `<div class="drill-spot-interpretacion">${nombreA} está relativamente caro frente a ${nombreB} en ese período (percentil ${percentil.toFixed(0)}): convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
+  if (variacion > 0) {
+    return `<div class="drill-spot-interpretacion">${nombreA} está ${variacion.toFixed(0)}% por encima de su promedio frente a ${nombreB}: convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
   }
-  return `<div class="drill-spot-interpretacion">${nombreA} está relativamente barato frente a ${nombreB} en ese período (percentil ${percentil.toFixed(0)}): convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
+  return `<div class="drill-spot-interpretacion">${nombreA} está ${Math.abs(variacion).toFixed(0)}% por debajo de su promedio frente a ${nombreB}: convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
 }
 
 // ── Panel de configuración de alerta (dentro del drill-down) ──
