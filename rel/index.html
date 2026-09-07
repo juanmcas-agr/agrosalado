@@ -48,8 +48,12 @@
     <section id="pantalla-matriz" data-screen="matriz" class="oculto">
       <div class="carga-nav">
         <h2 style="margin:0;">Precios relativos</h2>
-        <a href="#carga" class="boton-secundario boton-link">✏️ Cargar precios manuales</a>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="botonActualizarAhora" class="boton-secundario oculto" style="width:auto;">🔄 Actualizar ahora</button>
+          <a href="#carga" class="boton-secundario boton-link">✏️ Cargar precios manuales</a>
+        </div>
       </div>
+      <div id="actualizarAhoraMensaje" class="mensaje"></div>
       <p style="font-size:0.85em;color:#666;margin-top:0;">Tocá cualquier celda para ver el histórico de ese ratio.</p>
       <div class="matriz-scroll">
         <table id="matrizTabla" class="matriz-tabla"></table>

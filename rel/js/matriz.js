@@ -2,7 +2,18 @@
 // último valor disponible de cada uno. Click en una celda abre el
 // histórico de ese ratio puntual.
 import { supabase } from './supabaseClient.js';
+import { getEstado } from './auth.js';
 import { PRODUCTOS } from './config.js';
+
+// Funciones Netlify que traen datos de fuentes automáticas — se invocan
+// también por GET (el cron ya las corre solo de noche; esto es para no
+// tener que esperar ni escribir la URL a mano).
+const FUNCIONES_ACTUALIZABLES = [
+  'cierre-diario-precios-relativos',
+  'scraper-gasoil',
+  'scraper-novillo',
+  'scraper-invernada',
+];
 
 function el(id) {
   return document.getElementById(id);
@@ -296,6 +307,42 @@ function cerrarDrillDown() {
   el('modalDrillDown').classList.remove('abierto');
 }
 
+// Dispara las funciones de scraping/snapshot manualmente, sin esperar al
+// cron nocturno — mismo resultado que dejar que corran solas, solo que
+// ahora mismo. Cada una guarda directo en la base con service role, así
+// que alcanza con invocarlas y esperar a que terminen.
+async function actualizarAhora() {
+  const boton = el('botonActualizarAhora');
+  const msj = el('actualizarAhoraMensaje');
+  boton.disabled = true;
+  msj.textContent = 'Actualizando…';
+  msj.className = 'mensaje';
+
+  const resultados = await Promise.all(
+    FUNCIONES_ACTUALIZABLES.map(async (nombre) => {
+      try {
+        const res = await fetch(`/.netlify/functions/${nombre}`);
+        return { nombre, ok: res.ok };
+      } catch (error) {
+        return { nombre, ok: false };
+      }
+    })
+  );
+
+  const fallidas = resultados.filter((r) => !r.ok);
+  if (fallidas.length) {
+    msj.textContent = `⚠️ No se pudo actualizar: ${fallidas.map((f) => f.nombre).join(', ')}. El resto sí se actualizó.`;
+    msj.className = 'mensaje advertencia';
+  } else {
+    msj.textContent = '✅ Datos actualizados.';
+    msj.className = 'mensaje ok';
+  }
+
+  boton.disabled = false;
+  cargado = false; // fuerza a que el próximo refrescarMatriz() vuelva a traer todo
+  await refrescarMatriz();
+}
+
 export async function initMatriz() {
   document.querySelectorAll('.drill-periodo-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -311,6 +358,14 @@ export async function initMatriz() {
   });
   el('drillCerrar').addEventListener('click', cerrarDrillDown);
   el('modalDrillDownFondo').addEventListener('click', cerrarDrillDown);
+
+  // Disparar scrapers a demanda queda para owner — no tiene sentido que
+  // cualquier usuario autorizado ande pegándole a fuentes externas cada
+  // vez que abre la pantalla.
+  if (getEstado().perfil?.rol === 'owner') {
+    el('botonActualizarAhora').classList.remove('oculto');
+    el('botonActualizarAhora').addEventListener('click', actualizarAhora);
+  }
 }
 
 export async function refrescarMatriz() {
