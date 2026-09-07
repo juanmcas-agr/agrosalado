@@ -108,6 +108,18 @@
       <p id="drillModoValorNota" class="drill-modo-nota">Un ratio entre dos productos ya es neutro a la inflación — nominal y constante dan lo mismo acá.</p>
       <div id="drillGrafico"></div>
       <div id="drillResumen" class="drill-resumen"></div>
+      <div id="drillVariaciones" class="drill-variaciones"></div>
+      <div class="drill-spot-wrap">
+        <label style="font-size:0.8em;color:#666;">Spot vs. promedio de:
+          <select id="drillSpotPeriodo">
+            <option value="1">Último mes</option>
+            <option value="6">Últimos 6 meses (semestral)</option>
+            <option value="12" selected>Últimos 12 meses (anual)</option>
+            <option value="max">Máximo histórico</option>
+          </select>
+        </label>
+        <div id="drillSpotResultado" class="drill-spot-resultado"></div>
+      </div>
 
       <div class="alerta-config">
         <button type="button" id="alertaToggleBtn" class="boton-secundario" style="width:auto;">🔔 Configurar alerta</button>

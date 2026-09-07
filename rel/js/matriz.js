@@ -317,6 +317,44 @@ function filtrarPorRango(serie, desde, hasta) {
   return serie.filter((p) => (!desde || p.fecha >= desde) && (!hasta || p.fecha <= hasta));
 }
 
+// Último valor conocido en o antes de (fecha más reciente de la serie −
+// meses) — para variación interanual/intermensual. Busca DENTRO de la
+// propia serie ya calculada (no vuelve a pegarle a historialPorProducto),
+// para que respete el modo nominal/constante ya aplicado.
+function valorHaceMeses(serieCompleta, meses) {
+  if (!serieCompleta.length) return null;
+  const fechaRef = new Date(`${serieCompleta[serieCompleta.length - 1].fecha}T00:00:00`);
+  fechaRef.setMonth(fechaRef.getMonth() - meses);
+  const fechaIso = fechaRef.toISOString().slice(0, 10);
+  let resultado = null;
+  for (const p of serieCompleta) {
+    if (p.fecha > fechaIso) break;
+    resultado = p;
+  }
+  return resultado ? resultado.valor : null;
+}
+
+function calcularVariacionPct(actual, anterior) {
+  if (actual == null || anterior == null || !anterior) return null;
+  return ((actual - anterior) / anterior) * 100;
+}
+
+function promedioUltimosMeses(serieCompleta, meses) {
+  if (!serieCompleta.length) return null;
+  const fechaMax = serieCompleta[serieCompleta.length - 1].fecha;
+  const corte = new Date(`${fechaMax}T00:00:00`);
+  corte.setMonth(corte.getMonth() - meses);
+  const corteIso = corte.toISOString().slice(0, 10);
+  const puntos = serieCompleta.filter((p) => p.fecha >= corteIso);
+  if (!puntos.length) return null;
+  return puntos.reduce((suma, p) => suma + p.valor, 0) / puntos.length;
+}
+
+function maximoHistorico(serieCompleta) {
+  if (!serieCompleta.length) return null;
+  return Math.max(...serieCompleta.map((p) => p.valor));
+}
+
 // ── Alertas por ratio (percentil histórico y/o desvío % del promedio) ──
 // $ Pesos es sintético (no existe en precios_relativos_productos, ver
 // ID_PESOS más arriba), así que no puede tener fila de config — no se
@@ -599,6 +637,47 @@ function renderDrillDown() {
     &nbsp;·&nbsp; Mínimo del período: ${formatearRatio(min)}
     &nbsp;·&nbsp; Máximo del período: ${formatearRatio(max)}
   `;
+
+  const interanual = calcularVariacionPct(actual, valorHaceMeses(serieCompleta, 12));
+  const intermensual = calcularVariacionPct(actual, valorHaceMeses(serieCompleta, 1));
+  el('drillVariaciones').innerHTML = `
+    <span>Variación interanual: ${formatearVariacionPct(interanual)}</span>
+    <span>Variación intermensual: ${formatearVariacionPct(intermensual)}</span>
+  `;
+  renderSpotVsPromedio(serieCompleta, actual);
+}
+
+function formatearVariacionPct(pct) {
+  if (pct == null) return 'sin datos suficientes';
+  const signo = pct > 0 ? '+' : '';
+  const clase = pct > 0 ? 'positiva' : pct < 0 ? 'negativa' : '';
+  return `<span class="${clase}">${signo}${pct.toFixed(1)}%</span>`;
+}
+
+// Compara el valor spot (más reciente) contra el promedio del período
+// elegido en #drillSpotPeriodo (o el máximo histórico) — usa la serie
+// completa sin filtrar por período de visualización, para que "máximo
+// histórico" sea realmente histórico y no dependa del rango del gráfico.
+function renderSpotVsPromedio(serieCompleta, actual) {
+  const periodo = el('drillSpotPeriodo').value;
+  let referencia;
+  let etiqueta;
+  if (periodo === 'max') {
+    referencia = maximoHistorico(serieCompleta);
+    etiqueta = 'el máximo histórico';
+  } else {
+    const meses = Number(periodo);
+    referencia = promedioUltimosMeses(serieCompleta, meses);
+    etiqueta = meses === 1 ? 'el promedio del último mes' : meses === 6 ? 'el promedio semestral' : 'el promedio anual';
+  }
+  if (referencia == null) {
+    el('drillSpotResultado').textContent = 'Sin datos suficientes para ese período.';
+    return;
+  }
+  const variacion = calcularVariacionPct(actual, referencia);
+  el('drillSpotResultado').innerHTML = `
+    Spot actual (${formatearRatio(actual)}) vs. ${etiqueta} (${formatearRatio(referencia)}): ${formatearVariacionPct(variacion)}
+  `;
 }
 
 // ── Panel de configuración de alerta (dentro del drill-down) ──
@@ -808,6 +887,7 @@ export async function initMatriz() {
   });
   el('drillCerrar').addEventListener('click', cerrarDrillDown);
   el('modalDrillDownFondo').addEventListener('click', cerrarDrillDown);
+  el('drillSpotPeriodo').addEventListener('change', renderDrillDown);
 
   document.querySelectorAll('.matriz-modo-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
