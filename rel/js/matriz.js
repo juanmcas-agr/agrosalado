@@ -613,7 +613,11 @@ function renderAlertaPanel() {
   el('alertaDireccionNota').classList.toggle('oculto', excluido);
   el('alertaFormWrap').classList.toggle('oculto', excluido);
   el('alertaEstadoActual').classList.toggle('oculto', excluido);
-  if (excluido) return;
+  if (excluido) {
+    el('alertaExplicacionBtn').classList.add('oculto');
+    el('alertaExplicacionPanel').classList.add('oculto');
+    return;
+  }
 
   const [idCanonA, idCanonB] = [drillActualA, drillActualB].sort();
   const config = configDePar(idCanonA, idCanonB); // nunca null acá (ya se filtró $ Pesos arriba)
@@ -659,6 +663,36 @@ function renderAlertaPanel() {
     estadoEl.innerHTML = `<div>${encabezado}</div>${porQue}${detalleCompleto}`;
     estadoEl.className = `alerta-estado-actual ${alerta.estado}`;
   }
+
+  renderExplicacionAlerta(config.alerta_activa ? alerta : null, config, drillActualA, drillActualB);
+}
+
+// Explicación genérica de cómo se calculan percentil y desvío, más el
+// detalle puntual de este ratio — para el botón "¿Cómo se calcula esto?".
+// Colapsado por defecto (se re-arma el contenido en cada render, pero el
+// estado abierto/cerrado del botón lo maneja initMatriz()).
+function renderExplicacionAlerta(alerta, config, idA, idB) {
+  const boton = el('alertaExplicacionBtn');
+  const panel = el('alertaExplicacionPanel');
+  if (!alerta) {
+    boton.classList.add('oculto');
+    panel.classList.add('oculto');
+    panel.innerHTML = '';
+    return;
+  }
+  boton.classList.remove('oculto');
+
+  const nombreA = porId(idA).nombre;
+  const nombreB = porId(idB).nombre;
+  const detalleActual = alerta.detalles.length
+    ? `<p><strong>${nombreA} ÷ ${nombreB}, ahora mismo (últimos ${config.ventana_meses} meses):</strong></p><ul>${alerta.detalles.map((d) => `<li>${d}</li>`).join('')}</ul>`
+    : '';
+
+  panel.innerHTML = `
+    <p><strong>Percentil histórico:</strong> ubica el valor de HOY entre todos los valores de la ventana elegida. Percentil 100 = el valor más alto de todo ese período; percentil 0 = el más bajo. Con el umbral por defecto, percentil ≥90 dispara "caro" (casi nunca estuvo tan alto) y percentil ≤10 dispara "barato" (casi nunca estuvo tan bajo).</p>
+    <p><strong>Desvío % del promedio:</strong> cuánto se aleja el valor de HOY del promedio de esa misma ventana, en porcentaje. +20% significa 20% por encima del promedio histórico; -20%, 20% por debajo. Con el umbral por defecto, ±15% o más dispara la alerta.</p>
+    ${detalleActual}
+  `;
 }
 
 async function guardarAlerta() {
@@ -795,6 +829,9 @@ export async function initMatriz() {
 
   el('alertaToggleBtn').addEventListener('click', () => {
     el('alertaPanel').classList.toggle('oculto');
+  });
+  el('alertaExplicacionBtn').addEventListener('click', () => {
+    el('alertaExplicacionPanel').classList.toggle('oculto');
   });
   el('alertaActiva').addEventListener('change', () => {
     el('alertaOpciones').classList.toggle('oculto', !el('alertaActiva').checked);

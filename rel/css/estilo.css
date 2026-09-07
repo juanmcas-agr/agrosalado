@@ -424,3 +424,14 @@ button:active { filter: brightness(0.9); }
 .alerta-estado-actual.barato { color: #1e7e34; }
 .alerta-estado-motivo { font-weight: normal; font-size: 0.95em; margin-top: 2px; }
 .alerta-estado-detalle { font-weight: normal; font-size: 0.9em; color: #888; margin-top: 2px; }
+.alerta-explicacion-btn {
+  background: transparent; color: #546e7a; text-decoration: underline;
+  width: auto; padding: 4px 0; margin-top: 4px; font-size: 0.8em;
+}
+.alerta-explicacion-panel {
+  background: #f7f7f7; border-radius: 8px; padding: 10px 12px;
+  margin-top: 6px; font-size: 0.85em; color: #444;
+}
+.alerta-explicacion-panel p { margin: 0 0 8px; }
+.alerta-explicacion-panel p:last-child { margin-bottom: 0; }
+.alerta-explicacion-panel ul { margin: 4px 0 8px; padding-left: 18px; }
