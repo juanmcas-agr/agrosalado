@@ -473,6 +473,26 @@ create policy compradores_update on compradores for update to authenticated
 create policy compradores_delete on compradores for delete to authenticated
   using (rol_actual() = 'owner');
 
+-- Corredores: lista editable del desplegable "Corredor" en VENTA, mismo
+-- patrón que "compradores".
+create table corredores (
+  id uuid primary key default gen_random_uuid(),
+  nombre text not null,
+  creado_at timestamptz not null default now()
+);
+create unique index corredores_nombre_lower_idx on corredores (lower(nombre));
+
+alter table corredores enable row level security;
+
+create policy corredores_select on corredores for select to authenticated
+  using (rol_actual() = 'owner');
+create policy corredores_insert on corredores for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy corredores_update on corredores for update to authenticated
+  using (rol_actual() = 'owner');
+create policy corredores_delete on corredores for delete to authenticated
+  using (rol_actual() = 'owner');
+
 -- Posición: cuánto de un negocio de compra ya cerrado está asignado a
 -- uno o más negocios de venta cerrados (y viceversa), en toneladas
 -- parciales — un contrato de compra puede repartirse en varios de

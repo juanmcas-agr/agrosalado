@@ -197,6 +197,12 @@
     }
     .tab-modo.activo { background: #8a5a34; color: white; }
     .tab-modo.activo-venta { background: #546e7a; color: white; }
+    .badge-alerta {
+      display: inline-flex; align-items: center; justify-content: center;
+      min-width: 18px; height: 18px; padding: 0 4px; margin-left: 6px;
+      background: #d32f2f; color: white; border-radius: 999px;
+      font-size: 0.75em; font-weight: bold; vertical-align: middle;
+    }
     /* Fondo gris tenue mientras se trabaja en VENTA, para diferenciarlo
        claramente de COMPRA a simple vista. */
     body.venta-activa .fondo-fijo {
@@ -889,7 +895,7 @@
 
   <div class="tabs-modo">
     <button type="button" id="tabCompra" class="tab-modo activo" onclick="cambiarModo('compra')">COMPRA</button>
-    <button type="button" id="tabVenta" class="tab-modo" onclick="cambiarModo('venta')">VENTA</button>
+    <button type="button" id="tabVenta" class="tab-modo" onclick="cambiarModo('venta')">VENTA<span id="badgeVentaSinCorredor" class="badge-alerta" style="display:none;" title="Contratos sin N° de corredor asignado" onclick="event.stopPropagation(); cambiarModo('venta'); abrirModalCorredoresPendientes();"></span></button>
     <button type="button" id="tabPosicion" class="tab-modo" onclick="cambiarModo('posicion')">POSICIÓN</button>
   </div>
 
@@ -1005,13 +1011,16 @@
         <input type="text" id="ventaContratoCompra" placeholder="Contrato de compra asociado (opcional)">
         <button type="button" onclick="abrirModalTraerCompra()" style="width:auto;">📂 Traer de compra</button>
       </div>
+      <button type="button" class="full" onclick="abrirModalPegarMail()">📋 Pegar mail del corredor</button>
       <input type="text" id="ventaCliente" placeholder="Cliente vendedor">
       <label style="font-size:0.85em;color:#666;">Fecha de venta<br><input type="date" id="ventaFecha"></label>
       <select id="ventaComprador" onchange="onCambioComprador()">
         <option value="">Comprador...</option>
       </select>
       <label class="chk-tipo2" title="Negocio interno: no manda mail"><input type="checkbox" id="ventaChkTipo2"></label>
-      <input type="text" id="ventaCorredor" placeholder="Corredor">
+      <select id="ventaCorredor" onchange="onCambioCorredor()">
+        <option value="">Corredor...</option>
+      </select>
       <input type="text" id="ventaNumeroContratoCorredor" placeholder="N° contrato corredor (opcional)">
       <div class="campo-con-boton">
         <select id="ventaComisionSel" onchange="onCambioComisionVenta()" style="flex:1;">
@@ -1209,6 +1218,26 @@
       <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">📂 Traer de un contrato de compra</div>
       <div id="listaTraerCompra" style="display:flex;flex-direction:column;gap:8px;"></div>
       <button onclick="cerrarModalTraerCompra()" style="margin-top:16px;background:#888;">Cancelar</button>
+    </div>
+  </div>
+
+  <div id="modalPegarMail" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:8px;">📋 Pegar mail del corredor</div>
+      <div style="font-size:0.8em;color:#888;margin-bottom:8px;">Pegá el texto del mail de confirmación (Zeni y similares) y se completan los datos que reconozca: comprador, contrato del corredor, producto, destino, precio, toneladas, etc.</div>
+      <textarea id="pegarMailTexto" rows="10" style="width:100%;font-family:inherit;font-size:0.85em;padding:8px;border-radius:6px;border:1px solid #ccc;box-sizing:border-box;"></textarea>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button onclick="extraerDatosMail()">Extraer datos</button>
+        <button onclick="cerrarModalPegarMail()" style="background:#888;">Cancelar</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modalCorredoresPendientes" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:12px;padding:20px;width:90%;max-width:420px;max-height:75vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.3);">
+      <div style="font-weight:bold;font-size:1.1em;margin-bottom:12px;">⚠️ Contratos sin N° de corredor</div>
+      <div id="listaCorredoresPendientes" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <button onclick="cerrarModalCorredoresPendientes()" style="margin-top:16px;background:#888;">Cerrar</button>
     </div>
   </div>
 
@@ -2343,6 +2372,8 @@
       cargarClientes();
       cargarDestinos();
       cargarCompradores();
+      cargarCorredores();
+      actualizarBadgeVentaSinCorredor();
       cargarDestinatariosNegocio();
       wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
       wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
@@ -3799,6 +3830,169 @@
       document.getElementById('modalTraerCompra').style.display = 'none';
     }
 
+    // ── Pegar mail del corredor: parsea el texto de confirmación (formato
+    // tipo Zeni: líneas "Etiqueta: valor") y completa los campos de VENTA
+    // que reconozca, para no tener que tipearlos ni ir a buscarlos a mano
+    // (sobre todo Comprador y N° de contrato del corredor, que son los que
+    // suelen faltar cuando el borrador se armó "Trayendo de compra").
+    function abrirModalPegarMail() {
+      document.getElementById('pegarMailTexto').value = '';
+      document.getElementById('modalPegarMail').style.display = 'flex';
+    }
+
+    function cerrarModalPegarMail() {
+      document.getElementById('modalPegarMail').style.display = 'none';
+    }
+
+    function parsearMailCorredor(texto) {
+      const datos = {};
+      const observacionesExtra = [];
+      for (let linea of texto.split('\n')) {
+        linea = linea.trim();
+        const idx = linea.indexOf(':');
+        if (idx === -1) continue;
+        const etiqueta = linea.slice(0, idx).trim();
+        const valor = linea.slice(idx + 1).trim();
+        const etiquetaNorm = etiqueta.toLowerCase();
+        if (!valor) continue;
+
+        if (etiquetaNorm === 'comprador') datos.comprador = valor;
+        else if (etiquetaNorm === 'producto') datos.producto = valor;
+        else if (etiquetaNorm === 'destino') datos.destino = valor;
+        else if (etiquetaNorm === 'pactado') datos.toneladas = valor;
+        else if (etiquetaNorm === 'precio') datos.precio = valor;
+        else if (etiquetaNorm === 'fecha operación' || etiquetaNorm === 'fecha operacion') datos.fecha = valor;
+        else if (etiquetaNorm === 'período de entrega' || etiquetaNorm === 'periodo de entrega') datos.periodoEntrega = valor;
+        else if (etiquetaNorm === 'días de pago' || etiquetaNorm === 'dias de pago') datos.diasPago = valor;
+        else if (etiquetaNorm === 'observaciones' || etiquetaNorm === 'calidad') observacionesExtra.push(valor);
+        else if (etiquetaNorm.startsWith('contrato') && etiquetaNorm !== 'contrato comprador' && etiquetaNorm !== 'contrato vendedor') {
+          // "Contrato Zeni: 26/15874/8" -> corredor "Zeni", n° contrato "26/15874/8"
+          datos.corredor = etiqueta.replace(/^contrato\s*/i, '').trim();
+          datos.numeroContratoCorredor = valor;
+        }
+      }
+      if (observacionesExtra.length) datos.observaciones = observacionesExtra.join(' ');
+      return datos;
+    }
+
+    function mapearProductoMail(valor) {
+      const v = (valor || '').toLowerCase();
+      if (v.includes('soja')) return 'SOJA';
+      if (v.includes('trigo')) return 'TRIGO';
+      if (v.includes('maiz') || v.includes('maíz')) return 'MAIZ';
+      if (v.includes('girasol') && v.includes('comun')) return 'GIRASOL COMUN';
+      if (v.includes('girasol')) return 'GIRASOL AO';
+      if (v.includes('avena')) return 'AVENA';
+      if (v.includes('cebada')) return 'CEBADA';
+      return '';
+    }
+
+    function parsearNumeroMail(valor) {
+      // Formato argentino: "." separador de miles, "," decimal (ej. "150.000" = 150000, "370.000,00" = 370000).
+      const limpio = (valor || '').replace(/[^\d.,]/g, '');
+      if (!limpio) return '';
+      const normalizado = limpio.replace(/\./g, '').replace(',', '.');
+      const n = parseFloat(normalizado);
+      return isNaN(n) ? '' : n;
+    }
+
+    function parsearFechaMail(valor) {
+      const m = (valor || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if (!m) return '';
+      const [, d, mm, y] = m;
+      return `${y}-${mm.padStart(2, '0')}-${d.padStart(2, '0')}`;
+    }
+
+    function extraerDatosMail() {
+      const texto = document.getElementById('pegarMailTexto').value;
+      if (!texto.trim()) { alert('Pegá primero el texto del mail.'); return; }
+      const datos = parsearMailCorredor(texto);
+      if (!Object.keys(datos).length) { alert('No se reconoció ningún dato en el texto pegado.'); return; }
+
+      if (datos.comprador) asegurarOpcionComprador(datos.comprador.toUpperCase());
+      if (datos.corredor) asegurarOpcionCorredor(datos.corredor.toUpperCase());
+      if (datos.numeroContratoCorredor) document.getElementById('ventaNumeroContratoCorredor').value = datos.numeroContratoCorredor;
+      const productoMapeado = mapearProductoMail(datos.producto);
+      if (productoMapeado) document.getElementById('ventaProducto').value = productoMapeado;
+      if (datos.destino) asegurarOpcionDestino('ventaDestino', datos.destino);
+      if (datos.precio !== undefined) document.getElementById('ventaPrecio').value = parsearNumeroMail(datos.precio);
+      if (datos.toneladas !== undefined) document.getElementById('ventaToneladas').value = parsearNumeroMail(datos.toneladas);
+      if (datos.fecha) {
+        const fechaIso = parsearFechaMail(datos.fecha);
+        if (fechaIso) document.getElementById('ventaFecha').value = fechaIso;
+      }
+      if (datos.diasPago) {
+        document.getElementById('ventaPlazoPago').value = /^\d+$/.test(datos.diasPago.trim())
+          ? `${datos.diasPago.trim()} días`
+          : datos.diasPago;
+      } else if (datos.periodoEntrega) {
+        document.getElementById('ventaPlazoPago').value = datos.periodoEntrega;
+      }
+      if (datos.observaciones) document.getElementById('ventaObservaciones').value = datos.observaciones;
+
+      cerrarModalPegarMail();
+      mostrarMensajeCerrarNegocio('✅ Datos del mail cargados, revisá antes de confirmar');
+    }
+
+    // ── Recordatorio de N° de contrato de corredor pendiente: no bloquea
+    // guardar/cerrar (es un dato opcional), pero avisa con un badge en la
+    // pestaña VENTA para que no quede en el olvido ningún contrato
+    // brokereado sin su número asignado.
+    let corredoresPendientesCache = [];
+
+    async function actualizarBadgeVentaSinCorredor() {
+      const { data, error } = await window.supabaseClient.from('negocios_venta_historial')
+        .select('id, cliente_vendedor, numero_orden, fecha_cierre, datos');
+      if (error || !data) return;
+      corredoresPendientesCache = data.filter((r) => {
+        const b = r.datos && r.datos.borrador;
+        return b && b.corredor && !b.numeroContratoCorredor;
+      });
+      const badge = document.getElementById('badgeVentaSinCorredor');
+      if (corredoresPendientesCache.length) {
+        badge.textContent = corredoresPendientesCache.length;
+        badge.style.display = '';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function abrirModalCorredoresPendientes() {
+      const lista = document.getElementById('listaCorredoresPendientes');
+      lista.innerHTML = '';
+      if (!corredoresPendientesCache.length) {
+        lista.innerHTML = '<div style="color:#888;">No hay contratos pendientes de N° de corredor.</div>';
+      } else {
+        corredoresPendientesCache.forEach((registro) => {
+          const b = registro.datos.borrador;
+          const div = document.createElement('div');
+          div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px;border:1px solid #eee;border-radius:8px;gap:8px;';
+          div.innerHTML = `<div><strong>${registro.cliente_vendedor}</strong> <span style="color:#888;font-weight:normal;">(${b.corredor})</span><br><small>${formatearFecha(registro.fecha_cierre)} · N° ${registro.numero_orden || '-'}</small></div>`;
+          const btn = document.createElement('button');
+          btn.textContent = 'Cargar N°';
+          btn.onclick = () => cargarNumeroContratoCorredorPendiente(registro);
+          div.appendChild(btn);
+          lista.appendChild(div);
+        });
+      }
+      document.getElementById('modalCorredoresPendientes').style.display = 'flex';
+    }
+
+    function cerrarModalCorredoresPendientes() {
+      document.getElementById('modalCorredoresPendientes').style.display = 'none';
+    }
+
+    async function cargarNumeroContratoCorredorPendiente(registro) {
+      const b = registro.datos.borrador;
+      const numero = (prompt(`N° de contrato de ${b.corredor} para "${registro.cliente_vendedor}":`) || '').trim();
+      if (!numero) return;
+      const nuevosDatos = { ...registro.datos, borrador: { ...b, numeroContratoCorredor: numero } };
+      const { error } = await window.supabaseClient.from('negocios_venta_historial').update({ datos: nuevosDatos }).eq('id', registro.id);
+      if (error) { alert('No se pudo guardar: ' + error.message); return; }
+      await actualizarBadgeVentaSinCorredor();
+      abrirModalCorredoresPendientes();
+    }
+
     // ══════════════════════════════════════════════════════════════════
     // ── POSICIÓN: cuánto de cada compra/venta cerrada está asignado a
     // la otra punta, y cuánto queda libre — por contrato y por cereal.
@@ -4178,6 +4372,7 @@
             const { error: errorUpdate } = await window.supabaseClient.from('negocios_venta_historial')
               .update({ datos: nuevosDatos }).eq('id', venta.registro.id);
             if (errorUpdate) alert('No se pudo guardar el N° de contrato corredor: ' + errorUpdate.message);
+            else actualizarBadgeVentaSinCorredor();
           }
         }
       }
@@ -4245,6 +4440,66 @@
       compradoresCache.push(nombre);
       compradoresCache.sort((a, b) => a.localeCompare(b, 'es'));
       renderSelectComprador(nombre);
+    }
+
+    // ── Corredor: mismo mecanismo que Comprador (lista + "OTRO"), para
+    // evitar variantes de tipeo del mismo corredor (Zeni/ZENI/zeni).
+    const CORREDORES_BASE = ['ZENI'];
+    let corredoresCache = [...CORREDORES_BASE];
+
+    function renderSelectCorredor(seleccionar) {
+      const select = document.getElementById('ventaCorredor');
+      const valorPrevio = seleccionar !== undefined ? seleccionar : select.value;
+      select.innerHTML = '<option value="">Corredor...</option>';
+      for (const nombre of corredoresCache) {
+        const opt = document.createElement('option');
+        opt.value = nombre;
+        opt.textContent = nombre;
+        select.appendChild(opt);
+      }
+      const optOtro = document.createElement('option');
+      optOtro.value = 'OTRO';
+      optOtro.textContent = 'OTRO (escribir cuál)';
+      select.appendChild(optOtro);
+      if (valorPrevio) select.value = valorPrevio;
+    }
+
+    // Por si se rectifica/precarga una venta con un corredor que ya no
+    // está en la lista actual — así el <select> igual puede mostrarlo.
+    function asegurarOpcionCorredor(nombre) {
+      const select = document.getElementById('ventaCorredor');
+      if (!nombre) { select.value = ''; return; }
+      const existe = Array.from(select.options).some((o) => o.value === nombre);
+      if (!existe) {
+        const opt = document.createElement('option');
+        opt.value = nombre;
+        opt.textContent = nombre;
+        select.insertBefore(opt, select.querySelector('option[value="OTRO"]'));
+      }
+      select.value = nombre;
+    }
+
+    async function cargarCorredores() {
+      renderSelectCorredor();
+      const { data, error } = await window.supabaseClient.from('corredores').select('*').order('nombre');
+      const custom = (!error && data) ? data.map((d) => d.nombre) : [];
+      const baseSet = new Set(CORREDORES_BASE.map((n) => n.toLowerCase()));
+      corredoresCache = [...CORREDORES_BASE, ...custom.filter((n) => !baseSet.has((n || '').toLowerCase()))]
+        .sort((a, b) => a.localeCompare(b, 'es'));
+      renderSelectCorredor();
+    }
+
+    async function onCambioCorredor() {
+      const select = document.getElementById('ventaCorredor');
+      if (select.value !== 'OTRO') return;
+      const nombre = (prompt('Nombre del corredor:') || '').trim().toUpperCase();
+      if (!nombre) { select.value = ''; return; }
+      if (corredoresCache.includes(nombre)) { renderSelectCorredor(nombre); return; }
+      const { error } = await window.supabaseClient.from('corredores').insert({ nombre });
+      if (error) { alert('No se pudo guardar el corredor: ' + error.message); }
+      corredoresCache.push(nombre);
+      corredoresCache.sort((a, b) => a.localeCompare(b, 'es'));
+      renderSelectCorredor(nombre);
     }
 
     function onCambioComisionVenta() {
@@ -4351,7 +4606,7 @@
       document.getElementById('ventaFecha').value = b.fecha || new Date().toISOString().split('T')[0];
       asegurarOpcionComprador(b.comprador || '');
       document.getElementById('ventaChkTipo2').checked = !!b.esTipo2;
-      document.getElementById('ventaCorredor').value = b.corredor || '';
+      asegurarOpcionCorredor(b.corredor || '');
       document.getElementById('ventaNumeroContratoCorredor').value = b.numeroContratoCorredor || '';
       const comisionStr = String(b.comisionPct ?? '0.5');
       const esComisionFija = ['0.5', '0', '1', '2', '3'].includes(comisionStr);
@@ -4422,6 +4677,10 @@
       const b = leerBorradorVentaDesdeFormulario();
       const faltantes = validarBorradorVenta(b);
       if (faltantes.length) { alert('⚠️ Completá: ' + faltantes.join(', ')); return; }
+
+      if (!b.numeroContratoCorredor) {
+        if (!confirm('⚠️ No cargaste el N° de contrato del corredor (Zeni u otro).\n\n¿Confirmar el borrador igual, sin ese dato?')) return;
+      }
 
       borradoresVentaPendientes.push(b);
       renderTablaVentaPendientes();
@@ -4610,6 +4869,7 @@
       if (error) { alert('No se pudo anular: ' + error.message); return false; }
 
       cacheCerradosVenta = cacheCerradosVenta.filter((r) => r.id !== registro.id);
+      actualizarBadgeVentaSinCorredor();
       return true;
     }
 
@@ -4701,6 +4961,7 @@
 
       borradoresVentaPendientes = [];
       renderTablaVentaPendientes();
+      actualizarBadgeVentaSinCorredor();
     }
   </script>
 </body>
