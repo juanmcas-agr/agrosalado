@@ -83,6 +83,11 @@
         <button type="button" class="drill-periodo-btn" data-meses="36">36m</button>
         <button type="button" class="drill-periodo-btn" data-meses="">Todo</button>
       </div>
+      <div id="drillModoValorWrap" class="drill-modo-wrap oculto">
+        <button type="button" class="drill-modo-btn activo" data-modo="nominal">Nominal</button>
+        <button type="button" class="drill-modo-btn" data-modo="real">Constante (ajustado por inflación)</button>
+      </div>
+      <p id="drillModoValorNota" class="drill-modo-nota">Un ratio entre dos productos ya es neutro a la inflación — nominal y constante dan lo mismo acá.</p>
       <div id="drillGrafico"></div>
       <div id="drillResumen" class="drill-resumen"></div>
     </div>

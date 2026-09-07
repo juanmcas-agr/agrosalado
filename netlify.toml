@@ -20,3 +20,9 @@
 # 21:30 hora Argentina = 00:30 UTC del día siguiente.
 [functions."scraper-gasoil"]
   schedule = "30 0 * * *"
+
+# El IPC/CPI son mensuales, no hace falta correr esto seguido. Día 15 de
+# cada mes, 09:00 hora Argentina = 12:00 UTC (INDEC suele publicar el IPC
+# del mes anterior entre el día 12 y el 15).
+[functions."indices-inflacion"]
+  schedule = "0 12 15 * *"

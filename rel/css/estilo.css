@@ -348,6 +348,10 @@ button:active { filter: brightness(0.9); }
   width: auto;
 }
 .drill-periodo-btn.activo { background: #8a5a34; color: white; }
+.drill-modo-wrap { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
+.drill-modo-btn { background: #e9ecef; color: #2c3e50; padding: 6px 10px; font-size: 0.8em; width: auto; }
+.drill-modo-btn.activo { background: #546e7a; color: white; }
+.drill-modo-nota { font-size: 0.8em; color: #888; font-style: italic; margin: 0 0 8px; }
 .chart-svg { width: 100%; height: auto; }
 .chart-etiqueta { font-size: 10px; fill: #888; }
 .chart-vacio { color: #888; font-size: 0.9em; padding: 20px 0; text-align: center; }

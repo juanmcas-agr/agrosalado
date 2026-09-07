@@ -32,24 +32,73 @@ function porId(id) {
 // chica todavía) y se reusa tanto para la matriz como para el drill-down,
 // mismo criterio que calcularLibres() en Granos.
 let historialPorProducto = {};
+// indicePorTipo['ARS'|'USD'] = [{ fecha, indice }, ...] ascendente — para
+// re-expresar un valor absoluto (precio de un producto en $Pesos o en U$
+// BNA) en moneda constante. Un ratio entre dos productos reales NO
+// necesita esto (se cancela matemáticamente, ver comentario de ID_PESOS).
+let indicePorTipo = {};
 let cargado = false;
 
 async function cargarHistorialCompleto() {
   if (cargado) return;
-  const { data, error } = await supabase
-    .from('precios_relativos_historial')
-    .select('producto_id, fecha, valor_nativo')
-    .order('fecha', { ascending: true });
-  if (error) {
-    console.error('No se pudo cargar el histórico de precios relativos:', error);
+  const [{ data: historial, error: errorHistorial }, { data: indices, error: errorIndices }] = await Promise.all([
+    supabase.from('precios_relativos_historial').select('producto_id, fecha, valor_nativo').order('fecha', { ascending: true }),
+    supabase.from('precios_relativos_indices').select('tipo, fecha, indice').order('fecha', { ascending: true }),
+  ]);
+  if (errorHistorial) {
+    console.error('No se pudo cargar el histórico de precios relativos:', errorHistorial);
     return;
   }
   historialPorProducto = {};
-  for (const fila of data) {
+  for (const fila of historial) {
     if (!historialPorProducto[fila.producto_id]) historialPorProducto[fila.producto_id] = [];
     historialPorProducto[fila.producto_id].push({ fecha: fila.fecha, valorNativo: Number(fila.valor_nativo) });
   }
+  indicePorTipo = { ARS: [], USD: [] };
+  if (!errorIndices && indices) {
+    for (const fila of indices) {
+      if (!indicePorTipo[fila.tipo]) indicePorTipo[fila.tipo] = [];
+      indicePorTipo[fila.tipo].push({ fecha: fila.fecha, indice: Number(fila.indice) });
+    }
+  }
   cargado = true;
+}
+
+function indiceAsOf(tipo, fechaLimite) {
+  const serie = indicePorTipo[tipo] || [];
+  let resultado = null;
+  for (const punto of serie) {
+    if (punto.fecha > fechaLimite) break;
+    resultado = punto;
+  }
+  return resultado;
+}
+
+// Devuelve 'ARS' o 'USD' si el ratio pedido es en realidad el precio
+// ABSOLUTO de un producto (contra $Pesos o contra U$ BNA) — ahí sí tiene
+// sentido ofrecer nominal/constante. Si son dos productos reales entre
+// sí, devuelve null (el toggle no cambiaría nada, se oculta).
+function tipoIndiceAplicable(idA, idB) {
+  if (idA === ID_PESOS || idB === ID_PESOS) return 'ARS';
+  if (idA === 'dolar_bna' || idB === 'dolar_bna') return 'USD';
+  return null;
+}
+
+// Re-expresa una serie nominal en moneda constante, tomando como "hoy" la
+// fecha más reciente de la propia serie — así el número de "Actual" no
+// cambia al togglear (es el ancla), y todo lo anterior se ajusta relativo
+// a eso.
+function aplicarDeflactor(serie, tipo) {
+  if (!serie.length) return serie;
+  const referencia = indiceAsOf(tipo, serie[serie.length - 1].fecha);
+  if (!referencia) return serie; // todavía no hay índices cargados (M9)
+  return serie
+    .map((p) => {
+      const indicePunto = indiceAsOf(tipo, p.fecha);
+      if (!indicePunto || !indicePunto.indice) return null;
+      return { fecha: p.fecha, valor: p.valor * (referencia.indice / indicePunto.indice) };
+    })
+    .filter(Boolean);
 }
 
 // Último valor conocido de un producto a una fecha dada (o antes) — permite
@@ -150,6 +199,7 @@ function renderMatriz() {
 let drillActualA = null;
 let drillActualB = null;
 let drillPeriodoMeses = 24; // default
+let drillModoValor = 'nominal'; // 'nominal' | 'real' — solo aplica a valores absolutos
 
 function serieRatio(idA, idB) {
   const fechasA = (historialPorProducto[idA] || []).map((p) => p.fecha);
@@ -198,11 +248,22 @@ function renderDrillDown() {
   const b = porId(drillActualB);
   el('drillTitulo').textContent = `${a.nombre} ÷ ${b.nombre}`;
 
-  const serieCompleta = serieRatio(drillActualA, drillActualB);
+  const tipoIndice = tipoIndiceAplicable(drillActualA, drillActualB);
+  el('drillModoValorWrap').classList.toggle('oculto', !tipoIndice);
+  el('drillModoValorNota').classList.toggle('oculto', !!tipoIndice);
+  if (!tipoIndice) drillModoValor = 'nominal';
+
+  let serieCompleta = serieRatio(drillActualA, drillActualB);
+  if (tipoIndice && drillModoValor === 'real') {
+    serieCompleta = aplicarDeflactor(serieCompleta, tipoIndice);
+  }
   const serie = filtrarPorPeriodo(serieCompleta, drillPeriodoMeses);
 
   document.querySelectorAll('.drill-periodo-btn').forEach((btn) => {
     btn.classList.toggle('activo', Number(btn.dataset.meses || 0) === drillPeriodoMeses);
+  });
+  document.querySelectorAll('.drill-modo-btn').forEach((btn) => {
+    btn.classList.toggle('activo', btn.dataset.modo === drillModoValor);
   });
 
   if (!serie.length) {
@@ -239,6 +300,12 @@ export async function initMatriz() {
   document.querySelectorAll('.drill-periodo-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       drillPeriodoMeses = Number(btn.dataset.meses || 0) || null;
+      renderDrillDown();
+    });
+  });
+  document.querySelectorAll('.drill-modo-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      drillModoValor = btn.dataset.modo;
       renderDrillDown();
     });
   });
