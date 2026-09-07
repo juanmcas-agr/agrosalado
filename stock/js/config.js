@@ -82,6 +82,13 @@ export const TIPOS_MOVIMIENTO = {
     campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
     soloOwner: true,
   },
+  cambio_rodeo: {
+    nombre: 'Cambio de rodeo', clase: 'interna',
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen', 'rodeo_destino'],
+    duplicarEstablecimientoEnDestino: true,
+    duplicarCategoriaEnDestino: true,
+    duplicarTitularEnDestino: true,
+  },
 };
 
 // Rango de sanidad para kilos promedio por cabeza (solo advierte, no bloquea).

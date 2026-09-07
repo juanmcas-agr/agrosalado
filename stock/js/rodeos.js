@@ -48,3 +48,12 @@ export async function crearRodeo({ nombre, categoriaId, establecimientoId, fecha
   cache = [...cache, data];
   return data;
 }
+
+// Cabezas actuales de un rodeo (sumando todos los titulares) — se pide en
+// vivo al validar un movimiento de salida/interna, no se cachea, para no
+// dar luz verde con un stock desactualizado.
+export async function stockDelRodeo(rodeoId) {
+  const { data, error } = await supabase.from('stock_actual').select('cabezas').eq('rodeo_id', rodeoId);
+  if (error) throw error;
+  return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
+}

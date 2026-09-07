@@ -71,7 +71,8 @@ insert into tipos_movimiento
   ('traslado',            'Traslado entre establecimientos',    'interna', true,  true,  true,  true,  true,  true,  8),
   ('cambio_categoria',    'Cambio de categoría',                'interna', true,  true,  true,  true,  true,  true,  9),
   ('cambio_titular',      'Cambio de titularidad',              'interna', true,  true,  true,  true,  true,  true,  10),
-  ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  false, true,  11);
+  ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  false, true,  11),
+  ('cambio_rodeo',        'Cambio de rodeo',                    'interna', true,  true,  true,  true,  true,  true,  12);
 
 -- ─── Rodeos ─────────────────────────────────────────────────────────────
 -- Un rodeo es el grupo real de animales que se trackea como unidad (nace,
@@ -155,6 +156,10 @@ create table movimientos (
   kilos_promedio numeric(6,2) not null check (kilos_promedio > 0),
   usuario_id uuid not null references auth.users(id),
   rodeo_id uuid not null references rodeos(id),
+  -- Solo se usa en 'cambio_rodeo': mover animales de un rodeo a otro sin
+  -- cambiar establecimiento/categoría/titular (ej. separar un lote para
+  -- curarlo aparte). Para el resto de los tipos queda null.
+  rodeo_destino_id uuid references rodeos(id),
   observaciones text,
   created_at timestamptz not null default now(),
   anulado boolean not null default false,
@@ -259,6 +264,26 @@ begin
     end if;
   end if;
 
+  if new.tipo_movimiento = 'cambio_rodeo' then
+    if new.rodeo_destino_id is null then
+      raise exception 'Falta rodeo_destino_id para cambio_rodeo';
+    end if;
+    if new.rodeo_destino_id = new.rodeo_id then
+      raise exception 'En un cambio de rodeo, el rodeo destino tiene que ser distinto del origen';
+    end if;
+    if new.establecimiento_origen <> new.establecimiento_destino then
+      raise exception 'En un cambio de rodeo, el establecimiento no cambia';
+    end if;
+    if new.categoria_origen <> new.categoria_destino then
+      raise exception 'En un cambio de rodeo, la categoría no cambia';
+    end if;
+    if new.titular_origen <> new.titular_destino then
+      raise exception 'En un cambio de rodeo, la titularidad no cambia';
+    end if;
+  elsif new.rodeo_destino_id is not null then
+    raise exception 'rodeo_destino_id no corresponde para %', new.tipo_movimiento;
+  end if;
+
   if new.tipo_movimiento = 'apertura_stock' and rol_actual() <> 'owner' then
     raise exception 'Solo un owner puede cargar una apertura de stock';
   end if;
@@ -289,11 +314,36 @@ create trigger trg_bloquear_created_at
   before update on movimientos
   for each row execute function bloquear_cambio_created_at();
 
+-- Mantiene rodeos.establecimiento_id / categoria_id al día cuando el
+-- rodeo se traslada o cambia de categoría — si no, el selector de rodeos
+-- de "Cargar movimiento" (que filtra por establecimiento+categoría
+-- actuales) dejaría de encontrar un rodeo que ya se movió.
+create or replace function actualizar_rodeo_tras_movimiento() returns trigger
+language plpgsql as $$
+begin
+  if new.tipo_movimiento = 'traslado' then
+    update rodeos set establecimiento_id = new.establecimiento_destino where id = new.rodeo_id;
+  elsif new.tipo_movimiento = 'cambio_categoria' then
+    update rodeos set categoria_id = new.categoria_destino where id = new.rodeo_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_actualizar_rodeo_tras_movimiento
+  after insert on movimientos
+  for each row execute function actualizar_rodeo_tras_movimiento();
+
 -- ─── Vistas de stock ────────────────────────────────────────────────────
 
+-- coalesce(rodeo_destino_id, rodeo_id) en la rama de destino: para los 11
+-- tipos "normales" rodeo_destino_id es null y no cambia nada (destino usa
+-- el mismo rodeo que origen); solo 'cambio_rodeo' lo completa, y ahí el
+-- lado que ENTRA cabezas debe acreditarse al rodeo nuevo, no al de origen.
 create view movimiento_lineas as
   select id, fecha, establecimiento_destino as establecimiento, categoria_destino as categoria,
-         coalesce(titular_destino, 'agro_salado') as titular, rodeo_id,
+         coalesce(titular_destino, 'agro_salado') as titular,
+         coalesce(rodeo_destino_id, rodeo_id) as rodeo_id,
          cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
   where not anulado and establecimiento_destino is not null
@@ -338,7 +388,9 @@ create view historial_movimientos as
     m.titular_origen, tio.nombre as titular_origen_nombre,
     m.titular_destino, tid.nombre as titular_destino_nombre,
     m.cantidad_cabezas, m.kilos_promedio,
-    m.rodeo_id, r.codigo as rodeo, m.observaciones,
+    m.rodeo_id, r.codigo as rodeo,
+    m.rodeo_destino_id, rd.codigo as rodeo_destino,
+    m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo
   from movimientos m
@@ -350,6 +402,7 @@ create view historial_movimientos as
   left join titulares tio on tio.id = m.titular_origen
   left join titulares tid on tid.id = m.titular_destino
   left join rodeos r on r.id = m.rodeo_id
+  left join rodeos rd on rd.id = m.rodeo_destino_id
   left join perfiles p on p.user_id = m.usuario_id
   order by m.fecha desc, m.created_at desc;
 

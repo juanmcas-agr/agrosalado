@@ -5,13 +5,14 @@ import {
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
-import { cargarRodeos, rodeosDe, crearRodeo } from './rodeos.js';
+import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo } from './rodeos.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
 const CAMPOS = [
   'establecimiento_origen', 'establecimiento_destino',
   'categoria_origen', 'categoria_destino',
   'titular_origen', 'titular_destino',
+  'rodeo_destino',
 ];
 
 function el(id) {
@@ -116,13 +117,26 @@ function campoRelevante(cfg, base) {
   return cfg.campos.includes(`${base}_origen`) ? 'origen' : 'destino';
 }
 
-function poblarSelectRodeos() {
+// IDs de los dos selectores de rodeo posibles — "origen" (siempre visible,
+// el rodeo que ya existe) y "destino" (solo para cambio_rodeo: separar/
+// fusionar animales en OTRO rodeo). Mismos ids que usaba el selector único
+// original para no tener que tocar el resto del formulario.
+const RODEO_ORIGEN_IDS = {
+  select: 'mov-rodeo', wrap: 'mov-rodeo-nuevo-wrap',
+  nombre: 'mov-rodeo-nuevo-nombre', fecha: 'mov-rodeo-nuevo-fecha', crear: 'mov-rodeo-nuevo-crear',
+};
+const RODEO_DESTINO_IDS = {
+  select: 'mov-rodeo-destino', wrap: 'mov-rodeo-destino-nuevo-wrap',
+  nombre: 'mov-rodeo-destino-nuevo-nombre', fecha: 'mov-rodeo-destino-nuevo-fecha', crear: 'mov-rodeo-destino-nuevo-crear',
+};
+
+function poblarSelectRodeo(ids, excluirId) {
   const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
   if (!cfg) return;
   const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
   const establecimientoId = obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
 
-  const select = el('mov-rodeo');
+  const select = el(ids.select);
   const valorPrevio = select.value;
   select.innerHTML = '';
   const opcionVacia = document.createElement('option');
@@ -132,6 +146,7 @@ function poblarSelectRodeos() {
 
   if (categoriaId && establecimientoId) {
     for (const r of rodeosDe(establecimientoId, categoriaId)) {
+      if (excluirId && r.id === excluirId) continue;
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = r.codigo;
@@ -146,15 +161,26 @@ function poblarSelectRodeos() {
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
 }
 
-function inicializarRodeo() {
-  el('mov-rodeo').addEventListener('change', () => {
-    const esNuevo = el('mov-rodeo').value === '__nuevo__';
-    el('mov-rodeo-nuevo-wrap').classList.toggle('oculto', !esNuevo);
-    if (esNuevo) el('mov-rodeo-nuevo-fecha').value = new Date().toISOString().slice(0, 10);
+// El rodeo destino nunca puede ser el mismo que el de origen — se re-arma
+// cada vez que cambia cualquiera de los dos, para excluir siempre el actual.
+function actualizarSelectsRodeo() {
+  poblarSelectRodeo(RODEO_ORIGEN_IDS, null);
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (cfg && cfg.campos.includes('rodeo_destino')) {
+    poblarSelectRodeo(RODEO_DESTINO_IDS, el(RODEO_ORIGEN_IDS.select).value);
+  }
+}
+
+function inicializarSelectorRodeo(ids) {
+  el(ids.select).addEventListener('change', () => {
+    const esNuevo = el(ids.select).value === '__nuevo__';
+    el(ids.wrap).classList.toggle('oculto', !esNuevo);
+    if (esNuevo) el(ids.fecha).value = new Date().toISOString().slice(0, 10);
+    if (ids === RODEO_ORIGEN_IDS) poblarSelectRodeo(RODEO_DESTINO_IDS, el(ids.select).value);
   });
 
-  el('mov-rodeo-nuevo-crear').addEventListener('click', async () => {
-    const nombre = el('mov-rodeo-nuevo-nombre').value.trim();
+  el(ids.crear).addEventListener('click', async () => {
+    const nombre = el(ids.nombre).value.trim();
     if (!nombre) { alert('Ingresá un nombre para el rodeo.'); return; }
     const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
     const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
@@ -168,13 +194,13 @@ function inicializarRodeo() {
         nombre,
         categoriaId,
         establecimientoId,
-        fechaCreacion: el('mov-rodeo-nuevo-fecha').value || undefined,
+        fechaCreacion: el(ids.fecha).value || undefined,
         usuarioId: getEstado().session.user.id,
       });
-      poblarSelectRodeos();
-      el('mov-rodeo').value = nuevo.id;
-      el('mov-rodeo-nuevo-wrap').classList.add('oculto');
-      el('mov-rodeo-nuevo-nombre').value = '';
+      actualizarSelectsRodeo();
+      el(ids.select).value = nuevo.id;
+      el(ids.wrap).classList.add('oculto');
+      el(ids.nombre).value = '';
     } catch (error) {
       alert('No se pudo crear el rodeo: ' + error.message);
     }
@@ -210,7 +236,7 @@ function actualizarCamposVisibles() {
     'mov-categoria-destino',
     cfg.categoriasPermitidas ? CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id)) : CATEGORIAS
   );
-  poblarSelectRodeos();
+  actualizarSelectsRodeo();
 }
 
 function activarAccesoRapidoFeedLot() {
@@ -236,6 +262,7 @@ function leerFormulario() {
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
     rodeo_id: el('mov-rodeo').value,
+    rodeo_destino: cfg.campos.includes('rodeo_destino') ? el('mov-rodeo-destino').value : null,
     observaciones: el('mov-observaciones').value.trim() || null,
   };
 }
@@ -257,6 +284,13 @@ function validar(datos) {
 
   if (!datos.rodeo_id || datos.rodeo_id === '__nuevo__') {
     errores.push('Elegí un rodeo (o creá uno nuevo con "+ Crear rodeo nuevo...").');
+  }
+  if (datos.cfg.campos.includes('rodeo_destino')) {
+    if (datos.rodeo_destino === '__nuevo__') {
+      errores.push('Terminá de crear el rodeo destino (o elegí uno existente).');
+    } else if (datos.rodeo_destino && datos.rodeo_destino === datos.rodeo_id) {
+      errores.push('El rodeo destino tiene que ser distinto del rodeo de origen.');
+    }
   }
 
   const cabezas = Number(datos.cantidad_cabezas);
@@ -304,6 +338,7 @@ function armarFila(datos) {
     kilos_promedio: Number(datos.kilos_promedio),
     usuario_id: getEstado().session.user.id,
     rodeo_id: datos.rodeo_id,
+    rodeo_destino_id: datos.rodeo_destino || null,
     observaciones: datos.observaciones,
   };
 }
@@ -340,9 +375,34 @@ function resetFormulario() {
   limpiarTitular('destino');
   el('mov-rodeo-nuevo-wrap').classList.add('oculto');
   el('mov-rodeo-nuevo-nombre').value = '';
+  el('mov-rodeo-destino-nuevo-wrap').classList.add('oculto');
+  el('mov-rodeo-destino-nuevo-nombre').value = '';
   // establecerSeleccion dispara 'cambio' -> actualizarCamposVisibles() ->
-  // poblarSelectRodeos(), que ya reconstruye #mov-rodeo vacío.
+  // actualizarSelectsRodeo(), que ya reconstruye los selects vacíos.
   establecerSeleccion('mov-tipo', primerTipoPermitido());
+}
+
+// Salida/interna sacan cabezas del rodeo de origen — no puede haber más
+// saliendo que las que tiene. Solo se puede chequear con conexión (pide el
+// stock real a Supabase); si está offline se deja pasar como hasta ahora
+// (la app es offline-first) y si el chequeo mismo falla por red no se
+// bloquea el movimiento por eso — solo cuando el chequeo SÍ pudo hacerse y
+// da que no alcanza.
+async function validarStockDisponible(datos) {
+  if (datos.cfg.clase === 'entrada') return null;
+  if (!navigator.onLine) return null;
+  let disponible;
+  try {
+    disponible = await stockDelRodeo(datos.rodeo_id);
+  } catch (error) {
+    console.warn('No se pudo verificar el stock del rodeo antes de guardar:', error);
+    return null;
+  }
+  const cabezas = Number(datos.cantidad_cabezas);
+  if (cabezas > disponible) {
+    return `No hay stock suficiente en ese rodeo: tiene ${disponible} cabeza(s) y se intentan mover ${cabezas}.`;
+  }
+  return null;
 }
 
 async function onSubmit(evento) {
@@ -352,6 +412,12 @@ async function onSubmit(evento) {
 
   if (errores.length) {
     mostrarMensaje(errores.join(' '), 'error');
+    return;
+  }
+
+  const errorStock = await validarStockDisponible(datos);
+  if (errorStock) {
+    mostrarMensaje(errorStock, 'error');
     return;
   }
 
@@ -370,11 +436,12 @@ async function onSubmit(evento) {
 export async function initMovimientos() {
   await Promise.all([cargarTitulares(), cargarRodeos()]);
   poblarGrupos();
-  inicializarRodeo();
+  inicializarSelectorRodeo(RODEO_ORIGEN_IDS);
+  inicializarSelectorRodeo(RODEO_DESTINO_IDS);
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
-    el(id).addEventListener('cambio', poblarSelectRodeos);
+    el(id).addEventListener('cambio', actualizarSelectsRodeo);
   }
   establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
