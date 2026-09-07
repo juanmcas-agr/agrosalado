@@ -1,6 +1,7 @@
 import { initAuth, onAuthChange, iniciarSesion, cerrarSesion, getEstado } from './auth.js';
 import { initSync, onSyncChange, reintentarErrores } from './sync.js';
 import { initMovimientos } from './movimientos.js';
+import { initTrabajoManga } from './trabajoManga.js';
 import { initDashboard } from './dashboard.js';
 import { initHistorial } from './historial.js';
 import { initRouter } from './router.js';
@@ -16,6 +17,7 @@ function iniciarPantallasDeLaApp(rol) {
   if (appIniciada) return;
   appIniciada = true;
   initMovimientos();
+  initTrabajoManga();
   initDashboard();
   initHistorial();
   initRouter(rol);

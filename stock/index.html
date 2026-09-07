@@ -49,6 +49,7 @@
 
     <nav class="navegacion">
       <button data-ir="cargar">Cargar movimiento</button>
+      <button data-ir="manga">Trabajo de Manga</button>
       <button data-ir="dashboard">Stock</button>
       <button data-ir="historial">Historial</button>
     </nav>
@@ -163,6 +164,45 @@
 
         <button type="submit" id="mov-submit" class="full">Guardar movimiento</button>
         <div id="mov-mensaje" class="mensaje full"></div>
+      </form>
+    </section>
+
+    <!-- ─── TRABAJO DE MANGA ─── -->
+    <section id="pantalla-manga" data-screen="manga" class="oculto">
+      <h2>🐮 Trabajo de Manga</h2>
+
+      <form id="manga-form" class="formulario">
+        <label>Fecha
+          <input id="manga-fecha" type="date" required>
+        </label>
+
+        <div class="campo-grupo full">
+          <div class="etiqueta-grupo">Categoría</div>
+          <div id="manga-categoria"></div>
+        </div>
+
+        <div class="campo-grupo full">
+          <div class="etiqueta-grupo">Rodeo</div>
+          <select id="manga-rodeo" required>
+            <option value="">Elegir...</option>
+          </select>
+        </div>
+
+        <div class="campo-grupo full">
+          <div class="etiqueta-grupo">Propietario(s)</div>
+          <div id="manga-propietarios"></div>
+        </div>
+
+        <label>Cantidad trabajada
+          <input id="manga-cantidad" type="number" min="1" step="1" required>
+        </label>
+
+        <label class="full">Observaciones (opcional)
+          <textarea id="manga-observaciones" rows="2"></textarea>
+        </label>
+
+        <button type="submit" class="full">Guardar trabajo de manga</button>
+        <div id="manga-mensaje" class="mensaje full"></div>
       </form>
     </section>
 

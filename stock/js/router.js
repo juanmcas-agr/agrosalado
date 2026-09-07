@@ -1,7 +1,7 @@
 import { refrescarDashboard } from './dashboard.js';
 import { cargarHistorial } from './historial.js';
 
-const PANTALLAS = ['cargar', 'dashboard', 'historial'];
+const PANTALLAS = ['cargar', 'manga', 'dashboard', 'historial'];
 
 function el(id) {
   return document.getElementById(id);

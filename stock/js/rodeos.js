@@ -19,6 +19,12 @@ export function rodeosDe(establecimientoId, categoriaId) {
   return cache.filter((r) => r.establecimiento_id === establecimientoId && r.categoria_id === categoriaId);
 }
 
+// Para Trabajo de Manga: no se elige establecimiento por separado (el
+// rodeo ya sabe dónde está), así que alcanza con filtrar por categoría.
+export function rodeosDeCategoria(categoriaId) {
+  return cache.filter((r) => r.categoria_id === categoriaId);
+}
+
 // El código (ej. "Vaquillona San Miguel 202601") se arma acá, no en la
 // base: año + secuencia salen de siguiente_secuencia_rodeo(), que es
 // atómica (RPC con función security definer) para que dos altas
