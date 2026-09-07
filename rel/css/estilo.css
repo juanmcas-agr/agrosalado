@@ -399,6 +399,7 @@ button:active { filter: brightness(0.9); }
   border-radius: 6px; border: 1px solid #ccc;
 }
 .drill-spot-resultado { font-size: 0.85em; color: #444; }
+.drill-spot-interpretacion { margin-top: 4px; font-style: italic; color: #555; }
 
 /* ─── Carga manual ─── */
 .carga-nav {

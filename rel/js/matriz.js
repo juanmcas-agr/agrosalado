@@ -702,7 +702,26 @@ function renderSpotVsPromedio(serieCompleta, actual) {
   const variacion = calcularVariacionPct(actual, referencia);
   el('drillSpotResultado').innerHTML = `
     Spot actual (${formatearRatio(actual)}) vs. ${etiqueta} (${formatearRatio(referencia)}): ${formatearVariacionPct(variacion)}
+    ${interpretarSpotVsPromedio(variacion)}
   `;
+}
+
+// Traduce el % de spot vs. promedio a una lectura simple de "qué convendría
+// hacer" — un ratio A÷B por encima de su referencia significa que A está
+// relativamente caro frente a B (compra menos B que de costumbre), y
+// viceversa cuando está por debajo. Sirve para cualquier par de productos,
+// no solo granos vs. hacienda.
+function interpretarSpotVsPromedio(variacion) {
+  if (variacion == null) return '';
+  const nombreA = porId(drillActualA).nombre;
+  const nombreB = porId(drillActualB).nombre;
+  if (Math.abs(variacion) < 1) {
+    return `<div class="drill-spot-interpretacion">En línea con esa referencia — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
+  }
+  if (variacion > 0) {
+    return `<div class="drill-spot-interpretacion">${nombreA} está relativamente caro frente a ${nombreB}: convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
+  }
+  return `<div class="drill-spot-interpretacion">${nombreA} está relativamente barato frente a ${nombreB}: convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
 }
 
 // ── Panel de configuración de alerta (dentro del drill-down) ──
