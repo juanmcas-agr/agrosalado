@@ -364,13 +364,17 @@ function calcularVariacionPct(actual, anterior) {
   return ((actual - anterior) / anterior) * 100;
 }
 
-function promedioUltimosMeses(serieCompleta, meses) {
-  if (!serieCompleta.length) return null;
+function puntosUltimosMeses(serieCompleta, meses) {
+  if (!serieCompleta.length) return [];
   const fechaMax = serieCompleta[serieCompleta.length - 1].fecha;
   const corte = new Date(`${fechaMax}T00:00:00`);
   corte.setMonth(corte.getMonth() - meses);
   const corteIso = corte.toISOString().slice(0, 10);
-  const puntos = serieCompleta.filter((p) => p.fecha >= corteIso);
+  return serieCompleta.filter((p) => p.fecha >= corteIso);
+}
+
+function promedioUltimosMeses(serieCompleta, meses) {
+  const puntos = puntosUltimosMeses(serieCompleta, meses);
   if (!puntos.length) return null;
   return puntos.reduce((suma, p) => suma + p.valor, 0) / puntos.length;
 }
@@ -687,11 +691,14 @@ function renderSpotVsPromedio(serieCompleta, actual) {
   const periodo = el('drillSpotPeriodo').value;
   let referencia;
   let etiqueta;
+  let ventana;
   if (periodo === 'max') {
     referencia = maximoHistorico(serieCompleta);
     etiqueta = 'el máximo histórico';
+    ventana = serieCompleta;
   } else {
     const meses = Number(periodo);
+    ventana = puntosUltimosMeses(serieCompleta, meses);
     referencia = promedioUltimosMeses(serieCompleta, meses);
     etiqueta = meses === 1 ? 'el promedio del último mes' : meses === 6 ? 'el promedio semestral' : 'el promedio anual';
   }
@@ -702,26 +709,28 @@ function renderSpotVsPromedio(serieCompleta, actual) {
   const variacion = calcularVariacionPct(actual, referencia);
   el('drillSpotResultado').innerHTML = `
     Spot actual (${formatearRatio(actual)}) vs. ${etiqueta} (${formatearRatio(referencia)}): ${formatearVariacionPct(variacion)}
-    ${interpretarSpotVsPromedio(variacion)}
+    ${interpretarSpotVsPromedio(percentilActual(ventana))}
   `;
 }
 
-// Traduce el % de spot vs. promedio a una lectura simple de "qué convendría
-// hacer" — un ratio A÷B por encima de su referencia significa que A está
-// relativamente caro frente a B (compra menos B que de costumbre), y
-// viceversa cuando está por debajo. Sirve para cualquier par de productos,
-// no solo granos vs. hacienda.
-function interpretarSpotVsPromedio(variacion) {
-  if (variacion == null) return '';
+// La recomendación de compra/venta se basa en el PERCENTIL de hoy dentro de
+// esa misma ventana, no en el % crudo de distancia al promedio/máximo — el
+// percentil es la única medida simétrica al invertir la relación
+// (percentil(A÷B) es siempre 100-percentil(B÷A) en la misma ventana). Con
+// el % crudo, A÷B y B÷A comparan cada una contra SU PROPIO máximo/promedio
+// (que ocurre en fechas distintas), y podían dar lecturas contradictorias
+// —las dos direcciones "convenía comprar"— que es lo que se reportó.
+function interpretarSpotVsPromedio(percentil) {
+  if (percentil == null) return '';
   const nombreA = porId(drillActualA).nombre;
   const nombreB = porId(drillActualB).nombre;
-  if (Math.abs(variacion) < 1) {
-    return `<div class="drill-spot-interpretacion">En línea con esa referencia — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
+  if (percentil >= 45 && percentil <= 55) {
+    return `<div class="drill-spot-interpretacion">En línea con ese período — sin ventaja clara entre ${nombreA} y ${nombreB}.</div>`;
   }
-  if (variacion > 0) {
-    return `<div class="drill-spot-interpretacion">${nombreA} está relativamente caro frente a ${nombreB}: convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
+  if (percentil > 55) {
+    return `<div class="drill-spot-interpretacion">${nombreA} está relativamente caro frente a ${nombreB} en ese período (percentil ${percentil.toFixed(0)}): convendría vender ${nombreA} y comprar ${nombreB}.</div>`;
   }
-  return `<div class="drill-spot-interpretacion">${nombreA} está relativamente barato frente a ${nombreB}: convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
+  return `<div class="drill-spot-interpretacion">${nombreA} está relativamente barato frente a ${nombreB} en ese período (percentil ${percentil.toFixed(0)}): convendría comprar ${nombreA} y vender ${nombreB}.</div>`;
 }
 
 // ── Panel de configuración de alerta (dentro del drill-down) ──
