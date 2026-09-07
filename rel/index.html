@@ -95,6 +95,12 @@
         <button type="button" class="drill-periodo-btn" data-meses="36">36m</button>
         <button type="button" class="drill-periodo-btn" data-meses="">Todo</button>
       </div>
+      <div class="drill-rango-custom">
+        <label>Desde <input type="date" id="drillRangoDesde"></label>
+        <label>Hasta <input type="date" id="drillRangoHasta"></label>
+        <button type="button" id="drillRangoAplicar" class="boton-secundario" style="width:auto;padding:6px 10px;">Aplicar rango</button>
+        <button type="button" id="drillRangoLimpiar" class="boton-secundario oculto" style="width:auto;padding:6px 10px;">✕ Quitar rango</button>
+      </div>
       <div id="drillModoValorWrap" class="drill-modo-wrap oculto">
         <button type="button" class="drill-modo-btn activo" data-modo="nominal">Nominal</button>
         <button type="button" class="drill-modo-btn" data-modo="real">Constante (ajustado por inflación)</button>

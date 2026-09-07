@@ -361,12 +361,26 @@ button:active { filter: brightness(0.9); }
   width: auto;
 }
 .drill-periodo-btn.activo { background: #8a5a34; color: white; }
+.drill-rango-custom {
+  display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;
+  margin-bottom: 10px; font-size: 0.8em; color: #666;
+}
+.drill-rango-custom label { display: flex; flex-direction: column; gap: 2px; }
+.drill-rango-custom input[type="date"] {
+  height: 32px; padding: 2px 6px; font-size: 0.95em;
+  border-radius: 6px; border: 1px solid #ccc;
+}
 .drill-modo-wrap { display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .drill-modo-btn { background: #e9ecef; color: #2c3e50; padding: 6px 10px; font-size: 0.8em; width: auto; }
 .drill-modo-btn.activo { background: #546e7a; color: white; }
 .drill-modo-nota { font-size: 0.8em; color: #888; font-style: italic; margin: 0 0 8px; }
 .chart-svg { width: 100%; height: auto; }
 .chart-etiqueta { font-size: 10px; fill: #888; }
+.chart-etiqueta-y, .chart-etiqueta-x { font-size: 9px; fill: #888; }
+.chart-grid { stroke: #eee; stroke-width: 1; }
+.chart-hover-linea { stroke: #ad1e19; stroke-width: 1; stroke-dasharray: 3,3; }
+.chart-hover-fondo { fill: #2c3e50; opacity: 0.9; }
+.chart-hover-texto { font-size: 10px; fill: white; font-weight: bold; }
 .chart-vacio { color: #888; font-size: 0.9em; padding: 20px 0; text-align: center; }
 .drill-resumen { font-size: 0.85em; color: #444; margin-top: 8px; }
 

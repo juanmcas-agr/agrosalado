@@ -291,6 +291,7 @@ let drillActualA = null;
 let drillActualB = null;
 let drillPeriodoMeses = 24; // default
 let drillModoValor = 'nominal'; // 'nominal' | 'real' — solo aplica a valores absolutos
+let drillRangoPersonalizado = null; // { desde, hasta } | null — si está seteado, gana sobre drillPeriodoMeses
 
 function serieRatio(idA, idB) {
   const fechasA = (historialPorProducto[idA] || []).map((p) => p.fecha);
@@ -310,16 +311,42 @@ function filtrarPorPeriodo(serie, meses) {
   return serie.filter((p) => p.fecha >= corteIso);
 }
 
+function filtrarPorRango(serie, desde, hasta) {
+  return serie.filter((p) => (!desde || p.fecha >= desde) && (!hasta || p.fecha <= hasta));
+}
+
 // ── Alertas por ratio (percentil histórico y/o desvío % del promedio) ──
 // $ Pesos es sintético (no existe en precios_relativos_productos, ver
 // ID_PESOS más arriba), así que no puede tener fila de config — no se
-// pueden armar alertas contra esa columna.
-function clavePar(idA, idB) {
-  return [idA, idB].sort().join('|');
-}
+// pueden armar alertas contra esa columna. Cualquier otro par (incluidos
+// los que van contra "Dólar Banco Nación", ej. Maíz÷Dólar = precio del
+// maíz en dólares) sí puede tener alerta.
 
+// Valores por defecto de una alerta: TODOS los pares (menos $ Pesos, que no
+// puede tener config — no es un producto real) arrancan con la alerta
+// ACTIVA usando estos valores, hasta que alguien la guarde explícitamente
+// apagada. Así el usuario ve todo de entrada y va sacando lo que no le
+// sirve, en vez de tener que prender par por par.
+const ALERTA_DEFAULT = {
+  favorito: false,
+  alerta_activa: true,
+  metodo: 'ambos',
+  ventana_meses: 24,
+  base: 'nominal_ars',
+  umbral_desvio_pct: 15,
+  umbral_percentil_bajo: 10,
+  umbral_percentil_alto: 90,
+};
+
+// Config real (guardada) para el par, o un objeto con los valores por
+// defecto si nadie la personalizó todavía. null solo si el par no puede
+// tener alerta ($ Pesos).
 function configDePar(idA, idB) {
-  return configPorPar[clavePar(idA, idB)];
+  if (idA === ID_PESOS || idB === ID_PESOS) return null;
+  const [a, b] = [idA, idB].sort();
+  const guardada = configPorPar[`${a}|${b}`];
+  if (guardada) return guardada;
+  return { producto_a_id: a, producto_b_id: b, personalizada: false, ...ALERTA_DEFAULT };
 }
 
 // Percentil del último valor de la serie dentro de su propia ventana: qué
@@ -405,28 +432,134 @@ function estadoAlertaParaPar(idA, idB) {
   };
 }
 
+function formatearFechaCorta(iso) {
+  const [y, m, d] = iso.split('-');
+  return `${d}/${m}/${y.slice(2)}`;
+}
+
+// Chart en SVG puro (sin librerías, coherente con el resto del proyecto):
+// ejes con grilla horizontal (valores) y etiquetas de fecha (eje X), más
+// una capa transparente que captura el mouse para el hover — mostrar fecha
+// y valor exactos del punto más cercano, con una línea guía + punto
+// resaltado sobre la curva.
 function svgLineChart(puntos, ancho, alto) {
   if (puntos.length < 2) return '<div class="chart-vacio">No hay suficientes datos para graficar.</div>';
   const valores = puntos.map((p) => p.valor);
   const min = Math.min(...valores);
   const max = Math.max(...valores);
-  const margen = 24;
+  const margenIzq = 68;
+  const margenDer = 14;
+  const margenSup = 14;
+  const margenInf = 30;
+  const anchoUtil = ancho - margenIzq - margenDer;
+  const altoUtil = alto - margenSup - margenInf;
   const rango = max - min || 1;
-  const coordenadas = puntos.map((p, i) => {
-    const x = margen + (i / (puntos.length - 1)) * (ancho - margen * 2);
-    const y = alto - margen - ((p.valor - min) / rango) * (alto - margen * 2);
-    return [x, y];
-  });
-  const path = coordenadas.map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+
+  const coordenadas = puntos.map((p, i) => ({
+    x: margenIzq + (i / (puntos.length - 1)) * anchoUtil,
+    y: margenSup + altoUtil - ((p.valor - min) / rango) * altoUtil,
+    fecha: p.fecha,
+    valor: p.valor,
+  }));
+
+  const path = coordenadas.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ');
+
+  const NUM_LINEAS_Y = 4;
+  let gridY = '';
+  for (let i = 0; i <= NUM_LINEAS_Y; i++) {
+    const frac = i / NUM_LINEAS_Y;
+    const y = margenSup + altoUtil * frac;
+    const valor = max - rango * frac;
+    gridY += `<line x1="${margenIzq}" y1="${y.toFixed(1)}" x2="${ancho - margenDer}" y2="${y.toFixed(1)}" class="chart-grid"/>`;
+    gridY += `<text x="${margenIzq - 6}" y="${(y + 3).toFixed(1)}" class="chart-etiqueta-y" text-anchor="end">${formatearRatio(valor)}</text>`;
+  }
+
+  const numEtiquetasX = Math.min(5, coordenadas.length);
+  let etiquetasX = '';
+  for (let i = 0; i < numEtiquetasX; i++) {
+    const idx = numEtiquetasX === 1 ? 0 : Math.round((i / (numEtiquetasX - 1)) * (coordenadas.length - 1));
+    const c = coordenadas[idx];
+    etiquetasX += `<text x="${c.x.toFixed(1)}" y="${alto - margenInf + 16}" class="chart-etiqueta-x" text-anchor="middle">${formatearFechaCorta(c.fecha)}</text>`;
+  }
+
   const ultimo = coordenadas[coordenadas.length - 1];
+  const datosJson = JSON.stringify(coordenadas).replace(/"/g, '&quot;');
+
   return `
-    <svg viewBox="0 0 ${ancho} ${alto}" class="chart-svg">
+    <svg viewBox="0 0 ${ancho} ${alto}" class="chart-svg" id="chartSvgActual"
+         data-margen-izq="${margenIzq}" data-ancho-util="${anchoUtil}"
+         data-margen-sup="${margenSup}" data-alto-inf="${alto - margenInf}"
+         data-puntos="${datosJson}">
+      ${gridY}
       <path d="${path}" fill="none" stroke="#8a5a34" stroke-width="2"/>
-      <circle cx="${ultimo[0]}" cy="${ultimo[1]}" r="3.5" fill="#8a5a34"/>
-      <text x="${margen}" y="14" class="chart-etiqueta">${formatearRatio(max)}</text>
-      <text x="${margen}" y="${alto - 8}" class="chart-etiqueta">${formatearRatio(min)}</text>
+      <circle cx="${ultimo.x.toFixed(1)}" cy="${ultimo.y.toFixed(1)}" r="3.5" fill="#8a5a34"/>
+      ${etiquetasX}
+      <g id="chartHoverGrupo" class="oculto">
+        <line id="chartHoverLinea" y1="${margenSup}" y2="${alto - margenInf}" class="chart-hover-linea"/>
+        <circle id="chartHoverPunto" r="4" fill="#ad1e19"/>
+        <rect id="chartHoverFondo" class="chart-hover-fondo" rx="4"/>
+        <text id="chartHoverTexto" class="chart-hover-texto"></text>
+      </g>
+      <rect x="${margenIzq}" y="${margenSup}" width="${anchoUtil}" height="${altoUtil}"
+            fill="transparent" id="chartHoverCaptura" style="cursor:crosshair;"/>
     </svg>
   `;
+}
+
+// Cablea el hover del gráfico recién insertado en el DOM — se llama
+// después de setear innerHTML porque necesita el <svg> ya en el árbol.
+function wireHoverChart() {
+  const svg = el('chartSvgActual');
+  if (!svg) return;
+  const captura = el('chartHoverCaptura');
+  const grupo = el('chartHoverGrupo');
+  const linea = el('chartHoverLinea');
+  const punto = el('chartHoverPunto');
+  const fondo = el('chartHoverFondo');
+  const texto = el('chartHoverTexto');
+
+  const margenIzq = Number(svg.dataset.margenIzq);
+  const anchoUtil = Number(svg.dataset.anchoUtil);
+  const margenSup = Number(svg.dataset.margenSup);
+  const altoInf = Number(svg.dataset.altoInf);
+  const puntos = JSON.parse(svg.dataset.puntos.replace(/&quot;/g, '"'));
+
+  function mostrarEnIndice(idx) {
+    const c = puntos[idx];
+    linea.setAttribute('x1', c.x);
+    linea.setAttribute('x2', c.x);
+    punto.setAttribute('cx', c.x);
+    punto.setAttribute('cy', c.y);
+    texto.textContent = `${formatearFechaCorta(c.fecha)} · ${formatearRatio(c.valor)}`;
+    grupo.classList.remove('oculto');
+
+    // El texto se ancla a la izquierda o derecha del punto según de qué
+    // lado quede más lugar, para que no se salga del gráfico.
+    const anchoAprox = texto.textContent.length * 6.5 + 12;
+    const haciaLaIzquierda = c.x + anchoAprox > margenIzq + anchoUtil;
+    const xTexto = haciaLaIzquierda ? c.x - anchoAprox - 8 : c.x + 8;
+    const yTexto = c.y > margenSup + 20 ? c.y - 10 : c.y + 22;
+    texto.setAttribute('x', xTexto + 6);
+    texto.setAttribute('y', yTexto);
+    fondo.setAttribute('x', xTexto);
+    fondo.setAttribute('y', yTexto - 13);
+    fondo.setAttribute('width', anchoAprox);
+    fondo.setAttribute('height', 18);
+  }
+
+  captura.addEventListener('mousemove', (evento) => {
+    const rect = svg.getBoundingClientRect();
+    const escala = svg.viewBox.baseVal.width / rect.width;
+    const xSvg = (evento.clientX - rect.left) * escala;
+    const fraccion = (xSvg - margenIzq) / anchoUtil;
+    const idx = Math.max(0, Math.min(puntos.length - 1, Math.round(fraccion * (puntos.length - 1))));
+    mostrarEnIndice(idx);
+  });
+  captura.addEventListener('mouseleave', () => {
+    grupo.classList.add('oculto');
+  });
+  // Punto de partida: el último dato (igual que el resumen de "Actual").
+  mostrarEnIndice(puntos.length - 1);
 }
 
 function renderDrillDown() {
@@ -443,14 +576,17 @@ function renderDrillDown() {
   if (tipoIndice && drillModoValor === 'real') {
     serieCompleta = aplicarDeflactor(serieCompleta, tipoIndice);
   }
-  const serie = filtrarPorPeriodo(serieCompleta, drillPeriodoMeses);
+  const serie = drillRangoPersonalizado
+    ? filtrarPorRango(serieCompleta, drillRangoPersonalizado.desde, drillRangoPersonalizado.hasta)
+    : filtrarPorPeriodo(serieCompleta, drillPeriodoMeses);
 
   document.querySelectorAll('.drill-periodo-btn').forEach((btn) => {
-    btn.classList.toggle('activo', Number(btn.dataset.meses || 0) === drillPeriodoMeses);
+    btn.classList.toggle('activo', !drillRangoPersonalizado && Number(btn.dataset.meses || 0) === drillPeriodoMeses);
   });
   document.querySelectorAll('.drill-modo-btn').forEach((btn) => {
     btn.classList.toggle('activo', btn.dataset.modo === drillModoValor);
   });
+  el('drillRangoLimpiar').classList.toggle('oculto', !drillRangoPersonalizado);
 
   if (!serie.length) {
     el('drillGrafico').innerHTML = '<div class="chart-vacio">No hay datos para este período.</div>';
@@ -459,6 +595,7 @@ function renderDrillDown() {
   }
 
   el('drillGrafico').innerHTML = svgLineChart(serie, 600, 220);
+  wireHoverChart();
 
   const actual = serie[serie.length - 1].valor;
   const valores = serie.map((p) => p.valor);
@@ -486,17 +623,20 @@ function renderAlertaPanel() {
   if (excluido) return;
 
   const [idCanonA, idCanonB] = [drillActualA, drillActualB].sort();
-  const config = configPorPar[`${idCanonA}|${idCanonB}`];
+  const config = configDePar(idCanonA, idCanonB); // nunca null acá (ya se filtró $ Pesos arriba)
 
-  el('alertaDireccionNota').textContent = `Esta alerta se configura para: ${porId(idCanonA).nombre} ÷ ${porId(idCanonB).nombre}.`;
-  el('alertaFavorito').checked = !!(config && config.favorito);
-  el('alertaActiva').checked = !!(config && config.alerta_activa);
-  el('alertaMetodo').value = (config && config.metodo) || 'ambos';
-  el('alertaVentana').value = String((config && config.ventana_meses) || 24);
-  el('alertaUmbralDesvio').value = (config && config.umbral_desvio_pct) ?? 15;
-  el('alertaUmbralPercentilBajo').value = (config && config.umbral_percentil_bajo) ?? 10;
-  el('alertaUmbralPercentilAlto').value = (config && config.umbral_percentil_alto) ?? 90;
-  const esReal = !!(config && (config.base === 'real_ars' || config.base === 'real_usd'));
+  const notaPersonalizada = config.personalizada === false
+    ? ' (valores por defecto — todavía no la personalizaste)'
+    : '';
+  el('alertaDireccionNota').textContent = `Esta alerta se configura para: ${porId(idCanonA).nombre} ÷ ${porId(idCanonB).nombre}.${notaPersonalizada}`;
+  el('alertaFavorito').checked = !!config.favorito;
+  el('alertaActiva').checked = !!config.alerta_activa;
+  el('alertaMetodo').value = config.metodo;
+  el('alertaVentana').value = String(config.ventana_meses);
+  el('alertaUmbralDesvio').value = config.umbral_desvio_pct;
+  el('alertaUmbralPercentilBajo').value = config.umbral_percentil_bajo;
+  el('alertaUmbralPercentilAlto').value = config.umbral_percentil_alto;
+  const esReal = config.base === 'real_ars' || config.base === 'real_usd';
   el('alertaBase').value = esReal ? 'real' : 'nominal';
 
   el('alertaBaseWrap').classList.toggle('oculto', !tipoIndiceAplicable(idCanonA, idCanonB));
@@ -505,7 +645,7 @@ function renderAlertaPanel() {
 
   const alerta = estadoAlertaParaPar(drillActualA, drillActualB);
   const estadoEl = el('alertaEstadoActual');
-  if (!config || !config.alerta_activa) {
+  if (!config.alerta_activa) {
     estadoEl.textContent = '';
     estadoEl.className = 'alerta-estado-actual';
   } else if (!alerta) {
@@ -609,6 +749,7 @@ export async function initMatriz() {
   document.querySelectorAll('.drill-periodo-btn').forEach((btn) => {
     btn.addEventListener('click', () => {
       drillPeriodoMeses = Number(btn.dataset.meses || 0) || null;
+      drillRangoPersonalizado = null; // un preset de período reemplaza el rango custom
       renderDrillDown();
     });
   });
@@ -617,6 +758,19 @@ export async function initMatriz() {
       drillModoValor = btn.dataset.modo;
       renderDrillDown();
     });
+  });
+  el('drillRangoAplicar').addEventListener('click', () => {
+    const desde = el('drillRangoDesde').value;
+    const hasta = el('drillRangoHasta').value;
+    if (!desde && !hasta) return;
+    drillRangoPersonalizado = { desde: desde || null, hasta: hasta || null };
+    renderDrillDown();
+  });
+  el('drillRangoLimpiar').addEventListener('click', () => {
+    drillRangoPersonalizado = null;
+    el('drillRangoDesde').value = '';
+    el('drillRangoHasta').value = '';
+    renderDrillDown();
   });
   el('drillCerrar').addEventListener('click', cerrarDrillDown);
   el('modalDrillDownFondo').addEventListener('click', cerrarDrillDown);
