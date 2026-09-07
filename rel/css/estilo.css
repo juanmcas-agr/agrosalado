@@ -419,6 +419,8 @@ button:active { filter: brightness(0.9); }
 .alerta-config { margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; }
 .alerta-panel { margin-top: 10px; }
 .alerta-panel .formulario { margin-bottom: 8px; box-shadow: none; padding: 0; background: transparent; }
-.alerta-estado-actual { font-size: 0.85em; font-weight: bold; margin-top: 6px; }
+.alerta-estado-actual { font-size: 0.85em; font-weight: bold; margin-top: 8px; }
 .alerta-estado-actual.caro { color: #ad1e19; }
 .alerta-estado-actual.barato { color: #1e7e34; }
+.alerta-estado-motivo { font-weight: normal; font-size: 0.95em; margin-top: 2px; }
+.alerta-estado-detalle { font-weight: normal; font-size: 0.9em; color: #888; margin-top: 2px; }

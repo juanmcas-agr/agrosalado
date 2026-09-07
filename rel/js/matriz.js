@@ -369,13 +369,16 @@ function desviacionActual(serie) {
   return ((actual - promedio) / promedio) * 100;
 }
 
-// Evalúa una config en su dirección CANÓNICA (producto_a_id ÷ producto_b_id
-// — así se guardó, ver el check de la tabla) y devuelve el estado en esa
-// dirección. estadoAlertaParaPar() se encarga de invertirlo si hace falta
-// para la dirección que se está mostrando.
-function evaluarConfig(config) {
-  const tipoIndice = tipoIndiceAplicable(config.producto_a_id, config.producto_b_id);
-  let serie = serieRatio(config.producto_a_id, config.producto_b_id);
+// Evalúa la alerta directamente en la dirección que se está MOSTRANDO
+// (idA ÷ idB, tal cual se pidió) — no en la canónica. Como serieRatio(idA,
+// idB) siempre calcula el ratio de verdad en ESE sentido, un valor "alto"
+// siempre significa "idA caro respecto a idB" sin importar en qué orden se
+// haya guardado la config (el orden guardado es solo para no duplicar fila
+// A÷B y B÷A — los umbrales/método/ventana son los mismos para el par,
+// mirado desde cualquier lado).
+function evaluarParEnDireccion(idA, idB, config) {
+  const tipoIndice = tipoIndiceAplicable(idA, idB);
+  let serie = serieRatio(idA, idB);
   if (tipoIndice && (config.base === 'real_ars' || config.base === 'real_usd')) {
     serie = aplicarDeflactor(serie, tipoIndice);
   }
@@ -385,53 +388,41 @@ function evaluarConfig(config) {
   const percentil = percentilActual(serie);
   const desviacionPct = desviacionActual(serie);
 
-  let estado = 'neutral';
-  const evaluarPercentil = () => {
-    if (percentil == null) return 'neutral';
-    if (percentil <= config.umbral_percentil_bajo) return 'barato';
-    if (percentil >= config.umbral_percentil_alto) return 'caro';
-    return 'neutral';
-  };
-  const evaluarDesvio = () => {
-    if (desviacionPct == null) return 'neutral';
-    if (desviacionPct <= -config.umbral_desvio_pct) return 'barato';
-    if (desviacionPct >= config.umbral_desvio_pct) return 'caro';
-    return 'neutral';
-  };
-
-  if (config.metodo === 'percentil') estado = evaluarPercentil();
-  else if (config.metodo === 'desvio') estado = evaluarDesvio();
-  else { // 'ambos': el primero que dispare gana
-    const porPercentil = evaluarPercentil();
-    const porDesvio = evaluarDesvio();
-    estado = porPercentil !== 'neutral' ? porPercentil : porDesvio;
+  function evaluarPercentil() {
+    if (percentil == null) return { estado: 'neutral', detalle: null };
+    if (percentil <= config.umbral_percentil_bajo) return { estado: 'barato', detalle: `percentil ${percentil.toFixed(0)} (umbral ≤${config.umbral_percentil_bajo})` };
+    if (percentil >= config.umbral_percentil_alto) return { estado: 'caro', detalle: `percentil ${percentil.toFixed(0)} (umbral ≥${config.umbral_percentil_alto})` };
+    return { estado: 'neutral', detalle: `percentil ${percentil.toFixed(0)}` };
+  }
+  function evaluarDesvio() {
+    if (desviacionPct == null) return { estado: 'neutral', detalle: null };
+    const signo = desviacionPct > 0 ? '+' : '';
+    if (desviacionPct <= -config.umbral_desvio_pct) return { estado: 'barato', detalle: `${signo}${desviacionPct.toFixed(1)}% del promedio (umbral ±${config.umbral_desvio_pct}%)` };
+    if (desviacionPct >= config.umbral_desvio_pct) return { estado: 'caro', detalle: `${signo}${desviacionPct.toFixed(1)}% del promedio (umbral ±${config.umbral_desvio_pct}%)` };
+    return { estado: 'neutral', detalle: `${signo}${desviacionPct.toFixed(1)}% del promedio` };
   }
 
-  return { estado, percentil, desviacionPct };
+  const porPercentil = config.metodo === 'percentil' || config.metodo === 'ambos' ? evaluarPercentil() : null;
+  const porDesvio = config.metodo === 'desvio' || config.metodo === 'ambos' ? evaluarDesvio() : null;
+
+  let estado = 'neutral';
+  let motivo = null;
+  if (porPercentil && porPercentil.estado !== 'neutral') { estado = porPercentil.estado; motivo = `Percentil: ${porPercentil.detalle}`; }
+  else if (porDesvio && porDesvio.estado !== 'neutral') { estado = porDesvio.estado; motivo = `Desvío: ${porDesvio.detalle}`; }
+
+  const detalles = [];
+  if (porPercentil) detalles.push(`Percentil: ${porPercentil.detalle}`);
+  if (porDesvio) detalles.push(`Desvío: ${porDesvio.detalle}`);
+
+  return { estado, motivo, detalles, ventanaMeses: config.ventana_meses };
 }
 
-function invertirEstado(estado) {
-  if (estado === 'caro') return 'barato';
-  if (estado === 'barato') return 'caro';
-  return estado;
-}
-
-// Estado de alerta para el par mostrado en (idA, idB) — puede venir
-// invertido respecto a cómo se guardó la config (esta siempre está en
-// orden alfabético). null si no hay config, no está activa, o no hay datos
-// suficientes.
+// Estado de alerta para el par mostrado en (idA, idB). null si no hay
+// config, no está activa, o no hay datos suficientes en la ventana.
 function estadoAlertaParaPar(idA, idB) {
   const config = configDePar(idA, idB);
   if (!config || !config.alerta_activa) return null;
-  const resultado = evaluarConfig(config);
-  if (!resultado) return null;
-  const esInverso = config.producto_a_id === idB && config.producto_b_id === idA;
-  if (!esInverso) return resultado;
-  return {
-    ...resultado,
-    estado: invertirEstado(resultado.estado),
-    percentil: resultado.percentil == null ? null : 100 - resultado.percentil,
-  };
+  return evaluarParEnDireccion(idA, idB, config);
 }
 
 function formatearFechaCorta(iso) {
@@ -648,17 +639,24 @@ function renderAlertaPanel() {
   const alerta = estadoAlertaParaPar(drillActualA, drillActualB);
   const estadoEl = el('alertaEstadoActual');
   if (!config.alerta_activa) {
-    estadoEl.textContent = '';
+    estadoEl.innerHTML = '';
     estadoEl.className = 'alerta-estado-actual';
   } else if (!alerta) {
-    estadoEl.textContent = 'Todavía no hay datos suficientes para evaluar esta alerta.';
+    estadoEl.textContent = `Todavía no hay suficientes datos en los últimos ${config.ventana_meses} meses para evaluar esta alerta.`;
     estadoEl.className = 'alerta-estado-actual';
   } else {
-    const texto = alerta.estado === 'caro' ? '🔴 En zona de "caro" respecto a su historia.'
-      : alerta.estado === 'barato' ? '🟢 En zona de "barato" respecto a su historia.'
-      : '⚪ En rango normal, sin alerta.';
-    const detalle = alerta.percentil != null ? ` (percentil ${alerta.percentil.toFixed(0)})` : '';
-    estadoEl.textContent = texto + detalle;
+    const nombreA = porId(drillActualA).nombre;
+    const nombreB = porId(drillActualB).nombre;
+    const encabezado = alerta.estado === 'caro'
+      ? `🔴 Caro: ${nombreA} está caro respecto a ${nombreB} frente a los últimos ${alerta.ventanaMeses} meses.`
+      : alerta.estado === 'barato'
+      ? `🟢 Barato: ${nombreA} está barato respecto a ${nombreB} frente a los últimos ${alerta.ventanaMeses} meses.`
+      : `⚪ En rango normal frente a los últimos ${alerta.ventanaMeses} meses, sin alerta.`;
+    const porQue = alerta.motivo ? `<div class="alerta-estado-motivo">Por qué: ${alerta.motivo}.</div>` : '';
+    const detalleCompleto = alerta.detalles.length
+      ? `<div class="alerta-estado-detalle">${alerta.detalles.join(' · ')}</div>`
+      : '';
+    estadoEl.innerHTML = `<div>${encabezado}</div>${porQue}${detalleCompleto}`;
     estadoEl.className = `alerta-estado-actual ${alerta.estado}`;
   }
 }
