@@ -4,6 +4,7 @@ import { initMovimientos } from './movimientos.js';
 import { initDashboard } from './dashboard.js';
 import { initHistorial } from './historial.js';
 import { initRouter } from './router.js';
+import { initConfigPanel } from './configPanel.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -165,6 +166,7 @@ async function main() {
   wireMostrarClave();
   wireAuth();
   wireSyncBanner();
+  initConfigPanel();
   onSyncChange(actualizarBannerSync);
   await initAuth();
   initSync();

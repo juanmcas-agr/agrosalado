@@ -63,7 +63,8 @@ exports.handler = async function (event) {
   try {
     const {
       email, password, nombre_completo, telefono, rol,
-      acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp,
+      acceso_hacienda, acceso_granos, acceso_precios_relativos,
+      recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios,
     } = JSON.parse(event.body);
     if (!email || !password || !nombre_completo || !rol) {
       return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: email, contraseña, nombre y rol son obligatorios.' }) };
@@ -105,6 +106,7 @@ exports.handler = async function (event) {
         rol,
         acceso_hacienda: !!acceso_hacienda,
         acceso_granos: !!acceso_granos,
+        acceso_precios_relativos: !!acceso_precios_relativos,
       }),
     });
     if (!resPerfil.ok) {
@@ -119,7 +121,7 @@ exports.handler = async function (event) {
     // Lo suma también a destinatarios_negocio si tildaron algún aviso,
     // para que enviar-liquidacion.js / resumen-diario-hacienda.js /
     // enviar-whatsapp.js ya lo tengan en cuenta sin pasos extra.
-    if (recibe_liquidaciones || recibe_hacienda || recibe_whatsapp) {
+    if (recibe_liquidaciones || recibe_hacienda || recibe_whatsapp || recibe_alertas_precios) {
       await fetch(`${SUPABASE_URL}/rest/v1/destinatarios_negocio`, {
         method: 'POST',
         headers: {
@@ -135,6 +137,7 @@ exports.handler = async function (event) {
           recibe_liquidaciones: !!recibe_liquidaciones,
           recibe_hacienda: !!recibe_hacienda,
           recibe_whatsapp: !!recibe_whatsapp,
+          recibe_alertas_precios: !!recibe_alertas_precios,
         }),
       });
     }

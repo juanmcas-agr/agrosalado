@@ -1357,9 +1357,11 @@
         </select>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoHacienda" checked> Acceso a Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoGranos"> Acceso a Granos</label>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoRel"> Acceso a $Rel</label>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeHacienda"> Recibe resumen diario de Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
+        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeAlertasPrecios"> Recibe alertas de $Rel</label>
         <button type="button" onclick="crearUsuario()">Crear usuario</button>
         <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
       </div>
@@ -1380,9 +1382,11 @@
         </select>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoHacienda"> Acceso a Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoGranos"> Acceso a Granos</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoRel"> Acceso a $Rel</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq"> Recibe liquidaciones / anulaciones</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeHacienda"> Recibe resumen diario de Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeAlertasPrecios"> Recibe alertas de $Rel</label>
         <button type="button" onclick="guardarCambiosUsuario()">Guardar cambios</button>
         <div class="campo-password">
           <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva (usuario elegido arriba)" autocomplete="new-password">
@@ -2035,9 +2039,11 @@
         document.getElementById('cfgUsuarioEditTelefono').value = '';
         document.getElementById('cfgUsuarioAccesoHacienda').checked = false;
         document.getElementById('cfgUsuarioAccesoGranos').checked = false;
+        document.getElementById('cfgUsuarioAccesoRel').checked = false;
         document.getElementById('cfgUsuarioRecibeLiq').checked = false;
         document.getElementById('cfgUsuarioRecibeHacienda').checked = false;
         document.getElementById('cfgUsuarioRecibeWhatsapp').checked = false;
+        document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked = false;
         return;
       }
       const usuario = usuariosCache.find((u) => u.user_id === userId);
@@ -2054,10 +2060,13 @@
       document.getElementById('cfgUsuarioAccesoHacienda').disabled = esOwner;
       document.getElementById('cfgUsuarioAccesoGranos').checked = esOwner || !!usuario.acceso_granos;
       document.getElementById('cfgUsuarioAccesoGranos').disabled = esOwner;
+      document.getElementById('cfgUsuarioAccesoRel').checked = esOwner || !!usuario.acceso_precios_relativos;
+      document.getElementById('cfgUsuarioAccesoRel').disabled = esOwner;
       document.getElementById('cfgUsuarioRecibeLiq').checked = !!(destinatario && destinatario.recibe_liquidaciones);
       document.getElementById('cfgUsuarioRecibeHacienda').checked = !!(destinatario && destinatario.recibe_hacienda);
       document.getElementById('cfgUsuarioEditTelefono').value = (destinatario && destinatario.telefono) || '';
       document.getElementById('cfgUsuarioRecibeWhatsapp').checked = !!(destinatario && destinatario.recibe_whatsapp);
+      document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked = !!(destinatario && destinatario.recibe_alertas_precios);
     }
 
     async function guardarCambiosUsuario() {
@@ -2072,9 +2081,11 @@
       const rol = document.getElementById('cfgUsuarioEditRol').value;
       const acceso_hacienda = document.getElementById('cfgUsuarioAccesoHacienda').checked;
       const acceso_granos = document.getElementById('cfgUsuarioAccesoGranos').checked;
+      const acceso_precios_relativos = document.getElementById('cfgUsuarioAccesoRel').checked;
       const recibe_liquidaciones = document.getElementById('cfgUsuarioRecibeLiq').checked;
       const recibe_hacienda = document.getElementById('cfgUsuarioRecibeHacienda').checked;
       const recibe_whatsapp = document.getElementById('cfgUsuarioRecibeWhatsapp').checked;
+      const recibe_alertas_precios = document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked;
       if (!nombre_completo || !email) { msj.textContent = 'Faltan nombre y email.'; msj.className = 'mensaje-panel error'; return; }
       if (recibe_whatsapp && !telefono) { msj.textContent = 'Para recibir WhatsApp hace falta cargar el teléfono.'; msj.className = 'mensaje-panel error'; return; }
 
@@ -2085,7 +2096,7 @@
         const res = await fetch('/.netlify/functions/admin-actualizar-usuario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp }),
+          body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
         });
         const datos = await res.json();
         if (!res.ok) {
@@ -2228,9 +2239,11 @@
       const rol = document.getElementById('cfgUsuarioRol').value;
       const acceso_hacienda = document.getElementById('cfgNuevoAccesoHacienda').checked;
       const acceso_granos = document.getElementById('cfgNuevoAccesoGranos').checked;
+      const acceso_precios_relativos = document.getElementById('cfgNuevoAccesoRel').checked;
       const recibe_liquidaciones = document.getElementById('cfgNuevoRecibeLiq').checked;
       const recibe_hacienda = document.getElementById('cfgNuevoRecibeHacienda').checked;
       const recibe_whatsapp = document.getElementById('cfgNuevoRecibeWhatsapp').checked;
+      const recibe_alertas_precios = document.getElementById('cfgNuevoRecibeAlertasPrecios').checked;
       const msj = document.getElementById('cfgUsuarioMensaje');
       msj.textContent = '';
 
@@ -2252,7 +2265,7 @@
         const res = await fetch('/.netlify/functions/admin-crear-usuario', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp }),
+          body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
         });
         const datos = await res.json();
         if (!res.ok) {
@@ -2268,9 +2281,11 @@
         document.getElementById('cfgUsuarioPassword').value = '';
         document.getElementById('cfgNuevoAccesoHacienda').checked = true;
         document.getElementById('cfgNuevoAccesoGranos').checked = false;
+        document.getElementById('cfgNuevoAccesoRel').checked = false;
         document.getElementById('cfgNuevoRecibeLiq').checked = true;
         document.getElementById('cfgNuevoRecibeHacienda').checked = false;
         document.getElementById('cfgNuevoRecibeWhatsapp').checked = false;
+        document.getElementById('cfgNuevoRecibeAlertasPrecios').checked = false;
         cargarUsuariosPanel();
       } catch (error) {
         msj.textContent = 'Error de red: ' + error.message;

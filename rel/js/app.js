@@ -1,5 +1,6 @@
 import { initAuth, onAuthChange, iniciarSesion, cerrarSesion, getEstado } from './auth.js';
 import { initRouter } from './router.js';
+import { initConfigPanel } from './configPanel.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -122,6 +123,7 @@ async function main() {
   wireLogin();
   wireMostrarClave();
   wireAuth();
+  initConfigPanel();
   await initAuth();
 }
 

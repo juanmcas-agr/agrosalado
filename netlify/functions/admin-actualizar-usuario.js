@@ -70,7 +70,8 @@ exports.handler = async function (event) {
   try {
     const {
       user_id, nombre_completo, email, telefono, rol,
-      acceso_hacienda, acceso_granos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp,
+      acceso_hacienda, acceso_granos, acceso_precios_relativos,
+      recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios,
     } = JSON.parse(event.body);
 
     if (!user_id || !nombre_completo || !email || !rol) {
@@ -89,6 +90,7 @@ exports.handler = async function (event) {
         rol,
         acceso_hacienda: !!acceso_hacienda,
         acceso_granos: !!acceso_granos,
+        acceso_precios_relativos: !!acceso_precios_relativos,
       }),
     });
     if (!resUpdate.ok) {
@@ -119,9 +121,10 @@ exports.handler = async function (event) {
           recibe_liquidaciones: !!recibe_liquidaciones,
           recibe_hacienda: !!recibe_hacienda,
           recibe_whatsapp: !!recibe_whatsapp,
+          recibe_alertas_precios: !!recibe_alertas_precios,
         }),
       });
-    } else if (recibe_liquidaciones || recibe_hacienda || recibe_whatsapp) {
+    } else if (recibe_liquidaciones || recibe_hacienda || recibe_whatsapp || recibe_alertas_precios) {
       await fetch(`${SUPABASE_URL}/rest/v1/destinatarios_negocio`, {
         method: 'POST',
         headers: headersSupabase(),
@@ -132,6 +135,7 @@ exports.handler = async function (event) {
           recibe_liquidaciones: !!recibe_liquidaciones,
           recibe_hacienda: !!recibe_hacienda,
           recibe_whatsapp: !!recibe_whatsapp,
+          recibe_alertas_precios: !!recibe_alertas_precios,
         }),
       });
     }
