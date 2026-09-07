@@ -248,10 +248,13 @@ function renderMatriz() {
   const calcularRatio = esInstantanea
     ? (a, b) => ratioAsOf(a, b, matrizFechaSeleccionada)
     : (a, b) => ratioPromedioMensual(a, b, matrizMesSeleccionado);
-  // Las alertas reflejan el estado de HOY, no el de la fecha que se esté
-  // mirando — para no confundir "está en rojo" con "estaba en rojo ese
-  // día". Solo se muestran cuando la vista coincide con la más reciente.
-  const mostrarAlertas = esInstantanea && matrizFechaSeleccionada === fechaHoy;
+  // Las alertas reflejan el estado de HOY, no el de la fecha/mes que se
+  // esté mirando — para no confundir "está en rojo" con "estaba en rojo
+  // esa vez". Se muestran mientras la vista sea "el presente": la fecha
+  // más reciente en instantánea, o el mes en curso en promedio mensual.
+  const mostrarAlertas = esInstantanea
+    ? matrizFechaSeleccionada === fechaHoy
+    : matrizMesSeleccionado === fechaHoy.slice(0, 7);
 
   const productos = productosVisibles();
   let theadHtml = '<thead><tr><th></th>';
@@ -269,8 +272,7 @@ function renderMatriz() {
       const v = calcularRatio(filaProd.id, colProd.id);
       const alerta = mostrarAlertas ? estadoAlertaParaPar(filaProd.id, colProd.id) : null;
       const claseAlerta = alerta?.estado === 'caro' ? ' celda-alerta-caro' : alerta?.estado === 'barato' ? ' celda-alerta-barato' : '';
-      const icono = alerta?.estado === 'caro' ? ' 🔴' : alerta?.estado === 'barato' ? ' 🟢' : '';
-      tbodyHtml += `<td class="celda-ratio${claseAlerta}" data-a="${filaProd.id}" data-b="${colProd.id}">${formatearRatio(v)}${icono}</td>`;
+      tbodyHtml += `<td class="celda-ratio${claseAlerta}" data-a="${filaProd.id}" data-b="${colProd.id}">${formatearRatio(v)}</td>`;
     }
     tbodyHtml += '</tr>';
   }

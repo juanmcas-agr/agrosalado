@@ -50,20 +50,39 @@ function fechaHoy() {
   return new Date().toISOString().slice(0, 10);
 }
 
-async function guardarValor(producto, valor, fecha, msjEl) {
+// Lista de fechas ISO entre desde y hasta, ambas incluidas.
+function rangoDeFechas(desde, hasta) {
+  const fechas = [];
+  const cursor = new Date(`${desde}T00:00:00`);
+  const fin = new Date(`${hasta}T00:00:00`);
+  while (cursor <= fin) {
+    fechas.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return fechas;
+}
+
+// Guarda el mismo valor para una fecha, o para todo un rango de fechas si
+// se pasa "hasta" — cada día del rango queda como una fila propia con
+// origen_dato='manual', para que cuente como "confirmado a mano" ese día
+// puntual (no como un arrastre automático) y no dispare el aviso de
+// estancamiento aunque el precio no haya cambiado.
+async function guardarValor(producto, valor, fechaDesde, fechaHasta, msjEl) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { msjEl.textContent = 'No hay sesión activa.'; msjEl.className = 'carga-item-mensaje error'; return false; }
 
-  const { error } = await supabase.from('precios_relativos_historial').upsert(
-    { producto_id: producto.id, fecha, valor_nativo: valor, origen_dato: 'manual', usuario_id: session.user.id },
-    { onConflict: 'producto_id,fecha' }
-  );
+  const fechas = fechaHasta && fechaHasta > fechaDesde ? rangoDeFechas(fechaDesde, fechaHasta) : [fechaDesde];
+  const filas = fechas.map((fecha) => ({
+    producto_id: producto.id, fecha, valor_nativo: valor, origen_dato: 'manual', usuario_id: session.user.id,
+  }));
+
+  const { error } = await supabase.from('precios_relativos_historial').upsert(filas, { onConflict: 'producto_id,fecha' });
   if (error) {
     msjEl.textContent = 'No se pudo guardar: ' + error.message;
     msjEl.className = 'carga-item-mensaje error';
     return false;
   }
-  msjEl.textContent = '✅ Guardado.';
+  msjEl.textContent = fechas.length > 1 ? `✅ Guardado para ${fechas.length} días.` : '✅ Guardado.';
   msjEl.className = 'carga-item-mensaje ok';
   return true;
 }
@@ -84,15 +103,18 @@ function renderFilaProducto(producto, info) {
     <div class="carga-item-aviso-texto">${enAviso ? '⚠️ ' : ''}${textoAviso}</div>
     <div class="carga-item-form">
       <input type="number" step="0.01" class="carga-input" value="${info.ultimoValor ? info.ultimoValor.valor_nativo : ''}" placeholder="Valor">
-      <input type="date" class="carga-fecha" value="${fechaHoy()}" max="${fechaHoy()}">
+      <input type="date" class="carga-fecha" value="${fechaHoy()}" title="Desde">
+      <input type="date" class="carga-fecha-hasta" title="Repetir hasta (opcional)">
       <button type="button" class="carga-guardar-btn">Guardar</button>
     </div>
+    <div class="carga-item-ayuda">Si el precio rige para varios días, completá "hasta" y se carga repetido en todo ese rango.</div>
     <div class="carga-item-mensaje"></div>
   `;
 
   div.querySelector('.carga-guardar-btn').addEventListener('click', async () => {
     const input = div.querySelector('.carga-input');
     const fechaInput = div.querySelector('.carga-fecha');
+    const fechaHastaInput = div.querySelector('.carga-fecha-hasta');
     const msj = div.querySelector('.carga-item-mensaje');
     const valor = parseFloat(input.value);
     if (!valor || valor <= 0) {
@@ -105,7 +127,12 @@ function renderFilaProducto(producto, info) {
       msj.className = 'carga-item-mensaje error';
       return;
     }
-    const ok = await guardarValor(producto, valor, fechaInput.value, msj);
+    if (fechaHastaInput.value && fechaHastaInput.value < fechaInput.value) {
+      msj.textContent = '"Hasta" no puede ser anterior a la fecha de inicio.';
+      msj.className = 'carga-item-mensaje error';
+      return;
+    }
+    const ok = await guardarValor(producto, valor, fechaInput.value, fechaHastaInput.value, msj);
     if (ok) {
       const infoNueva = await obtenerInfoProducto(producto.id);
       div.replaceWith(renderFilaProducto(producto, infoNueva));

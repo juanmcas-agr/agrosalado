@@ -407,9 +407,10 @@ button:active { filter: brightness(0.9); }
 .carga-item-aviso-texto { font-size: 0.8em; color: #666; margin-bottom: 8px; }
 .carga-item.carga-item-aviso .carga-item-aviso-texto { color: #8a6100; font-weight: bold; }
 .carga-item-form { display: flex; gap: 8px; flex-wrap: wrap; }
-.carga-item-form .carga-input { flex: 1 1 100px; min-width: 90px; }
-.carga-item-form .carga-fecha { flex: 1 1 140px; min-width: 130px; }
+.carga-item-form .carga-input { flex: 1 1 90px; min-width: 80px; }
+.carga-item-form .carga-fecha, .carga-item-form .carga-fecha-hasta { flex: 1 1 130px; min-width: 120px; }
 .carga-item-form .carga-guardar-btn { width: auto; padding: 8px 14px; flex: 0 0 auto; }
+.carga-item-ayuda { font-size: 0.75em; color: #999; margin-top: 4px; }
 .carga-item-mensaje { font-size: 0.85em; margin-top: 6px; min-height: 1.1em; }
 .carga-item-mensaje.ok { color: #1e7e34; }
 .carga-item-mensaje.error { color: #ad1e19; }
