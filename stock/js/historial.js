@@ -42,9 +42,13 @@ function poblarFiltros() {
   }
 }
 
-function puedeAnular(fila) {
+// Mismas reglas para anular y editar: administrativo/owner sin límite de
+// tiempo, o el propio usuario dentro de la ventana — y en ningún caso si
+// ya está anulado o ya fue reemplazado por una corrección (no tiene
+// sentido volver a tocar un movimiento que "ya no rige").
+function puedeModificar(fila) {
   const { perfil, session } = getEstado();
-  if (!perfil || fila.anulado) return false;
+  if (!perfil || fila.anulado || fila.reemplazado_por) return false;
   if (perfil.rol === 'administrativo' || perfil.rol === 'owner') return true;
   if (fila.usuario_id !== session.user.id) return false;
   const horas = (Date.now() - new Date(fila.created_at).getTime()) / 36e5;
@@ -92,6 +96,22 @@ async function anularMovimiento(id) {
   await cargarHistorial();
 }
 
+// Se llama desde movimientos.js al confirmar una corrección — el
+// movimiento nuevo ya se guardó (con editado_de=id), esto solo marca el
+// viejo. Requiere conexión (igual que anular): es un UPDATE puntual, no
+// pasa por el outbox offline.
+export async function marcarComoReemplazado(idOriginal, idNuevo) {
+  const { error } = await supabase.from('movimientos').update({ reemplazado_por: idNuevo }).eq('id', idOriginal);
+  if (error) throw error;
+}
+
+// Pide precargar el formulario de "Cargar movimiento" con esta fila — vía
+// evento en vez de importar movimientos.js directo, para no armar un
+// import circular (movimientos.js si necesita marcarComoReemplazado de acá).
+function pedirEdicion(fila) {
+  document.dispatchEvent(new CustomEvent('hacienda:editar-movimiento', { detail: fila }));
+}
+
 function renderFilas(filas) {
   const tbody = el('hist-tabla').querySelector('tbody');
   tbody.innerHTML = '';
@@ -99,6 +119,11 @@ function renderFilas(filas) {
     const { origen, destino } = describirMovimiento(fila);
     const tr = document.createElement('tr');
     if (fila.anulado) tr.classList.add('anulado');
+    if (fila.reemplazado_por) tr.classList.add('editado');
+    let estado = '';
+    if (fila.anulado) estado = `Anulado (${fila.anulado_motivo || 'sin motivo'})`;
+    else if (fila.reemplazado_por) estado = '✏️ Editado (ver corrección)';
+    else if (fila.editado_de) estado = '✏️ Corrección';
     tr.innerHTML = `
       <td>${fila.fecha}</td>
       <td>${new Date(fila.created_at).toLocaleString('es-AR')}</td>
@@ -111,15 +136,22 @@ function renderFilas(filas) {
       <td>${fila.rodeo || ''}</td>
       <td>${fila.usuario_nombre || '—'}</td>
       <td>${fila.observaciones || ''}</td>
-      <td>${fila.anulado ? `Anulado (${fila.anulado_motivo || 'sin motivo'})` : ''}</td>
+      <td>${estado}</td>
       <td></td>
     `;
-    if (puedeAnular(fila)) {
-      const btn = document.createElement('button');
-      btn.textContent = 'Anular';
-      btn.className = 'boton-anular';
-      btn.addEventListener('click', () => anularMovimiento(fila.id));
-      tr.lastElementChild.appendChild(btn);
+    if (puedeModificar(fila)) {
+      const btnEditar = document.createElement('button');
+      btnEditar.textContent = 'Editar';
+      btnEditar.className = 'boton-secundario';
+      btnEditar.style.cssText = 'width:auto;padding:4px 10px;margin-right:6px;';
+      btnEditar.addEventListener('click', () => pedirEdicion(fila));
+      tr.lastElementChild.appendChild(btnEditar);
+
+      const btnAnular = document.createElement('button');
+      btnAnular.textContent = 'Anular';
+      btnAnular.className = 'boton-anular';
+      btnAnular.addEventListener('click', () => anularMovimiento(fila.id));
+      tr.lastElementChild.appendChild(btnAnular);
     }
     tbody.appendChild(tr);
   }

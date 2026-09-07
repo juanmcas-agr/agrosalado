@@ -408,6 +408,7 @@ button:active { filter: brightness(0.9); }
   white-space: nowrap;
 }
 .tabla tr.anulado { color: #999; text-decoration: line-through; }
+.tabla tr.editado { color: #6c5ce7; text-decoration: line-through; }
 .tabla tr.fila-total td { background: #e9ecef; border-top: 2px solid #ccc; }
 .tabla tr.fila-clickeable { cursor: pointer; }
 .tabla tr.fila-clickeable:hover td { background: #f5f5f5; }

@@ -198,7 +198,14 @@ create table movimientos (
   anulado boolean not null default false,
   anulado_por uuid references auth.users(id),
   anulado_at timestamptz,
-  anulado_motivo text
+  anulado_motivo text,
+  -- Editar ≠ anular: "Editar" en el historial crea un movimiento nuevo con
+  -- los datos corregidos y deja ESTE marcado como reemplazado (tachado en
+  -- el historial, no confundir con "Anulado" — el movimiento sí existió y
+  -- afectó el stock hasta que se corrigió). reemplazado_por/editado_de son
+  -- inversos entre sí: el viejo apunta al nuevo, el nuevo apunta al viejo.
+  reemplazado_por uuid references movimientos(id),
+  editado_de uuid references movimientos(id)
 );
 -- Nota: "id" no tiene default — lo genera el cliente (crypto.randomUUID())
 -- para que los reintentos de sincronización offline sean idempotentes.
@@ -425,7 +432,8 @@ create view historial_movimientos as
     m.rodeo_destino_id, rd.codigo as rodeo_destino,
     m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
-    m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo
+    m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo,
+    m.reemplazado_por, m.editado_de
   from movimientos m
   join tipos_movimiento tm on tm.id = m.tipo_movimiento
   left join establecimientos eo on eo.id = m.establecimiento_origen

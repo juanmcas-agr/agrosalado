@@ -6,7 +6,13 @@ import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
 import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
+import { marcarComoReemplazado } from './historial.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
+
+// Id del movimiento que se está corrigiendo, o null en carga normal — ver
+// precargarParaEditar() (disparado desde historial.js vía evento, para no
+// armar un import circular entre los dos módulos).
+let editandoId = null;
 
 const CAMPOS = [
   'establecimiento_origen', 'establecimiento_destino',
@@ -103,6 +109,18 @@ function limpiarTitular(prefijo) {
   limpiarSeleccion(`mov-titular-${prefijo}-tipo`);
   el(`mov-titular-${prefijo}-cap-wrap`).classList.add('oculto');
   el(`mov-titular-${prefijo}-cap`).value = '';
+}
+
+// Para precargar el formulario al editar: reconstruye la selección
+// tipo+capitalizador a partir de un titular_id ya resuelto.
+function precargarTitular(prefijo, titularId) {
+  if (!titularId) { limpiarTitular(prefijo); return; }
+  const esBase = titularId === 'agro_salado' || titularId === 'dona_julia';
+  establecerSeleccion(`mov-titular-${prefijo}-tipo`, esBase ? titularId : 'capitalizador');
+  if (!esBase) {
+    el(`mov-titular-${prefijo}-cap-wrap`).classList.remove('oculto');
+    el(`mov-titular-${prefijo}-cap`).value = titularId;
+  }
 }
 
 // ─── rodeo: obligatorio, se filtra por la categoría/establecimiento
@@ -300,6 +318,7 @@ function leerFormulario() {
     feedlotCorral: obtenerSeleccion('mov-feedlot-corral'),
     feedlotFechaSalida: el('mov-feedlot-fecha-salida').value || null,
     feedlotKilosObjetivo: el('mov-feedlot-kilos-objetivo').value || null,
+    editandoId,
   };
 }
 
@@ -380,6 +399,7 @@ function armarFila(datos) {
     rodeo_id: datos.rodeo_id,
     rodeo_destino_id: datos.rodeo_destino || null,
     observaciones: datos.observaciones,
+    editado_de: datos.editandoId || null,
   };
 }
 
@@ -426,6 +446,42 @@ function resetFormulario() {
   establecerSeleccion('mov-tipo', primerTipoPermitido());
 }
 
+function cancelarEdicion() {
+  editandoId = null;
+  el('mov-editando-aviso').classList.add('oculto');
+  el('mov-submit').textContent = 'Guardar movimiento';
+  resetFormulario();
+}
+
+// Precarga el formulario con los datos de un movimiento del historial para
+// corregirlo — el tipo se elige primero porque dispara
+// actualizarCamposVisibles() (reconstruye categoría-destino, selects de
+// rodeo y bloque de feed lot), recién después tiene sentido setear el
+// resto de los campos que dependen de eso.
+function precargarParaEditar(fila) {
+  editandoId = fila.id;
+  establecerSeleccion('mov-tipo', fila.tipo_movimiento);
+  if (fila.establecimiento_origen) establecerSeleccion('mov-establecimiento-origen', fila.establecimiento_origen);
+  if (fila.establecimiento_destino) establecerSeleccion('mov-establecimiento-destino', fila.establecimiento_destino);
+  if (fila.categoria_origen) establecerSeleccion('mov-categoria-origen', fila.categoria_origen);
+  if (fila.categoria_destino) establecerSeleccion('mov-categoria-destino', fila.categoria_destino);
+  precargarTitular('origen', fila.titular_origen);
+  precargarTitular('destino', fila.titular_destino);
+  el('mov-cabezas').value = fila.cantidad_cabezas;
+  el('mov-kilos').value = fila.kilos_promedio;
+  el('mov-fecha').value = fila.fecha;
+  el('mov-observaciones').value = fila.observaciones || '';
+  actualizarSelectsRodeo();
+  if (fila.rodeo_id) el('mov-rodeo').value = fila.rodeo_id;
+  if (fila.rodeo_destino_id) el('mov-rodeo-destino').value = fila.rodeo_destino_id;
+
+  el('mov-editando-texto').textContent =
+    `✏️ Corrigiendo el movimiento del ${fila.fecha} (${fila.tipo_movimiento_nombre}). Al guardar, el original queda tachado en el historial como "Editado".`;
+  el('mov-editando-aviso').classList.remove('oculto');
+  el('mov-submit').textContent = 'Guardar corrección';
+  location.hash = 'cargar';
+}
+
 // Salida/interna sacan cabezas del rodeo de origen — no puede haber más
 // saliendo que las que tiene. Solo se puede chequear con conexión (pide el
 // stock real a Supabase); si está offline se deja pasar como hasta ahora
@@ -456,6 +512,14 @@ async function onSubmit(evento) {
 
   if (errores.length) {
     mostrarMensaje(errores.join(' '), 'error');
+    return;
+  }
+
+  // Guardar una corrección exige conexión: además de encolar el movimiento
+  // nuevo, hay que marcar el original como reemplazado con un UPDATE en
+  // vivo (no pasa por el outbox) — mismo criterio que anular.
+  if (datos.editandoId && !navigator.onLine) {
+    mostrarMensaje('Necesitás conexión a internet para guardar una corrección.', 'error');
     return;
   }
 
@@ -492,13 +556,27 @@ async function onSubmit(evento) {
     }
   }
 
-  mostrarToast('✅ MOVIMIENTO REGISTRADO');
+  if (datos.editandoId) {
+    try {
+      await marcarComoReemplazado(datos.editandoId, fila.id);
+    } catch (error) {
+      mostrarMensaje(
+        `La corrección se guardó, pero no se pudo marcar el movimiento original como reemplazado: ${error.message}. Avisá para resolverlo a mano.`,
+        'advertencia'
+      );
+      cancelarEdicion();
+      mostrarToast('✅ CORRECCIÓN REGISTRADA');
+      return;
+    }
+  }
+
+  mostrarToast(datos.editandoId ? '✅ CORRECCIÓN REGISTRADA' : '✅ MOVIMIENTO REGISTRADO');
   if (advertencias.length) {
     mostrarMensaje(`Se sincroniza automáticamente. (${advertencias.join(' ')})`, 'advertencia');
   } else {
     mostrarMensaje('', 'ok');
   }
-  resetFormulario();
+  cancelarEdicion();
 }
 
 export async function initMovimientos() {
@@ -514,4 +592,6 @@ export async function initMovimientos() {
   establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
+  el('mov-editando-cancelar').addEventListener('click', cancelarEdicion);
+  document.addEventListener('hacienda:editar-movimiento', (evento) => precargarParaEditar(evento.detail));
 }

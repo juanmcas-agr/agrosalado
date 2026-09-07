@@ -58,6 +58,11 @@
       <h2>Cargar movimiento</h2>
       <button id="mov-feedlot" type="button" class="boton-secundario">Enviar a Feed Lot</button>
 
+      <div id="mov-editando-aviso" class="mensaje advertencia oculto" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span id="mov-editando-texto"></span>
+        <button type="button" id="mov-editando-cancelar" class="boton-secundario" style="width:auto;flex-shrink:0;">Cancelar edición</button>
+      </div>
+
       <form id="mov-form" class="formulario">
         <div class="campo-grupo full">
           <div class="etiqueta-grupo">Tipo de movimiento</div>
@@ -156,7 +161,7 @@
           <textarea id="mov-observaciones" rows="2"></textarea>
         </label>
 
-        <button type="submit" class="full">Guardar movimiento</button>
+        <button type="submit" id="mov-submit" class="full">Guardar movimiento</button>
         <div id="mov-mensaje" class="mensaje full"></div>
       </form>
     </section>
