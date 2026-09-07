@@ -736,11 +736,14 @@ create policy precios_relativos_ratios_config_delete on precios_relativos_ratios
 
 -- Simulaciones de FLETE (pestaña privada de Granos, solo owner): compara
 -- para una misma alternativa de compra/venta cuánto le queda al acopio
--- según a qué destino despache realmente, manteniendo fijo el precio ya
--- pactado con el productor. costo_flete_pct hoy es una estimación simple
--- (% de la tarifa corto+largo ya calculada); componentes_costo queda
--- reservado para cuando se cargue el costo real desglosado (combustible,
--- peajes, chofer...) sin necesitar otra migración.
+-- según a qué destino despache realmente. Todos los campos son editables a
+-- mano en la pestaña (ej. si el precio pactado con el productor es el de
+-- OTRA alternativa, no el de esta fila). modo_costo elige cómo se calcula
+-- el costo de flete: 'pct' (estimación simple, % de flete_corto+flete_largo)
+-- o 'rubros' (costo real: flete_costos_rubro × km_corto+km_largo).
+-- componentes_costo guarda una foto de los rubros usados en el momento,
+-- para que no cambie retroactivamente si después se actualiza
+-- flete_costos_rubro.
 create table flete_simulaciones (
   id uuid primary key default gen_random_uuid(),
   usuario_id uuid not null references auth.users(id),
@@ -751,8 +754,11 @@ create table flete_simulaciones (
   destino text,
   precio_bruto numeric,
   precio_productor numeric,
+  km_corto numeric,
+  km_largo numeric,
   flete_corto numeric,
   flete_largo numeric,
+  modo_costo text not null default 'pct' check (modo_costo in ('pct', 'rubros')),
   costo_flete_pct numeric not null default 75,
   componentes_costo jsonb,
   notas text,
@@ -768,6 +774,35 @@ create policy flete_simulaciones_insert on flete_simulaciones for insert to auth
 create policy flete_simulaciones_update on flete_simulaciones for update to authenticated
   using (rol_actual() = 'owner');
 create policy flete_simulaciones_delete on flete_simulaciones for delete to authenticated
+  using (rol_actual() = 'owner');
+
+-- Costo real de flete por rubro ($/KM) — una sola fila fija (id='default'),
+-- que se actualiza (upsert) desde la pestaña FLETE cuando Juan carga datos
+-- nuevos. Los rubros son los que categoriza la publicación de "Costos del
+-- Transporte de Larga Distancia": mano de obra, combustibles, neumáticos,
+-- mantenimiento, material rodante, patentes y registros, seguros, gastos
+-- generales y costos financieros.
+create table flete_costos_rubro (
+  id text primary key default 'default',
+  mano_obra numeric not null default 0,
+  combustibles numeric not null default 0,
+  neumaticos numeric not null default 0,
+  mantenimiento numeric not null default 0,
+  material_rodante numeric not null default 0,
+  patentes_registros numeric not null default 0,
+  seguros numeric not null default 0,
+  gastos_generales numeric not null default 0,
+  costos_financieros numeric not null default 0,
+  actualizado_at timestamptz not null default now()
+);
+
+alter table flete_costos_rubro enable row level security;
+
+create policy flete_costos_rubro_select on flete_costos_rubro for select to authenticated
+  using (rol_actual() = 'owner');
+create policy flete_costos_rubro_insert on flete_costos_rubro for insert to authenticated
+  with check (rol_actual() = 'owner');
+create policy flete_costos_rubro_update on flete_costos_rubro for update to authenticated
   using (rol_actual() = 'owner');
 
 -- ─── Después de correr este script ──────────────────────────────────────
