@@ -8,7 +8,22 @@ function el(id) {
   return document.getElementById(id);
 }
 
+// "$ Pesos" es un producto de referencia sintético, no vive en la base
+// (no tiene fuente ni serie propia): vale siempre 1 ARS, por definición.
+// Dividir cualquier producto por esta columna da directamente su precio
+// nominal en pesos de esa fecha — igual que dividir por "Dólar Banco
+// Nación" ya daba su precio nominal en dólares. Un ratio entre dos
+// productos reales no cambia con esto (se cancela matemáticamente); esta
+// referencia es la manera de sacar el valor absoluto, no un ratio.
+const ID_PESOS = '__pesos__';
+const PRODUCTO_PESOS = { id: ID_PESOS, nombre: 'Pesos (nominal)', corto: '$ Pesos', monedaNativa: 'ARS' };
+
+function productosVisibles() {
+  return [PRODUCTO_PESOS, ...PRODUCTOS];
+}
+
 function porId(id) {
+  if (id === ID_PESOS) return PRODUCTO_PESOS;
   return PRODUCTOS.find((p) => p.id === id);
 }
 
@@ -43,6 +58,7 @@ async function cargarHistorialCompleto() {
 // hueco, igual que el criterio de "arrastre" ya definido para la carga
 // manual.
 function valorAsOf(productoId, fechaLimite) {
+  if (productoId === ID_PESOS) return { fecha: fechaLimite, valorNativo: 1 };
   const serie = historialPorProducto[productoId] || [];
   let resultado = null;
   for (const punto of serie) {
@@ -103,14 +119,15 @@ function renderMatriz() {
     return;
   }
 
+  const productos = productosVisibles();
   let theadHtml = '<thead><tr><th></th>';
-  for (const p of PRODUCTOS) theadHtml += `<th>${p.corto}</th>`;
+  for (const p of productos) theadHtml += `<th>${p.corto}</th>`;
   theadHtml += '</tr></thead>';
 
   let tbodyHtml = '<tbody>';
-  for (const filaProd of PRODUCTOS) {
+  for (const filaProd of productos) {
     tbodyHtml += `<tr><th>${filaProd.corto}</th>`;
-    for (const colProd of PRODUCTOS) {
+    for (const colProd of productos) {
       if (filaProd.id === colProd.id) {
         tbodyHtml += '<td class="celda-diagonal">—</td>';
         continue;
@@ -122,7 +139,7 @@ function renderMatriz() {
   }
   tbodyHtml += '</tbody>';
 
-  tabla.innerHTML = `<caption>Datos al ${formatearFecha(fechaHoy)}. Fila ÷ columna.</caption>${theadHtml}${tbodyHtml}`;
+  tabla.innerHTML = `<caption>Datos al ${formatearFecha(fechaHoy)}. Fila ÷ columna — dividí por "$ Pesos" o "U$ BNA" para ver el precio nominal en pesos o dólares.</caption>${theadHtml}${tbodyHtml}`;
 
   tabla.querySelectorAll('.celda-ratio').forEach((celda) => {
     celda.addEventListener('click', () => abrirDrillDown(celda.dataset.a, celda.dataset.b));
