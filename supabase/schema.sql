@@ -224,6 +224,67 @@ create trigger trg_resolver_diferencia_manga
   after insert on movimientos
   for each row execute function resolver_diferencia_manga();
 
+-- ─── Trabajo de Manga: Sanidad ──────────────────────────────────────────
+-- Catálogos con alta on-the-fly (mismo patrón que titulares): id text
+-- slug, nombre, activo. catalogo_toros es de M10 (Reproducción), no acá.
+create table catalogo_drogas (id text primary key, nombre text not null, activo boolean not null default true);
+create table catalogo_vacunas_reproductivas (id text primary key, nombre text not null, activo boolean not null default true);
+create table catalogo_otras_sanidades (id text primary key, nombre text not null, activo boolean not null default true);
+
+-- 1-a-1 con trabajos_manga: solo existe si el checkbox "Sanidad" se tildó.
+create table trabajo_manga_sanidad (
+  trabajo_manga_id uuid primary key references trabajos_manga(id) on delete cascade,
+  desparasitada boolean not null default false,
+  droga_id text references catalogo_drogas(id),
+  cobre boolean not null default false,
+  aftosa boolean not null default false,
+  brucelosis boolean not null default false,
+  carbunclo boolean not null default false
+);
+
+-- Selección múltiple (varias vacunas/otras sanidades a la vez).
+create table trabajo_manga_vacunas (
+  trabajo_manga_id uuid references trabajos_manga(id) on delete cascade,
+  vacuna_id text references catalogo_vacunas_reproductivas(id),
+  primary key (trabajo_manga_id, vacuna_id)
+);
+create table trabajo_manga_otras_sanidades (
+  trabajo_manga_id uuid references trabajos_manga(id) on delete cascade,
+  sanidad_id text references catalogo_otras_sanidades(id),
+  primary key (trabajo_manga_id, sanidad_id)
+);
+
+alter table catalogo_drogas enable row level security;
+alter table catalogo_vacunas_reproductivas enable row level security;
+alter table catalogo_otras_sanidades enable row level security;
+alter table trabajo_manga_sanidad enable row level security;
+alter table trabajo_manga_vacunas enable row level security;
+alter table trabajo_manga_otras_sanidades enable row level security;
+
+create policy catalogo_drogas_select on catalogo_drogas for select to authenticated using (true);
+create policy catalogo_drogas_insert on catalogo_drogas for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy catalogo_vacunas_reproductivas_select on catalogo_vacunas_reproductivas for select to authenticated using (true);
+create policy catalogo_vacunas_reproductivas_insert on catalogo_vacunas_reproductivas for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy catalogo_otras_sanidades_select on catalogo_otras_sanidades for select to authenticated using (true);
+create policy catalogo_otras_sanidades_insert on catalogo_otras_sanidades for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy trabajo_manga_sanidad_select on trabajo_manga_sanidad for select to authenticated using (true);
+create policy trabajo_manga_sanidad_insert on trabajo_manga_sanidad for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy trabajo_manga_vacunas_select on trabajo_manga_vacunas for select to authenticated using (true);
+create policy trabajo_manga_vacunas_insert on trabajo_manga_vacunas for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy trabajo_manga_otras_sanidades_select on trabajo_manga_otras_sanidades for select to authenticated using (true);
+create policy trabajo_manga_otras_sanidades_insert on trabajo_manga_otras_sanidades for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
 create table perfiles (

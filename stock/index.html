@@ -197,6 +197,65 @@
           <input id="manga-cantidad" type="number" min="1" step="1" required>
         </label>
 
+        <label class="full checkbox-linea">
+          <input id="manga-check-sanidad" type="checkbox">
+          SANIDAD
+        </label>
+
+        <div id="manga-bloque-sanidad" class="full bloque-condicional oculto">
+          <label class="checkbox-linea">
+            <input id="manga-desparasitada" type="checkbox">
+            Desparasitada
+          </label>
+          <label id="manga-fila-droga" class="oculto">Droga
+            <select id="manga-droga">
+              <option value="">Elegir...</option>
+              <option value="__nuevo__">+ Nueva droga...</option>
+            </select>
+          </label>
+
+          <label class="checkbox-linea">
+            <input id="manga-cobre" type="checkbox">
+            Cobre
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-aftosa" type="checkbox">
+            Aftosa
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-brucelosis" type="checkbox">
+            Brucelosis
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-carbunclo" type="checkbox">
+            Carbunclo
+          </label>
+
+          <label class="checkbox-linea">
+            <input id="manga-check-vacunas" type="checkbox">
+            Vacunas reproductivas
+          </label>
+          <div id="manga-bloque-vacunas" class="campo-grupo oculto">
+            <div id="manga-vacunas"></div>
+            <select id="manga-vacunas-agregar">
+              <option value="">+ Agregar vacuna...</option>
+              <option value="__nuevo__">+ Nueva vacuna...</option>
+            </select>
+          </div>
+
+          <label class="checkbox-linea">
+            <input id="manga-check-otras" type="checkbox">
+            Otras sanidades
+          </label>
+          <div id="manga-bloque-otras" class="campo-grupo oculto">
+            <div id="manga-otras"></div>
+            <select id="manga-otras-agregar">
+              <option value="">+ Agregar...</option>
+              <option value="__nuevo__">+ Nueva...</option>
+            </select>
+          </div>
+        </div>
+
         <label class="full">Observaciones (opcional)
           <textarea id="manga-observaciones" rows="2"></textarea>
         </label>

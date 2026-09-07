@@ -16,6 +16,120 @@ function el(id) {
   return document.getElementById(id);
 }
 
+// ─── Catálogos de Sanidad con alta on-the-fly (mismo patrón que
+// titulares.js: id = slug del nombre, se cachean y se agregan al vuelo). ───
+
+function slugify(texto) {
+  const sinAcentos = texto.normalize('NFD').replace(/[̀-ͯ]/g, '');
+  return sinAcentos.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+const catalogos = {
+  drogas: { tabla: 'catalogo_drogas', cache: [] },
+  vacunas: { tabla: 'catalogo_vacunas_reproductivas', cache: [] },
+  otras: { tabla: 'catalogo_otras_sanidades', cache: [] },
+};
+
+async function cargarCatalogo(clave) {
+  const c = catalogos[clave];
+  const { data, error } = await supabase.from(c.tabla).select('*').eq('activo', true).order('nombre');
+  if (!error) c.cache = data;
+  return c.cache;
+}
+
+async function crearEnCatalogo(clave, nombre) {
+  const c = catalogos[clave];
+  const id = slugify(nombre);
+  if (!id) throw new Error('Nombre inválido');
+  const existente = c.cache.find((x) => x.id === id);
+  if (existente) return existente;
+  const { data, error } = await supabase.from(c.tabla).insert({ id, nombre }).select().single();
+  if (error) throw error;
+  c.cache = [...c.cache, data];
+  return data;
+}
+
+function poblarSelectCatalogo(idSelect, clave, textoNuevo) {
+  const select = el(idSelect);
+  const valorPrevio = select.value;
+  select.innerHTML = '';
+  const opcionVacia = document.createElement('option');
+  opcionVacia.value = '';
+  opcionVacia.textContent = 'Elegir...';
+  select.appendChild(opcionVacia);
+  for (const item of catalogos[clave].cache) {
+    const opt = document.createElement('option');
+    opt.value = item.id;
+    opt.textContent = item.nombre;
+    select.appendChild(opt);
+  }
+  const opcionNueva = document.createElement('option');
+  opcionNueva.value = '__nuevo__';
+  opcionNueva.textContent = textoNuevo;
+  select.appendChild(opcionNueva);
+  if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+}
+
+// ─── Selección múltiple contra un catálogo (vacunas / otras sanidades):
+// un <select> "agregar" que suma chips a una lista, con alta on-the-fly. ───
+
+const seleccionMultipleCatalogo = {
+  vacunas: new Set(),
+  otras: new Set(),
+};
+
+function renderChips(idLista, clave) {
+  const contenedor = el(idLista);
+  contenedor.innerHTML = '';
+  for (const id of seleccionMultipleCatalogo[clave]) {
+    const item = catalogos[clave].cache.find((x) => x.id === id);
+    if (!item) continue;
+    const chip = document.createElement('span');
+    chip.className = 'chip';
+    chip.textContent = item.nombre;
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = '×';
+    boton.addEventListener('click', () => {
+      seleccionMultipleCatalogo[clave].delete(id);
+      renderChips(idLista, clave);
+    });
+    chip.appendChild(boton);
+    contenedor.appendChild(chip);
+  }
+}
+
+function inicializarAgregarCatalogo(idSelect, idLista, clave, textoNuevo) {
+  poblarSelectCatalogo(idSelect, clave, textoNuevo);
+  el(idSelect).addEventListener('change', async () => {
+    const select = el(idSelect);
+    const valor = select.value;
+    if (!valor) return;
+    if (valor === '__nuevo__') {
+      const nombre = prompt('Nombre nuevo:');
+      select.value = '';
+      if (!nombre || !nombre.trim()) return;
+      try {
+        const nuevo = await crearEnCatalogo(clave, nombre.trim());
+        poblarSelectCatalogo(idSelect, clave, textoNuevo);
+        seleccionMultipleCatalogo[clave].add(nuevo.id);
+        renderChips(idLista, clave);
+      } catch (error) {
+        alert('No se pudo crear: ' + error.message);
+      }
+      return;
+    }
+    seleccionMultipleCatalogo[clave].add(valor);
+    renderChips(idLista, clave);
+    select.value = '';
+  });
+}
+
+function limpiarSeleccionMultipleCatalogo(clave, idLista) {
+  seleccionMultipleCatalogo[clave].clear();
+  renderChips(idLista, clave);
+}
+
 function poblarSelectRodeoManga() {
   const categoriaId = obtenerSeleccion('manga-categoria');
   const select = el('manga-rodeo');
@@ -32,6 +146,88 @@ function poblarSelectRodeoManga() {
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
 }
 
+function leerSanidad() {
+  if (!el('manga-check-sanidad').checked) return null;
+  const desparasitada = el('manga-desparasitada').checked;
+  return {
+    desparasitada,
+    droga_id: desparasitada && el('manga-droga').value && el('manga-droga').value !== '__nuevo__' ? el('manga-droga').value : null,
+    cobre: el('manga-cobre').checked,
+    aftosa: el('manga-aftosa').checked,
+    brucelosis: el('manga-brucelosis').checked,
+    carbunclo: el('manga-carbunclo').checked,
+    vacunas: el('manga-check-vacunas').checked ? [...seleccionMultipleCatalogo.vacunas] : [],
+    otras: el('manga-check-otras').checked ? [...seleccionMultipleCatalogo.otras] : [],
+  };
+}
+
+async function guardarSanidad(trabajoMangaId, sanidad) {
+  const { error: errorSanidad } = await supabase
+    .from('trabajo_manga_sanidad')
+    .insert({
+      trabajo_manga_id: trabajoMangaId,
+      desparasitada: sanidad.desparasitada,
+      droga_id: sanidad.droga_id,
+      cobre: sanidad.cobre,
+      aftosa: sanidad.aftosa,
+      brucelosis: sanidad.brucelosis,
+      carbunclo: sanidad.carbunclo,
+    });
+  if (errorSanidad) throw errorSanidad;
+
+  if (sanidad.vacunas.length) {
+    const { error } = await supabase
+      .from('trabajo_manga_vacunas')
+      .insert(sanidad.vacunas.map((vacunaId) => ({ trabajo_manga_id: trabajoMangaId, vacuna_id: vacunaId })));
+    if (error) throw error;
+  }
+  if (sanidad.otras.length) {
+    const { error } = await supabase
+      .from('trabajo_manga_otras_sanidades')
+      .insert(sanidad.otras.map((sanidadId) => ({ trabajo_manga_id: trabajoMangaId, sanidad_id: sanidadId })));
+    if (error) throw error;
+  }
+}
+
+function activarBloquesSanidad() {
+  el('manga-check-sanidad').addEventListener('change', () => {
+    el('manga-bloque-sanidad').classList.toggle('oculto', !el('manga-check-sanidad').checked);
+  });
+  el('manga-desparasitada').addEventListener('change', () => {
+    const marcada = el('manga-desparasitada').checked;
+    el('manga-fila-droga').classList.toggle('oculto', !marcada);
+    if (!marcada) el('manga-droga').value = '';
+  });
+  el('manga-check-vacunas').addEventListener('change', () => {
+    const marcada = el('manga-check-vacunas').checked;
+    el('manga-bloque-vacunas').classList.toggle('oculto', !marcada);
+    if (!marcada) limpiarSeleccionMultipleCatalogo('vacunas', 'manga-vacunas');
+  });
+  el('manga-check-otras').addEventListener('change', () => {
+    const marcada = el('manga-check-otras').checked;
+    el('manga-bloque-otras').classList.toggle('oculto', !marcada);
+    if (!marcada) limpiarSeleccionMultipleCatalogo('otras', 'manga-otras');
+  });
+}
+
+function limpiarSanidad() {
+  el('manga-check-sanidad').checked = false;
+  el('manga-bloque-sanidad').classList.add('oculto');
+  el('manga-desparasitada').checked = false;
+  el('manga-fila-droga').classList.add('oculto');
+  el('manga-droga').value = '';
+  el('manga-cobre').checked = false;
+  el('manga-aftosa').checked = false;
+  el('manga-brucelosis').checked = false;
+  el('manga-carbunclo').checked = false;
+  el('manga-check-vacunas').checked = false;
+  el('manga-bloque-vacunas').classList.add('oculto');
+  limpiarSeleccionMultipleCatalogo('vacunas', 'manga-vacunas');
+  el('manga-check-otras').checked = false;
+  el('manga-bloque-otras').classList.add('oculto');
+  limpiarSeleccionMultipleCatalogo('otras', 'manga-otras');
+}
+
 function mostrarMensaje(texto, tipo) {
   const contenedor = el('manga-mensaje');
   contenedor.textContent = texto;
@@ -45,6 +241,7 @@ function resetFormulario() {
   limpiarSeleccion('manga-propietarios');
   el('manga-cantidad').value = '';
   el('manga-observaciones').value = '';
+  limpiarSanidad();
 }
 
 async function onSubmit(evento) {
@@ -98,6 +295,16 @@ async function onSubmit(evento) {
     .insert(propietarios.map((titularId) => ({ trabajo_manga_id: trabajo.id, titular_id: titularId })));
   if (errorProp) { mostrarMensaje('Se guardó el trabajo, pero no se pudieron guardar los propietarios: ' + errorProp.message, 'advertencia'); return; }
 
+  const sanidad = leerSanidad();
+  if (sanidad) {
+    try {
+      await guardarSanidad(trabajo.id, sanidad);
+    } catch (error) {
+      mostrarMensaje('Se guardó el trabajo, pero no se pudo guardar la sanidad: ' + error.message, 'advertencia');
+      return;
+    }
+  }
+
   if (diferenciaPendiente) {
     mostrarMensaje(
       `⚠️ Guardado, pero la cantidad trabajada (${cantidad}) no coincide con el stock del rodeo (${stockActual}). ` +
@@ -111,10 +318,14 @@ async function onSubmit(evento) {
 }
 
 export async function initTrabajoManga() {
-  await Promise.all([cargarTitulares(), cargarRodeos()]);
+  await Promise.all([cargarTitulares(), cargarRodeos(), cargarCatalogo('drogas'), cargarCatalogo('vacunas'), cargarCatalogo('otras')]);
   crearGrupoBotones('manga-categoria', CATEGORIAS);
   crearGrupoBotonesMultiple('manga-propietarios', obtenerTitularesCache());
   el('manga-categoria').addEventListener('cambio', poblarSelectRodeoManga);
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
+  activarBloquesSanidad();
+  poblarSelectCatalogo('manga-droga', 'drogas', '+ Nueva droga...');
+  inicializarAgregarCatalogo('manga-vacunas-agregar', 'manga-vacunas', 'vacunas', '+ Nueva vacuna...');
+  inicializarAgregarCatalogo('manga-otras-agregar', 'manga-otras', 'otras', '+ Nueva...');
   el('manga-form').addEventListener('submit', onSubmit);
 }

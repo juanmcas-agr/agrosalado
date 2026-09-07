@@ -225,6 +225,55 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 .campo-grupo { margin: 6px 0; }
 .campo-grupo + .campo-grupo { margin-top: 14px; }
 
+.checkbox-linea {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 8px !important;
+}
+.checkbox-linea input[type="checkbox"] {
+  width: 20px; height: 20px;
+  flex-shrink: 0;
+}
+
+.bloque-condicional {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  margin: 6px 0 14px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.lista-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 0;
+}
+.lista-chips:empty { display: none; }
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #8a5a34;
+  color: #fff;
+  border-radius: 16px;
+  padding: 6px 8px 6px 12px;
+  font-size: 0.9em;
+}
+.chip button {
+  background: rgba(255,255,255,0.25);
+  border: none;
+  color: #fff;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  line-height: 1;
+  cursor: pointer;
+  font-size: 1em;
+}
+
 .etiqueta-grupo { font-size: 0.9em; font-weight: bold; margin-bottom: 6px; }
 
 .grupo-botones {
