@@ -320,6 +320,17 @@
         <button type="button" id="botonCambiarClave">Cambiar contraseña</button>
         <div id="cfgUsuarioEditMensaje" class="mensaje-panel"></div>
       </div>
+
+      <button type="button" class="panel-menu-item" data-seccion="rodeos">
+        <span>RENOMBRAR RODEO</span><span class="panel-menu-flecha">›</span>
+      </button>
+      <div id="seccionRodeos" class="panel-seccion">
+        <p style="font-size:0.85em;color:#666;margin-top:0;">El código (año y secuencia) no cambia — solo el nombre.</p>
+        <select id="cfgListaRodeos"></select>
+        <input type="text" id="cfgRodeoNombreNuevo" placeholder="Nombre nuevo">
+        <button type="button" id="botonRenombrarRodeo">Guardar nombre</button>
+        <div id="cfgRodeoMensaje" class="mensaje-panel"></div>
+      </div>
     </div>
 
     <div class="panel-footer">

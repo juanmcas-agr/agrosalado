@@ -49,6 +49,24 @@ export async function crearRodeo({ nombre, categoriaId, establecimientoId, fecha
   return data;
 }
 
+// Renombrar un rodeo: el código se re-arma con el nombre nuevo pero el
+// mismo año/secuencia (esos no cambian nunca, son la identidad real del
+// rodeo — el nombre es solo la parte "humana" del código).
+export async function renombrarRodeo(id, nuevoNombre) {
+  const rodeo = cache.find((r) => r.id === id);
+  if (!rodeo) throw new Error('Rodeo no encontrado — recargá la página e intentá de nuevo.');
+  const nuevoCodigo = `${nuevoNombre} ${rodeo.anio}${String(rodeo.secuencia).padStart(2, '0')}`;
+  const { data, error } = await supabase
+    .from('rodeos')
+    .update({ nombre: nuevoNombre, codigo: nuevoCodigo })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  cache = cache.map((r) => (r.id === id ? data : r));
+  return data;
+}
+
 // Cabezas actuales de un rodeo (sumando todos los titulares) — se pide en
 // vivo al validar un movimiento de salida/interna, no se cachea, para no
 // dar luz verde con un stock desactualizado.

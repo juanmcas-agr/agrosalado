@@ -6,6 +6,7 @@
 // porque este archivo es un módulo ES.
 import { supabase } from './supabaseClient.js';
 import { getEstado, cerrarSesion } from './auth.js';
+import { cargarRodeos, obtenerRodeosCache, renombrarRodeo } from './rodeos.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -51,7 +52,7 @@ function cerrarPanelConfig() {
 // Menú tipo acordeón: un click abre esa sección y cierra las demás; un
 // segundo click sobre la misma la cierra.
 function toggleSeccionConfig(nombre) {
-  const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar' };
+  const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', rodeos: 'seccionRodeos' };
   const yaAbierta = el(secciones[nombre]).classList.contains('abierta');
   for (const [clave, id] of Object.entries(secciones)) {
     el(id).classList.remove('abierta');
@@ -61,6 +62,7 @@ function toggleSeccionConfig(nombre) {
     el(secciones[nombre]).classList.add('abierta');
     document.querySelector(`.panel-menu-item[data-seccion="${nombre}"]`).classList.add('activo');
     if (nombre === 'administrar') cargarUsuariosPanel();
+    if (nombre === 'rodeos') cargarRodeosPanel();
   }
 }
 
@@ -288,6 +290,52 @@ async function cambiarClaveUsuario() {
   }
 }
 
+// ─── Renombrar rodeo ───
+
+async function cargarRodeosPanel() {
+  await cargarRodeos();
+  renderListaRodeosPanel();
+}
+
+function renderListaRodeosPanel() {
+  const select = el('cfgListaRodeos');
+  const seleccionPrevia = select.value;
+  select.innerHTML = '<option value="">— Elegir rodeo —</option>';
+  for (const r of obtenerRodeosCache()) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.codigo;
+    select.appendChild(opt);
+  }
+  select.value = seleccionPrevia;
+}
+
+function onSeleccionRodeoLista() {
+  const rodeoId = el('cfgListaRodeos').value;
+  el('cfgRodeoMensaje').textContent = '';
+  const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
+  el('cfgRodeoNombreNuevo').value = rodeo ? rodeo.nombre : '';
+}
+
+async function guardarNombreRodeo() {
+  const rodeoId = el('cfgListaRodeos').value;
+  const nombreNuevo = el('cfgRodeoNombreNuevo').value.trim();
+  const msj = el('cfgRodeoMensaje');
+  msj.textContent = '';
+  if (!rodeoId) { msj.textContent = 'Elegí un rodeo de la lista primero.'; msj.className = 'mensaje-panel error'; return; }
+  if (!nombreNuevo) { msj.textContent = 'Escribí el nombre nuevo.'; msj.className = 'mensaje-panel error'; return; }
+  try {
+    const actualizado = await renombrarRodeo(rodeoId, nombreNuevo);
+    msj.textContent = `Renombrado a "${actualizado.codigo}".`;
+    msj.className = 'mensaje-panel ok';
+    renderListaRodeosPanel();
+    el('cfgListaRodeos').value = rodeoId;
+  } catch (error) {
+    msj.textContent = 'No se pudo renombrar: ' + error.message;
+    msj.className = 'mensaje-panel error';
+  }
+}
+
 export function initConfigPanel() {
   el('botonConfig').innerHTML = ICONO_ENGRANAJE;
   el('botonConfig').addEventListener('click', abrirPanelConfig);
@@ -304,4 +352,6 @@ export function initConfigPanel() {
   el('botonCerrarSesionPanel').addEventListener('click', cerrarSesionDesdePanel);
   wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
   wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
+  el('cfgListaRodeos').addEventListener('change', onSeleccionRodeoLista);
+  el('botonRenombrarRodeo').addEventListener('click', guardarNombreRodeo);
 }
