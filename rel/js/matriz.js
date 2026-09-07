@@ -45,13 +45,22 @@ let historialPorProducto = {};
 // BNA) en moneda constante. Un ratio entre dos productos reales NO
 // necesita esto (se cancela matemáticamente, ver comentario de ID_PESOS).
 let indicePorTipo = {};
+// configPorPar['idMenor|idMayor'] = fila de precios_relativos_ratios_config
+// o undefined si nadie configuró ese par. Orden alfabético fijo (coincide
+// con el check producto_a_id < producto_b_id de la tabla).
+let configPorPar = {};
 let cargado = false;
 
 async function cargarHistorialCompleto() {
   if (cargado) return;
-  const [{ data: historial, error: errorHistorial }, { data: indices, error: errorIndices }] = await Promise.all([
+  const [
+    { data: historial, error: errorHistorial },
+    { data: indices, error: errorIndices },
+    { data: configs, error: errorConfigs },
+  ] = await Promise.all([
     supabase.from('precios_relativos_historial').select('producto_id, fecha, valor_nativo').order('fecha', { ascending: true }),
     supabase.from('precios_relativos_indices').select('tipo, fecha, indice').order('fecha', { ascending: true }),
+    supabase.from('precios_relativos_ratios_config').select('*'),
   ]);
   if (errorHistorial) {
     console.error('No se pudo cargar el histórico de precios relativos:', errorHistorial);
@@ -67,6 +76,12 @@ async function cargarHistorialCompleto() {
     for (const fila of indices) {
       if (!indicePorTipo[fila.tipo]) indicePorTipo[fila.tipo] = [];
       indicePorTipo[fila.tipo].push({ fecha: fila.fecha, indice: Number(fila.indice) });
+    }
+  }
+  configPorPar = {};
+  if (!errorConfigs && configs) {
+    for (const fila of configs) {
+      configPorPar[`${fila.producto_a_id}|${fila.producto_b_id}`] = fila;
     }
   }
   cargado = true;
@@ -190,7 +205,10 @@ function renderMatriz() {
         continue;
       }
       const v = ratioAsOf(filaProd.id, colProd.id, fechaHoy);
-      tbodyHtml += `<td class="celda-ratio" data-a="${filaProd.id}" data-b="${colProd.id}">${formatearRatio(v)}</td>`;
+      const alerta = estadoAlertaParaPar(filaProd.id, colProd.id);
+      const claseAlerta = alerta?.estado === 'caro' ? ' celda-alerta-caro' : alerta?.estado === 'barato' ? ' celda-alerta-barato' : '';
+      const icono = alerta?.estado === 'caro' ? ' 🔴' : alerta?.estado === 'barato' ? ' 🟢' : '';
+      tbodyHtml += `<td class="celda-ratio${claseAlerta}" data-a="${filaProd.id}" data-b="${colProd.id}">${formatearRatio(v)}${icono}</td>`;
     }
     tbodyHtml += '</tr>';
   }
@@ -225,6 +243,101 @@ function filtrarPorPeriodo(serie, meses) {
   fechaCorte.setMonth(fechaCorte.getMonth() - meses);
   const corteIso = fechaCorte.toISOString().slice(0, 10);
   return serie.filter((p) => p.fecha >= corteIso);
+}
+
+// ── Alertas por ratio (percentil histórico y/o desvío % del promedio) ──
+// $ Pesos es sintético (no existe en precios_relativos_productos, ver
+// ID_PESOS más arriba), así que no puede tener fila de config — no se
+// pueden armar alertas contra esa columna.
+function clavePar(idA, idB) {
+  return [idA, idB].sort().join('|');
+}
+
+function configDePar(idA, idB) {
+  return configPorPar[clavePar(idA, idB)];
+}
+
+// Percentil del último valor de la serie dentro de su propia ventana: qué
+// fracción de los valores del período es <= al actual.
+function percentilActual(serie) {
+  if (serie.length < 2) return null;
+  const actual = serie[serie.length - 1].valor;
+  const menoresOIguales = serie.filter((p) => p.valor <= actual).length;
+  return (menoresOIguales / serie.length) * 100;
+}
+
+// Desvío % del último valor respecto al promedio de toda la ventana.
+function desviacionActual(serie) {
+  if (serie.length < 2) return null;
+  const actual = serie[serie.length - 1].valor;
+  const promedio = serie.reduce((suma, p) => suma + p.valor, 0) / serie.length;
+  if (!promedio) return null;
+  return ((actual - promedio) / promedio) * 100;
+}
+
+// Evalúa una config en su dirección CANÓNICA (producto_a_id ÷ producto_b_id
+// — así se guardó, ver el check de la tabla) y devuelve el estado en esa
+// dirección. estadoAlertaParaPar() se encarga de invertirlo si hace falta
+// para la dirección que se está mostrando.
+function evaluarConfig(config) {
+  const tipoIndice = tipoIndiceAplicable(config.producto_a_id, config.producto_b_id);
+  let serie = serieRatio(config.producto_a_id, config.producto_b_id);
+  if (tipoIndice && (config.base === 'real_ars' || config.base === 'real_usd')) {
+    serie = aplicarDeflactor(serie, tipoIndice);
+  }
+  serie = filtrarPorPeriodo(serie, config.ventana_meses);
+  if (serie.length < 2) return null;
+
+  const percentil = percentilActual(serie);
+  const desviacionPct = desviacionActual(serie);
+
+  let estado = 'neutral';
+  const evaluarPercentil = () => {
+    if (percentil == null) return 'neutral';
+    if (percentil <= config.umbral_percentil_bajo) return 'barato';
+    if (percentil >= config.umbral_percentil_alto) return 'caro';
+    return 'neutral';
+  };
+  const evaluarDesvio = () => {
+    if (desviacionPct == null) return 'neutral';
+    if (desviacionPct <= -config.umbral_desvio_pct) return 'barato';
+    if (desviacionPct >= config.umbral_desvio_pct) return 'caro';
+    return 'neutral';
+  };
+
+  if (config.metodo === 'percentil') estado = evaluarPercentil();
+  else if (config.metodo === 'desvio') estado = evaluarDesvio();
+  else { // 'ambos': el primero que dispare gana
+    const porPercentil = evaluarPercentil();
+    const porDesvio = evaluarDesvio();
+    estado = porPercentil !== 'neutral' ? porPercentil : porDesvio;
+  }
+
+  return { estado, percentil, desviacionPct };
+}
+
+function invertirEstado(estado) {
+  if (estado === 'caro') return 'barato';
+  if (estado === 'barato') return 'caro';
+  return estado;
+}
+
+// Estado de alerta para el par mostrado en (idA, idB) — puede venir
+// invertido respecto a cómo se guardó la config (esta siempre está en
+// orden alfabético). null si no hay config, no está activa, o no hay datos
+// suficientes.
+function estadoAlertaParaPar(idA, idB) {
+  const config = configDePar(idA, idB);
+  if (!config || !config.alerta_activa) return null;
+  const resultado = evaluarConfig(config);
+  if (!resultado) return null;
+  const esInverso = config.producto_a_id === idB && config.producto_b_id === idA;
+  if (!esInverso) return resultado;
+  return {
+    ...resultado,
+    estado: invertirEstado(resultado.estado),
+    percentil: resultado.percentil == null ? null : 100 - resultado.percentil,
+  };
 }
 
 function svgLineChart(puntos, ancho, alto) {
@@ -293,10 +406,101 @@ function renderDrillDown() {
   `;
 }
 
+// ── Panel de configuración de alerta (dentro del drill-down) ──
+// Los umbrales/método/ventana se configuran SIEMPRE en la dirección
+// canónica alfabética (idA < idB, igual que se guarda en la tabla), no en
+// la dirección que se esté mirando en pantalla — así "percentil alto =
+// caro" significa siempre lo mismo sin importar desde qué celda se abrió
+// el drill-down. Por eso la nota de dirección es explícita.
+function renderAlertaPanel() {
+  const excluido = drillActualA === ID_PESOS || drillActualB === ID_PESOS;
+  el('alertaSinPesosNota').classList.toggle('oculto', !excluido);
+  el('alertaDireccionNota').classList.toggle('oculto', excluido);
+  el('alertaFormWrap').classList.toggle('oculto', excluido);
+  el('alertaEstadoActual').classList.toggle('oculto', excluido);
+  if (excluido) return;
+
+  const [idCanonA, idCanonB] = [drillActualA, drillActualB].sort();
+  const config = configPorPar[`${idCanonA}|${idCanonB}`];
+
+  el('alertaDireccionNota').textContent = `Esta alerta se configura para: ${porId(idCanonA).nombre} ÷ ${porId(idCanonB).nombre}.`;
+  el('alertaFavorito').checked = !!(config && config.favorito);
+  el('alertaActiva').checked = !!(config && config.alerta_activa);
+  el('alertaMetodo').value = (config && config.metodo) || 'ambos';
+  el('alertaVentana').value = String((config && config.ventana_meses) || 24);
+  el('alertaUmbralDesvio').value = (config && config.umbral_desvio_pct) ?? 15;
+  el('alertaUmbralPercentilBajo').value = (config && config.umbral_percentil_bajo) ?? 10;
+  el('alertaUmbralPercentilAlto').value = (config && config.umbral_percentil_alto) ?? 90;
+  const esReal = !!(config && (config.base === 'real_ars' || config.base === 'real_usd'));
+  el('alertaBase').value = esReal ? 'real' : 'nominal';
+
+  el('alertaBaseWrap').classList.toggle('oculto', !tipoIndiceAplicable(idCanonA, idCanonB));
+  el('alertaOpciones').classList.toggle('oculto', !el('alertaActiva').checked);
+  el('alertaMensaje').textContent = '';
+
+  const alerta = estadoAlertaParaPar(drillActualA, drillActualB);
+  const estadoEl = el('alertaEstadoActual');
+  if (!config || !config.alerta_activa) {
+    estadoEl.textContent = '';
+    estadoEl.className = 'alerta-estado-actual';
+  } else if (!alerta) {
+    estadoEl.textContent = 'Todavía no hay datos suficientes para evaluar esta alerta.';
+    estadoEl.className = 'alerta-estado-actual';
+  } else {
+    const texto = alerta.estado === 'caro' ? '🔴 En zona de "caro" respecto a su historia.'
+      : alerta.estado === 'barato' ? '🟢 En zona de "barato" respecto a su historia.'
+      : '⚪ En rango normal, sin alerta.';
+    const detalle = alerta.percentil != null ? ` (percentil ${alerta.percentil.toFixed(0)})` : '';
+    estadoEl.textContent = texto + detalle;
+    estadoEl.className = `alerta-estado-actual ${alerta.estado}`;
+  }
+}
+
+async function guardarAlerta() {
+  if (drillActualA === ID_PESOS || drillActualB === ID_PESOS) return;
+  const msj = el('alertaMensaje');
+  msj.textContent = '';
+
+  const [idCanonA, idCanonB] = [drillActualA, drillActualB].sort();
+  const tipoIndice = tipoIndiceAplicable(idCanonA, idCanonB);
+  const esReal = el('alertaBase').value === 'real';
+  const base = esReal && tipoIndice === 'ARS' ? 'real_ars' : esReal && tipoIndice === 'USD' ? 'real_usd' : 'nominal_ars';
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje full error'; return; }
+
+  const { error } = await supabase.from('precios_relativos_ratios_config').upsert({
+    producto_a_id: idCanonA,
+    producto_b_id: idCanonB,
+    favorito: el('alertaFavorito').checked,
+    alerta_activa: el('alertaActiva').checked,
+    metodo: el('alertaMetodo').value,
+    ventana_meses: Number(el('alertaVentana').value),
+    base,
+    umbral_desvio_pct: Number(el('alertaUmbralDesvio').value) || 15,
+    umbral_percentil_bajo: Number(el('alertaUmbralPercentilBajo').value),
+    umbral_percentil_alto: Number(el('alertaUmbralPercentilAlto').value),
+  }, { onConflict: 'producto_a_id,producto_b_id' });
+
+  if (error) {
+    msj.textContent = 'No se pudo guardar: ' + error.message;
+    msj.className = 'mensaje full error';
+    return;
+  }
+  msj.textContent = '✅ Guardado.';
+  msj.className = 'mensaje full ok';
+
+  cargado = false;
+  await cargarHistorialCompleto();
+  renderMatriz();
+  renderAlertaPanel();
+}
+
 function abrirDrillDown(idA, idB) {
   drillActualA = idA;
   drillActualB = idB;
   renderDrillDown();
+  renderAlertaPanel();
   el('modalDrillDown').classList.add('abierto');
 }
 
@@ -351,6 +555,14 @@ export async function initMatriz() {
   });
   el('drillCerrar').addEventListener('click', cerrarDrillDown);
   el('modalDrillDownFondo').addEventListener('click', cerrarDrillDown);
+
+  el('alertaToggleBtn').addEventListener('click', () => {
+    el('alertaPanel').classList.toggle('oculto');
+  });
+  el('alertaActiva').addEventListener('change', () => {
+    el('alertaOpciones').classList.toggle('oculto', !el('alertaActiva').checked);
+  });
+  el('botonGuardarAlerta').addEventListener('click', guardarAlerta);
 
   // Disparar scrapers a demanda queda para owner — no tiene sentido que
   // cualquier usuario autorizado ande pegándole a fuentes externas cada

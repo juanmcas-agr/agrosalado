@@ -94,6 +94,53 @@
       <p id="drillModoValorNota" class="drill-modo-nota">Un ratio entre dos productos ya es neutro a la inflación — nominal y constante dan lo mismo acá.</p>
       <div id="drillGrafico"></div>
       <div id="drillResumen" class="drill-resumen"></div>
+
+      <div class="alerta-config">
+        <button type="button" id="alertaToggleBtn" class="boton-secundario" style="width:auto;">🔔 Configurar alerta</button>
+        <div id="alertaPanel" class="alerta-panel oculto">
+          <div id="alertaSinPesosNota" class="drill-modo-nota oculto">Las alertas no están disponibles para "$ Pesos" (no es un producto real, es solo una referencia de esta pantalla).</div>
+          <p id="alertaDireccionNota" class="drill-modo-nota"></p>
+          <div id="alertaFormWrap" class="formulario">
+            <label class="check-inline"><input type="checkbox" id="alertaFavorito"> ⭐ Marcar como favorito</label>
+            <label class="check-inline"><input type="checkbox" id="alertaActiva"> Activar alerta para este ratio</label>
+            <div id="alertaOpciones" class="oculto full">
+              <label style="font-size:0.85em;color:#666;">Método
+                <select id="alertaMetodo">
+                  <option value="percentil">Percentil histórico</option>
+                  <option value="desvio">Desvío % del promedio</option>
+                  <option value="ambos" selected>Ambos</option>
+                </select>
+              </label>
+              <label style="font-size:0.85em;color:#666;">Ventana
+                <select id="alertaVentana">
+                  <option value="12">12 meses</option>
+                  <option value="24" selected>24 meses</option>
+                  <option value="36">36 meses</option>
+                  <option value="48">48 meses</option>
+                </select>
+              </label>
+              <label id="alertaBaseWrap" style="font-size:0.85em;color:#666;">Base
+                <select id="alertaBase">
+                  <option value="nominal" selected>Nominal</option>
+                  <option value="real">Constante (ajustado por inflación)</option>
+                </select>
+              </label>
+              <label style="font-size:0.85em;color:#666;">Umbral desvío (± %)
+                <input type="number" id="alertaUmbralDesvio" value="15">
+              </label>
+              <label style="font-size:0.85em;color:#666;">Percentil bajo = barato (≤)
+                <input type="number" id="alertaUmbralPercentilBajo" value="10">
+              </label>
+              <label style="font-size:0.85em;color:#666;">Percentil alto = caro (≥)
+                <input type="number" id="alertaUmbralPercentilAlto" value="90">
+              </label>
+            </div>
+            <button type="button" id="botonGuardarAlerta" class="full">Guardar</button>
+            <div id="alertaMensaje" class="mensaje full"></div>
+          </div>
+          <div id="alertaEstadoActual" class="alerta-estado-actual"></div>
+        </div>
+      </div>
     </div>
   </div>
 

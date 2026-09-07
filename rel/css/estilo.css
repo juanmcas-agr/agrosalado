@@ -322,6 +322,9 @@ button:active { filter: brightness(0.9); }
 .matriz-tabla td.celda-diagonal { color: #ccc; background: #fafafa; }
 .matriz-tabla td.celda-ratio { cursor: pointer; color: #2c3e50; }
 .matriz-tabla td.celda-ratio:hover { background: #f2e9df; }
+.matriz-tabla td.celda-alerta-caro { background: #fdecea; }
+.matriz-tabla td.celda-alerta-barato { background: #e8f5e9; }
+.matriz-tabla td.celda-alerta-caro:hover, .matriz-tabla td.celda-alerta-barato:hover { filter: brightness(0.96); }
 
 /* ─── Modal de histórico (drill-down) ─── */
 .modal-fondo {
@@ -381,3 +384,11 @@ button:active { filter: brightness(0.9); }
 .carga-item-mensaje { font-size: 0.85em; margin-top: 6px; min-height: 1.1em; }
 .carga-item-mensaje.ok { color: #1e7e34; }
 .carga-item-mensaje.error { color: #ad1e19; }
+
+/* ─── Configuración de alertas (dentro del drill-down) ─── */
+.alerta-config { margin-top: 12px; border-top: 1px solid #eee; padding-top: 12px; }
+.alerta-panel { margin-top: 10px; }
+.alerta-panel .formulario { margin-bottom: 8px; box-shadow: none; padding: 0; background: transparent; }
+.alerta-estado-actual { font-size: 0.85em; font-weight: bold; margin-top: 6px; }
+.alerta-estado-actual.caro { color: #ad1e19; }
+.alerta-estado-actual.barato { color: #1e7e34; }
