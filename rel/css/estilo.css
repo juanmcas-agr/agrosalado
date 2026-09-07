@@ -379,6 +379,8 @@ button:active { filter: brightness(0.9); }
 .chart-etiqueta { font-size: 10px; fill: #888; }
 .chart-etiqueta-y, .chart-etiqueta-x { font-size: 9px; fill: #888; }
 .chart-grid { stroke: #eee; stroke-width: 1; }
+.chart-linea-promedio { stroke: #5b7fa6; stroke-width: 1.3; stroke-dasharray: 5,4; }
+.chart-etiqueta-promedio { font-size: 9px; fill: #5b7fa6; font-weight: bold; }
 .chart-hover-linea { stroke: #ad1e19; stroke-width: 1; stroke-dasharray: 3,3; }
 .chart-hover-fondo { fill: #2c3e50; opacity: 0.9; }
 .chart-hover-texto { font-size: 10px; fill: white; font-weight: bold; }

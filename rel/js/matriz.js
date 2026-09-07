@@ -545,12 +545,23 @@ function svgLineChart(puntos, ancho, alto) {
   const ultimo = coordenadas[coordenadas.length - 1];
   const datosJson = JSON.stringify(coordenadas).replace(/"/g, '&quot;');
 
+  // Línea punteada con el promedio del período mostrado (mismos puntos que
+  // el gráfico, no el de "Spot vs. promedio" del selector de abajo, que
+  // puede ser una ventana distinta).
+  const promedio = valores.reduce((suma, v) => suma + v, 0) / valores.length;
+  const yPromedio = margenSup + altoUtil - ((promedio - min) / rango) * altoUtil;
+  const lineaPromedio = `
+    <line x1="${margenIzq}" y1="${yPromedio.toFixed(1)}" x2="${ancho - margenDer}" y2="${yPromedio.toFixed(1)}" class="chart-linea-promedio"/>
+    <text x="${ancho - margenDer}" y="${(yPromedio - 4).toFixed(1)}" class="chart-etiqueta-promedio" text-anchor="end">Promedio: ${formatearRatio(promedio)}</text>
+  `;
+
   return `
     <svg viewBox="0 0 ${ancho} ${alto}" class="chart-svg" id="chartSvgActual"
          data-margen-izq="${margenIzq}" data-ancho-util="${anchoUtil}"
          data-margen-sup="${margenSup}" data-alto-inf="${alto - margenInf}"
          data-puntos="${datosJson}">
       ${gridY}
+      ${lineaPromedio}
       <path d="${path}" fill="none" stroke="#8a5a34" stroke-width="2"/>
       <circle cx="${ultimo.x.toFixed(1)}" cy="${ultimo.y.toFixed(1)}" r="3.5" fill="#8a5a34"/>
       ${etiquetasX}
