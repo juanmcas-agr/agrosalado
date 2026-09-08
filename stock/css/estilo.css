@@ -601,6 +601,9 @@ button:active { filter: brightness(0.9); }
 .indice-card .indice-estado.corroborado { color: #1d5236; }
 .indice-card .indice-estado.pendiente { color: #8a6d1a; }
 .indice-card .indice-botones { display: flex; gap: 6px; flex-wrap: wrap; }
+.indice-card .indice-auto-sugerido { color: #1d5236; }
+.indice-card.calculado { background: #f7f5f0; }
+.indice-card.calculado .indice-resultado { font-size: 1.1em; font-weight: bold; margin: 4px 0 0; }
 
 .solo-imprimir { display: none; }
 @media print {

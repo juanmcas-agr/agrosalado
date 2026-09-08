@@ -9,7 +9,7 @@ import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
 import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
-import { INDICES, ordenIndices, fechaGatilloDelAnio, hoyArtISO } from './indicesConfig.js';
+import { INDICES, ordenIndices, fechaGatilloDelAnio, ventanaDestete, hoyArtISO } from './indicesConfig.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -324,7 +324,45 @@ function formatearFechaHora(iso) {
   return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function crearTarjetaIndice(tipo, anio, valor) {
+function claveIndice(tipo, anio) {
+  return `${tipo}_${anio}`;
+}
+
+function obtenerValor(valoresPorTipoAnio, tipo, anio) {
+  return valoresPorTipoAnio[claveIndice(tipo, anio)] || null;
+}
+
+// Suma automática de Trabajo de Manga > Manejo > Destete en la ventana del
+// año pedido (ver ventanaDestete() en indicesConfig.js) — sugiere un valor
+// para el índice "destete" (M9); el usuario corrobora o corrige, nunca se
+// guarda solo.
+async function calcularDesteteAutomatico(anioDestete) {
+  const { desde, hasta } = ventanaDestete(anioDestete);
+  const { data: trabajos, error: errorTrabajos } = await supabase
+    .from('trabajos_manga').select('id').gte('fecha', desde).lte('fecha', hasta);
+  if (errorTrabajos) throw errorTrabajos;
+  if (!trabajos.length) return { cabezas: 0, pesoPromedio: null };
+
+  const ids = trabajos.map((t) => t.id);
+  const { data: manejos, error: errorManejo } = await supabase
+    .from('trabajo_manga_manejo')
+    .select('destete_machos_cantidad, destete_hembras_cantidad, destete_kilos_ternero, destete_kilos_ternera')
+    .eq('destete', true).in('trabajo_manga_id', ids);
+  if (errorManejo) throw errorManejo;
+
+  let cabezas = 0;
+  let kilosTotales = 0;
+  for (const m of manejos) {
+    const machos = m.destete_machos_cantidad || 0;
+    const hembras = m.destete_hembras_cantidad || 0;
+    cabezas += machos + hembras;
+    if (machos && m.destete_kilos_ternero) kilosTotales += machos * m.destete_kilos_ternero;
+    if (hembras && m.destete_kilos_ternera) kilosTotales += hembras * m.destete_kilos_ternera;
+  }
+  return { cabezas, pesoPromedio: cabezas ? +(kilosTotales / cabezas).toFixed(1) : null };
+}
+
+function crearTarjetaIndice(tipo, anio, valor, sugerencia) {
   const def = INDICES[tipo];
   const card = document.createElement('div');
   card.className = 'indice-card';
@@ -337,13 +375,27 @@ function crearTarjetaIndice(tipo, anio, valor) {
       ? `Cargado el ${formatearFechaHora(valor.cargado_at)} — falta corroborar.`
       : 'Sin cargar todavía.';
 
+  const valorPrincipalInicial = valor ? valor.valor_principal : (sugerencia ? sugerencia.cabezas : '');
+  const valorSecundarioInicial = valor ? valor.valor_secundario : (sugerencia ? sugerencia.pesoPromedio : '');
+
+  const campoSecundario = def.labelSecundario ? `
+    <label>${def.labelSecundario} (${def.unidadSecundario})
+      <input type="number" class="indice-valor-secundario" min="0" step="0.1" value="${valorSecundarioInicial ?? ''}">
+    </label>` : '';
+
+  const avisoAuto = def.autoCalculable && !valor && sugerencia
+    ? `<p class="ayuda indice-auto-sugerido">Cálculo automático (Trabajo de Manga): ${sugerencia.cabezas} cabezas${sugerencia.pesoPromedio != null ? `, ${sugerencia.pesoPromedio} kg promedio` : ''} — ya está precargado abajo, revisá y corroborá.</p>`
+    : '';
+
   card.innerHTML = `
     <h4>${def.nombre} <button type="button" class="icono-ayuda" title="¿Cómo se calcula?">?</button></h4>
     <p class="indice-gatillo">Fecha gatillo ${anio}: ${fechaGatilloDelAnio(tipo, anio)}</p>
     <p class="ayuda indice-ayuda-texto oculto">${def.ayuda}</p>
+    ${avisoAuto}
     <label>${def.labelPrincipal} (${def.unidadPrincipal})
-      <input type="number" class="indice-valor-principal" min="0" step="1" value="${valor?.valor_principal ?? ''}">
+      <input type="number" class="indice-valor-principal" min="0" step="1" value="${valorPrincipalInicial ?? ''}">
     </label>
+    ${campoSecundario}
     <label>Observaciones
       <textarea class="indice-observaciones">${valor?.observaciones ?? ''}</textarea>
     </label>
@@ -356,11 +408,94 @@ function crearTarjetaIndice(tipo, anio, valor) {
   return card;
 }
 
-function renderIndices(anio, valoresPorTipo) {
+async function renderIndices(anio, valoresPorTipoAnio) {
   const grid = el('rep-indices-grid');
   grid.innerHTML = '';
   for (const tipo of ordenIndices()) {
-    grid.appendChild(crearTarjetaIndice(tipo, anio, valoresPorTipo[tipo] || null));
+    const valor = obtenerValor(valoresPorTipoAnio, tipo, anio);
+    let sugerencia = null;
+    if (tipo === 'destete' && !valor) {
+      try {
+        sugerencia = await calcularDesteteAutomatico(anio);
+      } catch (error) {
+        console.error('No se pudo calcular el destete automático:', error);
+      }
+    }
+    grid.appendChild(crearTarjetaIndice(tipo, anio, valor, sugerencia));
+  }
+}
+
+// ─── Indicadores calculados (% preñez, % marcación, mortandad predestete,
+// peso promedio al destete) ───────────────────────────────────────────────
+// Solo lectura: no son filas propias de indices_valores, se calculan al
+// vuelo cruzando los índices manuales de la temporada. La temporada
+// mostrada es el "Año" elegido (mismo año que Preñadas/Parición); Vacas en
+// servicio se busca un año antes y Destete un año después, porque el
+// servicio de octubre arranca la temporada que pare y desteta recién en
+// los dos años siguientes (ver indicesConfig.js).
+
+function crearTarjetaCalculada(titulo, ayudaTexto, texto, faltante) {
+  const card = document.createElement('div');
+  card.className = 'indice-card calculado';
+  card.innerHTML = `
+    <h4>${titulo} <button type="button" class="icono-ayuda" title="¿Cómo se calcula?">?</button></h4>
+    <p class="ayuda indice-ayuda-texto oculto">${ayudaTexto}</p>
+    ${faltante ? `<p class="ayuda">${faltante}</p>` : `<p class="indice-resultado">${texto}</p>`}
+  `;
+  return card;
+}
+
+function renderIndicadoresCalculados(anio, valoresPorTipoAnio) {
+  const cont = el('rep-indices-calculados');
+  cont.innerHTML = '';
+
+  const servicio = obtenerValor(valoresPorTipoAnio, 'vacas_servicio', anio - 1);
+  const prenadas = obtenerValor(valoresPorTipoAnio, 'vacas_prenadas', anio);
+  const paridos = obtenerValor(valoresPorTipoAnio, 'paricion_control_3', anio);
+  const destete = obtenerValor(valoresPorTipoAnio, 'destete', anio + 1);
+
+  if (servicio && prenadas) {
+    const pct = ((prenadas.valor_principal / servicio.valor_principal) * 100).toFixed(1);
+    cont.appendChild(crearTarjetaCalculada(`% Preñez (temporada ${anio})`,
+      'Vacas preñadas ÷ vacas en servicio del año anterior (el servicio que generó estas preñeces), × 100.',
+      `${pct}% — ${prenadas.valor_principal} preñadas de ${servicio.valor_principal} en servicio (${anio - 1}).`));
+  } else {
+    cont.appendChild(crearTarjetaCalculada(`% Preñez (temporada ${anio})`,
+      'Vacas preñadas ÷ vacas en servicio del año anterior (el servicio que generó estas preñeces), × 100.',
+      null, `Falta cargar "Vacas en servicio" ${anio - 1} y/o "Vacas preñadas" ${anio}.`));
+  }
+
+  if (servicio && destete) {
+    const pct = ((destete.valor_principal / servicio.valor_principal) * 100).toFixed(1);
+    cont.appendChild(crearTarjetaCalculada(`% Marcación (temporada ${anio})`,
+      'Terneros destetados ÷ vacas en servicio de la temporada, × 100 — cuántos terneros llegaron al destete por cada vaca puesta en servicio.',
+      `${pct}% — ${destete.valor_principal} destetados de ${servicio.valor_principal} en servicio (${anio - 1}).`));
+  } else {
+    cont.appendChild(crearTarjetaCalculada(`% Marcación (temporada ${anio})`,
+      'Terneros destetados ÷ vacas en servicio de la temporada, × 100 — cuántos terneros llegaron al destete por cada vaca puesta en servicio.',
+      null, `Falta cargar "Vacas en servicio" ${anio - 1} y/o "Destete" ${anio + 1}.`));
+  }
+
+  if (paridos && destete) {
+    const muertos = paridos.valor_principal - destete.valor_principal;
+    const pct = paridos.valor_principal ? ((muertos / paridos.valor_principal) * 100).toFixed(1) : '0.0';
+    cont.appendChild(crearTarjetaCalculada(`Mortandad predestete (temporada ${anio})`,
+      '(Terneros nacidos − terneros destetados) ÷ terneros nacidos, × 100 — mortandad entre el nacimiento y el destete.',
+      `${pct}% — ${muertos} de ${paridos.valor_principal} nacidos no llegaron al destete (${anio + 1}).`));
+  } else {
+    cont.appendChild(crearTarjetaCalculada(`Mortandad predestete (temporada ${anio})`,
+      '(Terneros nacidos − terneros destetados) ÷ terneros nacidos, × 100 — mortandad entre el nacimiento y el destete.',
+      null, `Falta cargar "Parición — cierre" ${anio} y/o "Destete" ${anio + 1}.`));
+  }
+
+  if (destete && destete.valor_secundario != null) {
+    cont.appendChild(crearTarjetaCalculada(`Peso promedio al destete (temporada ${anio})`,
+      'Promedio ponderado de los kilos de destete cargados en Trabajo de Manga (machos y hembras) para esta temporada.',
+      `${destete.valor_secundario} kg promedio (Destete ${anio + 1}).`));
+  } else {
+    cont.appendChild(crearTarjetaCalculada(`Peso promedio al destete (temporada ${anio})`,
+      'Promedio ponderado de los kilos de destete cargados en Trabajo de Manga (machos y hembras) para esta temporada.',
+      null, `Falta cargar el peso promedio en "Destete" ${anio + 1}.`));
   }
 }
 
@@ -371,15 +506,21 @@ export async function cargarIndices() {
   if (!inputAnio.value) inputAnio.value = Number(hoyArtISO().slice(0, 4));
   const anio = Number(inputAnio.value);
 
-  const { data, error } = await supabase.from('indices_valores').select('*').eq('anio', anio);
+  // Rango de 3 años: los indicadores calculados cruzan "Vacas en servicio"
+  // del año anterior y "Destete" del año siguiente contra la temporada
+  // elegida (ver nota más arriba).
+  const { data, error } = await supabase.from('indices_valores').select('*')
+    .gte('anio', anio - 1).lte('anio', anio + 1);
   if (error) {
     mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
     mensaje.className = 'error';
     return;
   }
-  const valoresPorTipo = {};
-  for (const fila of data) valoresPorTipo[fila.tipo_indice] = fila;
-  renderIndices(anio, valoresPorTipo);
+  const valoresPorTipoAnio = {};
+  for (const fila of data) valoresPorTipoAnio[claveIndice(fila.tipo_indice, fila.anio)] = fila;
+
+  await renderIndices(anio, valoresPorTipoAnio);
+  renderIndicadoresCalculados(anio, valoresPorTipoAnio);
 }
 
 async function guardarIndice(card) {
@@ -394,6 +535,8 @@ async function guardarIndice(card) {
     mensaje.className = 'error';
     return;
   }
+  const campoSecundario = card.querySelector('.indice-valor-secundario');
+  const valorSecundario = campoSecundario && campoSecundario.value !== '' ? Number(campoSecundario.value) : null;
   const observaciones = card.querySelector('.indice-observaciones').value.trim() || null;
 
   const { data: existente } = await supabase.from('indices_valores').select('id')
@@ -403,6 +546,8 @@ async function guardarIndice(card) {
   if (existente) {
     ({ error } = await supabase.from('indices_valores').update({
       valor_principal: Number(valorPrincipal),
+      valor_secundario: valorSecundario,
+      unidad_secundaria: INDICES[tipo].unidadSecundario || null,
       observaciones,
       corroborado: false,
       corroborado_por: null,
@@ -415,6 +560,8 @@ async function guardarIndice(card) {
       anio,
       fecha_gatillo: fechaGatilloDelAnio(tipo, anio),
       valor_principal: Number(valorPrincipal),
+      valor_secundario: valorSecundario,
+      unidad_secundaria: INDICES[tipo].unidadSecundario || null,
       observaciones,
       cargado_por: usuarioId,
     }));
@@ -484,6 +631,10 @@ export async function initReportes() {
     } else if (evento.target.classList.contains('indice-corroborar')) {
       corroborarIndice(card);
     }
+  });
+  el('rep-indices-calculados').addEventListener('click', (evento) => {
+    if (!evento.target.classList.contains('icono-ayuda')) return;
+    evento.target.closest('.indice-card')?.querySelector('.indice-ayuda-texto')?.classList.toggle('oculto');
   });
   document.addEventListener('hacienda:ver-historia-rodeo', (evento) => verHistoriaRodeo(evento.detail.rodeoId));
 

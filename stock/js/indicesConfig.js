@@ -25,8 +25,9 @@ export const INDICES = {
     labelPrincipal: 'Cantidad de vacas preñadas',
     unidadPrincipal: 'cabezas',
     ayuda: 'Resultado del tacto o ecografía de preñez sobre las vacas puestas en '
-      + 'servicio. Se carga una vez por año, el 1° de marzo. El % de preñez se '
-      + 'calcula solo contra "Vacas en servicio" de la misma temporada.',
+      + 'servicio el octubre anterior. Se carga una vez por año, el 1° de marzo. '
+      + 'El % de preñez (más abajo) se calcula contra "Vacas en servicio" del año '
+      + 'anterior — el servicio que generó estas preñeces.',
   },
   paricion_control_1: {
     nombre: 'Parición — primer control (1/8)',
@@ -55,6 +56,20 @@ export const INDICES = {
     ayuda: 'Cierre de la temporada de parición, al arrancar octubre: total de '
       + 'terneros nacidos en la temporada.',
   },
+  destete: {
+    nombre: 'Destete',
+    mes: 3,
+    dia: 1,
+    labelPrincipal: 'Cantidad destetada',
+    unidadPrincipal: 'cabezas',
+    labelSecundario: 'Peso promedio al destete',
+    unidadSecundario: 'kg',
+    autoCalculable: true,
+    ayuda: 'Suma automática de los Destete cargados en Trabajo de Manga entre el '
+      + '1° de agosto del año anterior y el 1° de marzo de este año (la temporada '
+      + 'de parición que cierra en esa fecha). El sistema sugiere el total de '
+      + 'cabezas y el peso promedio — corroborá o corregí el número si hace falta.',
+  },
 };
 
 export function ordenIndices() {
@@ -65,6 +80,14 @@ export function ordenIndices() {
 export function fechaGatilloDelAnio(tipoIndice, anio) {
   const { mes, dia } = INDICES[tipoIndice];
   return `${anio}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+// Ventana de fechas (fecha real de Trabajo de Manga, no de "anio" del
+// índice) que se suma para el Destete automático de un año dado: desde el
+// 1/8 del año anterior (arranque de la temporada de parición que cierra
+// acá) hasta el propio gatillo del 1/3.
+export function ventanaDestete(anioDestete) {
+  return { desde: `${anioDestete - 1}-08-01`, hasta: fechaGatilloDelAnio('destete', anioDestete) };
 }
 
 // "Hoy" en horario ART, misma aritmética que rangoDeHoyArt() en
