@@ -57,7 +57,7 @@ export async function trySync() {
   try {
     const todos = (await outboxGetAll())
       .filter((m) => m.sync_status !== 'error')
-      .sort((a, b) => a.creado_localmente_at.localeCompare(b.creado_localmente_at));
+      .sort((a, b) => (a.creado_localmente_at || '').localeCompare(b.creado_localmente_at || ''));
 
     for (const item of todos) {
       const { sync_status, intentos, ultimo_error, creado_localmente_at, ...fila } = item;

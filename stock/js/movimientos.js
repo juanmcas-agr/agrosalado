@@ -277,6 +277,11 @@ function actualizarCamposVisibles() {
     const contenedor = document.querySelector(`[data-campo="${campo}"]`);
     contenedor.classList.toggle('oculto', !cfg.campos.includes(campo));
   }
+  // mov-rodeo-destino es "required" en el HTML, pero solo corresponde para
+  // los tipos que lo usan (cambio_rodeo) — si queda required mientras su
+  // contenedor está oculto, el navegador bloquea el submit en SILENCIO
+  // (sin mensaje visible) para cualquier otro tipo de movimiento.
+  el('mov-rodeo-destino').required = cfg.campos.includes('rodeo_destino');
 
   // Siempre se reconstruye para que quede sin selección al cambiar de tipo
   // (evita arrastrar una categoría elegida que ya no corresponde).
