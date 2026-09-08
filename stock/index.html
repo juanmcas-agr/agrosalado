@@ -465,7 +465,28 @@
       </div>
 
       <div id="reportes-manga" class="reportes-seccion oculto">
-        <p class="ayuda">Próximamente: listado de Trabajo de Manga, exportable a PDF.</p>
+        <div class="filtros">
+          <label>Desde <input id="rep-manga-desde" type="date"></label>
+          <label>Hasta <input id="rep-manga-hasta" type="date"></label>
+          <select id="rep-manga-rodeo"><option value="">Todos los rodeos</option></select>
+          <button type="button" id="rep-manga-filtrar" class="boton-secundario">Filtrar</button>
+          <button type="button" id="rep-manga-imprimir" class="boton-secundario">Imprimir / PDF</button>
+        </div>
+        <div id="rep-manga-mensaje" class="mensaje"></div>
+        <div id="rep-manga-imprimible" class="imprimible">
+          <h3 class="solo-imprimir">Trabajo de Manga</h3>
+          <div class="tabla-scroll">
+            <table id="rep-manga-tabla" class="tabla">
+              <thead>
+                <tr>
+                  <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categoría</th><th>Cantidad</th>
+                  <th>Propietario(s)</th><th>Detalle</th><th>Cargado por</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <div id="reportes-feedlot" class="reportes-seccion oculto">
         <p class="ayuda">Próximamente: informe de Feed Lot por corral (días restantes, kilos ganados).</p>

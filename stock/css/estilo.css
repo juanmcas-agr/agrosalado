@@ -534,3 +534,15 @@ button:active { filter: brightness(0.9); }
   border-radius: 6px;
   border: 1px solid #ccc;
 }
+
+/* ─── Reportes: "Imprimir / PDF" imprime solo el contenedor .imprimible
+   activo, ocultando el resto de la app — reusable por cualquier
+   sub-sección de Reportes (Trabajo de Manga, Feed Lot, etc.), no hace
+   falta CSS de impresión nuevo por cada una. ─── */
+.solo-imprimir { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  .imprimible, .imprimible * { visibility: visible; }
+  .imprimible { position: absolute; left: 0; top: 0; width: 100%; }
+  .solo-imprimir { display: block !important; }
+}
