@@ -255,6 +255,7 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 .pendiente-item .pendiente-botones { display: flex; gap: 8px; flex-wrap: wrap; }
 .pendiente-item .pendiente-botones button {
   width: auto;
+  min-width: 165px;
   padding: 6px 10px;
   font-size: 0.9em;
 }
@@ -486,6 +487,10 @@ button:active { filter: brightness(0.9); }
 }
 .tabla tr.anulado { color: #999; text-decoration: line-through; }
 .tabla tr.editado { color: #6c5ce7; text-decoration: line-through; }
+/* Trabajo de manga cuya cantidad trabajada se rectificó a mano (no
+   tachado: el registro sigue vigente, solo se corrigió el número). */
+.tabla tr.rectificado { background: #f3ecfd; }
+.tabla tr.rectificado td:first-child { font-weight: bold; }
 .tabla tr.fila-total td { background: #e9ecef; border-top: 2px solid #ccc; }
 .tabla tr.fila-clickeable { cursor: pointer; }
 .tabla tr.fila-clickeable:hover td { background: #f5f5f5; }

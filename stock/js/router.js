@@ -30,7 +30,7 @@ function renderRoute(rol) {
 
   if (pantalla === 'dashboard') refrescarDashboard();
   if (pantalla === 'historial') { cargarHistorial(); cargarHistorialManga(); }
-  if (pantalla === 'manga') refrescarDiferenciasPendientes();
+  if (pantalla === 'manga' || pantalla === 'cargar') refrescarDiferenciasPendientes();
   if (pantalla === 'reportes') refrescarReportes();
 }
 

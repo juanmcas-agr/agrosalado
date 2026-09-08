@@ -525,39 +525,52 @@ function pedirMovimientoParaDiferencia(trabajo) {
   }));
 }
 
+// Se muestra en dos pantallas a la vez (Trabajo de Manga Y Cargar
+// Movimiento — ahí es literalmente donde se resuelve con un movimiento
+// real), para que la alerta sea imposible de no ver.
+const CONTENEDORES_PENDIENTES = [
+  { bloque: 'manga-pendientes-bloque', lista: 'manga-pendientes-lista' },
+  { bloque: 'mov-pendientes-bloque', lista: 'mov-pendientes-lista' },
+];
+
+function crearItemPendiente(trabajo) {
+  const div = document.createElement('div');
+  div.className = 'pendiente-item';
+  const texto = document.createElement('div');
+  texto.className = 'pendiente-texto';
+  texto.textContent =
+    `${trabajo.codigo} — ${trabajo.fecha} — rodeo ${trabajo.rodeoCodigo} (${nombreCategoria(trabajo.categoria_id)}): ` +
+    `se trabajaron ${trabajo.cantidad_trabajada}, el rodeo tiene ${trabajo.stockActualAlListar} ahora.`;
+  div.appendChild(texto);
+
+  const botones = document.createElement('div');
+  botones.className = 'pendiente-botones';
+
+  const btnRectificar = document.createElement('button');
+  btnRectificar.type = 'button';
+  btnRectificar.textContent = 'RECTIFICAR CANTIDAD';
+  btnRectificar.addEventListener('click', () => editarCantidadTrabajada(trabajo));
+  botones.appendChild(btnRectificar);
+
+  const btnMovimiento = document.createElement('button');
+  btnMovimiento.type = 'button';
+  btnMovimiento.className = 'boton-secundario';
+  btnMovimiento.textContent = 'Cargar movimiento';
+  btnMovimiento.addEventListener('click', () => pedirMovimientoParaDiferencia(trabajo));
+  botones.appendChild(btnMovimiento);
+
+  div.appendChild(botones);
+  return div;
+}
+
 function renderDiferenciasPendientes(pendientes) {
-  const bloque = el('manga-pendientes-bloque');
-  const contenedor = el('manga-pendientes-lista');
-  bloque.classList.toggle('oculto', !pendientes.length);
-  contenedor.innerHTML = '';
-  for (const trabajo of pendientes) {
-    const div = document.createElement('div');
-    div.className = 'pendiente-item';
-    const texto = document.createElement('div');
-    texto.className = 'pendiente-texto';
-    texto.textContent =
-      `${trabajo.codigo} — ${trabajo.fecha} — rodeo ${trabajo.rodeoCodigo} (${nombreCategoria(trabajo.categoria_id)}): ` +
-      `se trabajaron ${trabajo.cantidad_trabajada}, el rodeo tiene ${trabajo.stockActualAlListar} ahora.`;
-    div.appendChild(texto);
-
-    const botones = document.createElement('div');
-    botones.className = 'pendiente-botones';
-
-    const btnEditar = document.createElement('button');
-    btnEditar.type = 'button';
-    btnEditar.textContent = 'Corregir cantidad';
-    btnEditar.addEventListener('click', () => editarCantidadTrabajada(trabajo));
-    botones.appendChild(btnEditar);
-
-    const btnMovimiento = document.createElement('button');
-    btnMovimiento.type = 'button';
-    btnMovimiento.className = 'boton-secundario';
-    btnMovimiento.textContent = 'Cargar movimiento que lo explica';
-    btnMovimiento.addEventListener('click', () => pedirMovimientoParaDiferencia(trabajo));
-    botones.appendChild(btnMovimiento);
-
-    div.appendChild(botones);
-    contenedor.appendChild(div);
+  for (const { bloque: idBloque, lista: idLista } of CONTENEDORES_PENDIENTES) {
+    const bloque = el(idBloque);
+    const contenedor = el(idLista);
+    if (!bloque || !contenedor) continue;
+    bloque.classList.toggle('oculto', !pendientes.length);
+    contenedor.innerHTML = '';
+    for (const trabajo of pendientes) contenedor.appendChild(crearItemPendiente(trabajo));
   }
 }
 

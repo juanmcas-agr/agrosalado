@@ -30,6 +30,14 @@ export function nombreCategoriaManga(categoriaId) {
   return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
 }
 
+// true si la cantidad trabajada se corrigió a mano (RECTIFICAR CANTIDAD
+// en la lista de diferencias pendientes) — a diferencia de resolverse
+// con un movimiento real, que deja resuelto_por_movimiento_id apuntando
+// a ese movimiento.
+export function esRectificado(t) {
+  return !!t.resuelto_at && !t.resuelto_por_movimiento_id;
+}
+
 function agruparPor(campo, filas) {
   const mapa = {};
   for (const f of filas || []) {

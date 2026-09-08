@@ -7,6 +7,7 @@ import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
 import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
 import { marcarComoReemplazado } from './historial.js';
+import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
 // Id del movimiento que se está corrigiendo, o null en carga normal — ver
@@ -685,6 +686,11 @@ async function onSubmit(evento) {
     mostrarMensaje('', 'ok');
   }
   cancelarEdicion();
+  // Best-effort: si este movimiento resolvió una diferencia pendiente, la
+  // saca de la lista apenas se pueda — si todavía no sincronizó (offline
+  // o de camino), se termina de reflejar solo cuando el trigger de la
+  // base la resuelva y se recargue la pantalla.
+  refrescarDiferenciasPendientes();
 }
 
 export async function initMovimientos() {

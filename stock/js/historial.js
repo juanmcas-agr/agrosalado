@@ -4,7 +4,7 @@ import { getEstado } from './auth.js';
 import { exportarHistorial, exportarTrabajosManga } from './export.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
-import { cargarCatalogosSanidad, obtenerTrabajosConDetalle } from './trabajoMangaDetalle.js';
+import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
 
 const VENTANA_ANULACION_HORAS = 48;
 
@@ -228,12 +228,13 @@ function renderFilasManga(trabajos) {
   }
   for (const t of trabajos) {
     const tr = document.createElement('tr');
+    if (esRectificado(t)) tr.classList.add('rectificado');
     tr.innerHTML = `
       <td>${t.codigo}</td>
       <td>${t.fecha}</td>
       <td>${t.rodeo || ''}</td>
       <td>${t.categoriaNombre}</td>
-      <td>${t.cantidad_trabajada}${t.diferencia_pendiente ? ' ⚠️' : ''}</td>
+      <td>${t.cantidad_trabajada}${t.diferencia_pendiente ? ' ⚠️' : ''}${esRectificado(t) ? ' ✏️' : ''}</td>
       <td>${t.propietariosTexto}</td>
       <td>${t.detalleTexto}</td>
       <td>${t.usuario_nombre || ''}</td>

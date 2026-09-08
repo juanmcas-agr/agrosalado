@@ -162,7 +162,7 @@ exports.handler = async function () {
     for (const t of diferenciasResueltasHoy) {
       const como = t.resuelto_por_movimiento_codigo
         ? `se resolvió con el movimiento ${t.resuelto_por_movimiento_codigo}`
-        : 'se corrigió la cantidad trabajada a mano';
+        : `se rectificó la cantidad trabajada a mano (ahora: ${t.cantidad_trabajada})`;
       partes.push(`<li>${t.codigo} (rodeo ${t.rodeo || t.rodeo_id}): <strong>resuelto hoy</strong> — ${como}.</li>`);
     }
     partes.push('</ul>');
