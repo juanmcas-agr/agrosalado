@@ -90,6 +90,17 @@ export async function stockDelRodeoPorCategoria(rodeoId, categoriaId) {
   return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
 }
 
+// Titulares con cabezas reales en un rodeo (para no dejar elegir, al
+// cargar un movimiento de salida/interna, una titularidad que ese rodeo
+// ni siquiera tiene).
+export async function titularesDelRodeo(rodeoId) {
+  const { data, error } = await supabase.from('stock_actual').select('titular, cabezas').eq('rodeo_id', rodeoId);
+  if (error) throw error;
+  const conStock = new Set();
+  for (const r of data) if (Number(r.cabezas) > 0) conStock.add(r.titular);
+  return conStock;
+}
+
 // ─── Feed lot: corral + ciclo ───
 // fecha/kilos de INGRESO salen del propio movimiento que trae el rodeo a
 // feed lot (no se vuelven a tipear); fecha estimada de salida y kilos

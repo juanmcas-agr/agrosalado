@@ -523,9 +523,9 @@ begin
     if new.rodeo_destino_id = new.rodeo_id then
       raise exception 'En un cambio de rodeo, el rodeo destino tiene que ser distinto del origen';
     end if;
-    if new.establecimiento_origen <> new.establecimiento_destino then
-      raise exception 'En un cambio de rodeo, el establecimiento no cambia';
-    end if;
+    -- El establecimiento SÍ puede cambiar acá (el rodeo destino puede
+    -- estar en otro establecimiento) — lo único fijo es categoría y
+    -- titularidad, que no cambian en un cambio de rodeo.
     if new.categoria_origen <> new.categoria_destino then
       raise exception 'En un cambio de rodeo, la categoría no cambia';
     end if;

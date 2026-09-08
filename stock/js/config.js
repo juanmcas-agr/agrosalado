@@ -77,17 +77,19 @@ export const TIPOS_MOVIMIENTO = {
     duplicarEstablecimientoEnDestino: true,
     duplicarCategoriaEnDestino: true,
   },
+  cambio_rodeo: {
+    nombre: 'Cambio de rodeo', clase: 'interna',
+    // El establecimiento de destino es un campo real (no se duplica del
+    // origen): el rodeo destino puede estar en otro establecimiento.
+    campos: ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen', 'titular_origen', 'rodeo_destino'],
+    duplicarCategoriaEnDestino: true,
+    duplicarTitularEnDestino: true,
+  },
+  // Al final del grupo de botones a propósito (uso excepcional, solo owner).
   apertura_stock: {
     nombre: 'Apertura de stock', clase: 'entrada',
     campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
     soloOwner: true,
-  },
-  cambio_rodeo: {
-    nombre: 'Cambio de rodeo', clase: 'interna',
-    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen', 'rodeo_destino'],
-    duplicarEstablecimientoEnDestino: true,
-    duplicarCategoriaEnDestino: true,
-    duplicarTitularEnDestino: true,
   },
 };
 

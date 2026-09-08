@@ -5,7 +5,7 @@ import {
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
-import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
+import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
 import { marcarComoReemplazado } from './historial.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
@@ -123,6 +123,54 @@ function precargarTitular(prefijo, titularId) {
   }
 }
 
+// El rodeo de origen ya tiene cabezas de titulares puntuales — no tiene
+// sentido dejar elegir una titularidad de origen que ese rodeo ni
+// siquiera tiene (ej. rodeo con AS + DJ, no debería poder elegirse un
+// capitalizador). Se nublan (deshabilitan) las opciones que no
+// corresponden, best-effort: si falla la consulta (sin conexión) se
+// deja todo habilitado como hasta ahora, no bloquea la carga.
+async function actualizarTitularesOrigenDisponibles() {
+  const grupo = el('mov-titular-origen-tipo');
+  const capSelect = el('mov-titular-origen-cap');
+  const habilitarTodo = () => {
+    grupo.querySelectorAll('.boton-opcion').forEach((b) => { b.disabled = false; b.classList.remove('deshabilitado'); });
+    [...capSelect.options].forEach((o) => { o.disabled = false; });
+  };
+
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  const rodeoId = el(RODEO_ORIGEN_IDS.select).value;
+  if (!cfg || !cfg.campos.includes('titular_origen') || !rodeoId || rodeoId === '__nuevo__' || !navigator.onLine) {
+    habilitarTodo();
+    return;
+  }
+
+  let disponibles;
+  try {
+    disponibles = await titularesDelRodeo(rodeoId);
+  } catch (error) {
+    console.warn('No se pudo verificar qué titulares tiene ese rodeo:', error);
+    habilitarTodo();
+    return;
+  }
+
+  grupo.querySelectorAll('.boton-opcion').forEach((boton) => {
+    const valor = boton.dataset.value;
+    const activo = valor === 'capitalizador'
+      ? [...capSelect.options].some((o) => o.value && o.value !== '__nuevo__' && disponibles.has(o.value))
+      : disponibles.has(valor);
+    boton.disabled = !activo;
+    boton.classList.toggle('deshabilitado', !activo);
+    if (!activo && boton.classList.contains('seleccionado')) {
+      boton.classList.remove('seleccionado');
+      grupo.dispatchEvent(new Event('cambio'));
+    }
+  });
+  [...capSelect.options].forEach((opcion) => {
+    if (!opcion.value || opcion.value === '__nuevo__') return;
+    opcion.disabled = !disponibles.has(opcion.value);
+  });
+}
+
 // ─── rodeo: obligatorio, se filtra por la categoría/establecimiento
 // "relevante" del tipo de movimiento actual ───
 
@@ -148,11 +196,22 @@ const RODEO_DESTINO_IDS = {
   nombre: 'mov-rodeo-destino-nuevo-nombre', fecha: 'mov-rodeo-destino-nuevo-fecha', crear: 'mov-rodeo-destino-nuevo-crear',
 };
 
+// Para el rodeo destino, si el tipo tiene un establecimiento_destino
+// REAL (no duplicado del origen — hoy solo cambio_rodeo), el rodeo se
+// filtra por ESE establecimiento, no por el de origen: el rodeo destino
+// puede estar en otro establecimiento.
+function establecimientoParaRodeo(cfg, ids) {
+  if (ids === RODEO_DESTINO_IDS && cfg.campos.includes('establecimiento_destino')) {
+    return obtenerSeleccion('mov-establecimiento-destino');
+  }
+  return obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
+}
+
 function poblarSelectRodeo(ids, excluirId) {
   const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
   if (!cfg) return;
   const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
-  const establecimientoId = obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
+  const establecimientoId = establecimientoParaRodeo(cfg, ids);
 
   const select = el(ids.select);
   const valorPrevio = select.value;
@@ -194,7 +253,10 @@ function inicializarSelectorRodeo(ids) {
     const esNuevo = el(ids.select).value === '__nuevo__';
     el(ids.wrap).classList.toggle('oculto', !esNuevo);
     if (esNuevo) el(ids.fecha).value = new Date().toISOString().slice(0, 10);
-    if (ids === RODEO_ORIGEN_IDS) poblarSelectRodeo(RODEO_DESTINO_IDS, el(ids.select).value);
+    if (ids === RODEO_ORIGEN_IDS) {
+      poblarSelectRodeo(RODEO_DESTINO_IDS, el(ids.select).value);
+      actualizarTitularesOrigenDisponibles();
+    }
   });
 
   el(ids.crear).addEventListener('click', async () => {
@@ -202,7 +264,7 @@ function inicializarSelectorRodeo(ids) {
     if (!nombre) { alert('Ingresá un nombre para el rodeo.'); return; }
     const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
     const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
-    const establecimientoId = obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
+    const establecimientoId = establecimientoParaRodeo(cfg, ids);
     if (!categoriaId || !establecimientoId) {
       alert('Elegí primero categoría y establecimiento para poder crear el rodeo.');
       return;
@@ -221,6 +283,26 @@ function inicializarSelectorRodeo(ids) {
       el(ids.nombre).value = '';
     } catch (error) {
       alert('No se pudo crear el rodeo: ' + error.message);
+    }
+  });
+}
+
+// En un traslado, origen y destino nunca pueden ser el mismo
+// establecimiento — en vez de dejar clickear y recién avisar al guardar,
+// se nubla (deshabilita) la opción de destino que coincide con el
+// origen elegido. No aplica a cambio_rodeo, que si puede compartir
+// establecimiento (mover animales de un rodeo a otro sin cambiar de
+// campo).
+function actualizarEstablecimientosDestinoDisponibles() {
+  const tipo = obtenerSeleccion('mov-tipo');
+  const origenId = tipo === 'traslado' ? obtenerSeleccion('mov-establecimiento-origen') : '';
+  el('mov-establecimiento-destino').querySelectorAll('.boton-opcion').forEach((boton) => {
+    const excluir = !!origenId && boton.dataset.value === origenId;
+    boton.disabled = excluir;
+    boton.classList.toggle('deshabilitado', excluir);
+    if (excluir && boton.classList.contains('seleccionado')) {
+      boton.classList.remove('seleccionado');
+      el('mov-establecimiento-destino').dispatchEvent(new Event('cambio'));
     }
   });
 }
@@ -291,6 +373,8 @@ function actualizarCamposVisibles() {
   );
   actualizarSelectsRodeo();
   actualizarBloqueFeedLot();
+  actualizarEstablecimientosDestinoDisponibles();
+  actualizarTitularesOrigenDisponibles();
 }
 
 function activarAccesoRapidoFeedLot() {
@@ -321,6 +405,7 @@ function leerFormulario() {
     feedlotEntrada: calcularEstadoFeedLot().entrada,
     feedlotSalida: calcularEstadoFeedLot().salida,
     feedlotCorral: obtenerSeleccion('mov-feedlot-corral'),
+    feedlotKilosEntrada: el('mov-feedlot-kilos-entrada').value || null,
     feedlotFechaSalida: el('mov-feedlot-fecha-salida').value || null,
     feedlotKilosObjetivo: el('mov-feedlot-kilos-objetivo').value || null,
     editandoId,
@@ -443,6 +528,7 @@ function resetFormulario() {
   el('mov-rodeo-destino-nuevo-wrap').classList.add('oculto');
   el('mov-rodeo-destino-nuevo-nombre').value = '';
   limpiarSeleccion('mov-feedlot-corral');
+  el('mov-feedlot-kilos-entrada').value = '';
   el('mov-feedlot-fecha-salida').value = '';
   el('mov-feedlot-kilos-objetivo').value = '';
   // establecerSeleccion dispara 'cambio' -> actualizarCamposVisibles() ->
@@ -479,6 +565,7 @@ function precargarParaEditar(fila) {
   actualizarSelectsRodeo();
   if (fila.rodeo_id) el('mov-rodeo').value = fila.rodeo_id;
   if (fila.rodeo_destino_id) el('mov-rodeo-destino').value = fila.rodeo_destino_id;
+  actualizarTitularesOrigenDisponibles();
 
   el('mov-editando-texto').textContent =
     `✏️ Corrigiendo el movimiento del ${fila.fecha} (${fila.tipo_movimiento_nombre}). Al guardar, el original queda tachado en el historial como "Editado".`;
@@ -546,7 +633,7 @@ async function onSubmit(evento) {
         rodeoId: datos.rodeo_id,
         corral: datos.feedlotCorral,
         fecha: datos.fecha,
-        kilosIngreso: Number(datos.kilos_promedio),
+        kilosIngreso: Number(datos.feedlotKilosEntrada || datos.kilos_promedio),
         fechaEstimadaSalida: datos.feedlotFechaSalida,
         kilosSalidaObjetivo: datos.feedlotKilosObjetivo,
       });
@@ -594,6 +681,7 @@ export async function initMovimientos() {
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
     el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); });
   }
+  el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
   establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
