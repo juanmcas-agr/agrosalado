@@ -62,3 +62,23 @@ export function crearGrupoBotonesMultiple(id, opciones) {
 export function obtenerSeleccionMultiple(id) {
   return Array.from(document.getElementById(id).querySelectorAll('.boton-opcion.seleccionado')).map((b) => b.dataset.value);
 }
+
+// Botón individual on/off (ej. las secciones "SANIDAD"/"REPRODUCCION"/
+// "MANEJO DE RODEO" de Trabajo de Manga, que despliegan sub-campos) —
+// mismo look que los grupos de botones, más consistente que un checkbox
+// suelto para algo que actúa como interruptor de sección.
+export function inicializarBotonToggle(id, alCambiar) {
+  const boton = document.getElementById(id);
+  boton.addEventListener('click', () => {
+    boton.classList.toggle('seleccionado');
+    if (alCambiar) alCambiar(boton.classList.contains('seleccionado'));
+  });
+}
+
+export function estaActivo(id) {
+  return document.getElementById(id).classList.contains('seleccionado');
+}
+
+export function desactivarBoton(id) {
+  document.getElementById(id).classList.remove('seleccionado');
+}

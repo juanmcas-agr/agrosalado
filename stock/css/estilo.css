@@ -233,7 +233,13 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 .checkbox-linea input[type="checkbox"] {
   width: 20px; height: 20px;
   flex-shrink: 0;
+  padding: 0;
+  background: none;
+  -webkit-appearance: checkbox;
+  appearance: checkbox;
 }
+
+.boton-seccion { width: 100%; font-size: 1em; }
 
 .bloque-condicional {
   display: flex;

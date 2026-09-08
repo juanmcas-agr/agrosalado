@@ -10,7 +10,7 @@ import { CATEGORIAS } from './config.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
 import { cargarRodeos, rodeosDeCategoria, stockDelRodeo } from './rodeos.js';
-import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, limpiarSeleccion } from './botones.js';
+import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -147,7 +147,7 @@ function poblarSelectRodeoManga() {
 }
 
 function leerSanidad() {
-  if (!el('manga-check-sanidad').checked) return null;
+  if (!estaActivo('manga-check-sanidad')) return null;
   const desparasitada = el('manga-desparasitada').checked;
   return {
     desparasitada,
@@ -190,8 +190,8 @@ async function guardarSanidad(trabajoMangaId, sanidad) {
 }
 
 function activarBloquesSanidad() {
-  el('manga-check-sanidad').addEventListener('change', () => {
-    el('manga-bloque-sanidad').classList.toggle('oculto', !el('manga-check-sanidad').checked);
+  inicializarBotonToggle('manga-check-sanidad', (activo) => {
+    el('manga-bloque-sanidad').classList.toggle('oculto', !activo);
   });
   el('manga-desparasitada').addEventListener('change', () => {
     const marcada = el('manga-desparasitada').checked;
@@ -211,7 +211,7 @@ function activarBloquesSanidad() {
 }
 
 function limpiarSanidad() {
-  el('manga-check-sanidad').checked = false;
+  desactivarBoton('manga-check-sanidad');
   el('manga-bloque-sanidad').classList.add('oculto');
   el('manga-desparasitada').checked = false;
   el('manga-fila-droga').classList.add('oculto');
