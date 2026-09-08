@@ -285,6 +285,43 @@ create policy trabajo_manga_otras_sanidades_select on trabajo_manga_otras_sanida
 create policy trabajo_manga_otras_sanidades_insert on trabajo_manga_otras_sanidades for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
+-- ─── Trabajo de Manga: Reproducción ─────────────────────────────────────
+create table catalogo_toros (id text primary key, nombre text not null, activo boolean not null default true);
+
+-- 1-a-1 con trabajos_manga: solo existe si el checkbox "Reproducción" se tildó.
+create table trabajo_manga_reproduccion (
+  trabajo_manga_id uuid primary key references trabajos_manga(id) on delete cascade,
+  estado_corporal numeric(3,2) check (estado_corporal between 1 and 5),
+  inseminacion boolean not null default false,
+  tacto boolean not null default false,
+  raspaje boolean not null default false,
+  ecografia boolean not null default false,
+  resincronizacion boolean not null default false
+);
+
+-- Selección múltiple de toros usados en la inseminación.
+create table trabajo_manga_inseminacion_toros (
+  trabajo_manga_id uuid references trabajos_manga(id) on delete cascade,
+  toro_id text references catalogo_toros(id),
+  primary key (trabajo_manga_id, toro_id)
+);
+
+alter table catalogo_toros enable row level security;
+alter table trabajo_manga_reproduccion enable row level security;
+alter table trabajo_manga_inseminacion_toros enable row level security;
+
+create policy catalogo_toros_select on catalogo_toros for select to authenticated using (true);
+create policy catalogo_toros_insert on catalogo_toros for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy trabajo_manga_reproduccion_select on trabajo_manga_reproduccion for select to authenticated using (true);
+create policy trabajo_manga_reproduccion_insert on trabajo_manga_reproduccion for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy trabajo_manga_inseminacion_toros_select on trabajo_manga_inseminacion_toros for select to authenticated using (true);
+create policy trabajo_manga_inseminacion_toros_insert on trabajo_manga_inseminacion_toros for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
 create table perfiles (

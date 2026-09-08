@@ -253,6 +253,43 @@
           </div>
         </div>
 
+        <button type="button" id="manga-check-reproduccion" class="full boton-opcion boton-seccion">REPRODUCCION</button>
+
+        <div id="manga-bloque-reproduccion" class="full bloque-condicional oculto">
+          <label>Estado corporal (1 a 5)
+            <input id="manga-estado-corporal" type="number" min="1" max="5" step="0.25">
+          </label>
+
+          <label class="checkbox-linea">
+            <input id="manga-check-inseminacion" type="checkbox">
+            Inseminación
+          </label>
+          <div id="manga-bloque-toros" class="campo-grupo oculto">
+            <div id="manga-toros"></div>
+            <select id="manga-toros-agregar">
+              <option value="">+ Agregar toro...</option>
+              <option value="__nuevo__">+ Nuevo toro...</option>
+            </select>
+          </div>
+
+          <label class="checkbox-linea">
+            <input id="manga-tacto" type="checkbox">
+            Tacto
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-raspaje" type="checkbox">
+            Raspaje
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-ecografia" type="checkbox">
+            Ecografía
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-resincronizacion" type="checkbox">
+            Resincronización
+          </label>
+        </div>
+
         <label class="full">Observaciones (opcional)
           <textarea id="manga-observaciones" rows="2"></textarea>
         </label>

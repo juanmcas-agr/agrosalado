@@ -28,6 +28,7 @@ const catalogos = {
   drogas: { tabla: 'catalogo_drogas', cache: [] },
   vacunas: { tabla: 'catalogo_vacunas_reproductivas', cache: [] },
   otras: { tabla: 'catalogo_otras_sanidades', cache: [] },
+  toros: { tabla: 'catalogo_toros', cache: [] },
 };
 
 async function cargarCatalogo(clave) {
@@ -76,6 +77,7 @@ function poblarSelectCatalogo(idSelect, clave, textoNuevo) {
 const seleccionMultipleCatalogo = {
   vacunas: new Set(),
   otras: new Set(),
+  toros: new Set(),
 };
 
 function renderChips(idLista, clave) {
@@ -228,6 +230,66 @@ function limpiarSanidad() {
   limpiarSeleccionMultipleCatalogo('otras', 'manga-otras');
 }
 
+function leerReproduccion() {
+  if (!estaActivo('manga-check-reproduccion')) return null;
+  const estadoCorporalTexto = el('manga-estado-corporal').value;
+  return {
+    estado_corporal: estadoCorporalTexto ? Number(estadoCorporalTexto) : null,
+    inseminacion: el('manga-check-inseminacion').checked,
+    toros: el('manga-check-inseminacion').checked ? [...seleccionMultipleCatalogo.toros] : [],
+    tacto: el('manga-tacto').checked,
+    raspaje: el('manga-raspaje').checked,
+    ecografia: el('manga-ecografia').checked,
+    resincronizacion: el('manga-resincronizacion').checked,
+  };
+}
+
+async function guardarReproduccion(trabajoMangaId, reproduccion) {
+  const { error: errorReproduccion } = await supabase
+    .from('trabajo_manga_reproduccion')
+    .insert({
+      trabajo_manga_id: trabajoMangaId,
+      estado_corporal: reproduccion.estado_corporal,
+      inseminacion: reproduccion.inseminacion,
+      tacto: reproduccion.tacto,
+      raspaje: reproduccion.raspaje,
+      ecografia: reproduccion.ecografia,
+      resincronizacion: reproduccion.resincronizacion,
+    });
+  if (errorReproduccion) throw errorReproduccion;
+
+  if (reproduccion.toros.length) {
+    const { error } = await supabase
+      .from('trabajo_manga_inseminacion_toros')
+      .insert(reproduccion.toros.map((toroId) => ({ trabajo_manga_id: trabajoMangaId, toro_id: toroId })));
+    if (error) throw error;
+  }
+}
+
+function activarBloquesReproduccion() {
+  inicializarBotonToggle('manga-check-reproduccion', (activo) => {
+    el('manga-bloque-reproduccion').classList.toggle('oculto', !activo);
+  });
+  el('manga-check-inseminacion').addEventListener('change', () => {
+    const marcada = el('manga-check-inseminacion').checked;
+    el('manga-bloque-toros').classList.toggle('oculto', !marcada);
+    if (!marcada) limpiarSeleccionMultipleCatalogo('toros', 'manga-toros');
+  });
+}
+
+function limpiarReproduccion() {
+  desactivarBoton('manga-check-reproduccion');
+  el('manga-bloque-reproduccion').classList.add('oculto');
+  el('manga-estado-corporal').value = '';
+  el('manga-check-inseminacion').checked = false;
+  el('manga-bloque-toros').classList.add('oculto');
+  limpiarSeleccionMultipleCatalogo('toros', 'manga-toros');
+  el('manga-tacto').checked = false;
+  el('manga-raspaje').checked = false;
+  el('manga-ecografia').checked = false;
+  el('manga-resincronizacion').checked = false;
+}
+
 function mostrarMensaje(texto, tipo) {
   const contenedor = el('manga-mensaje');
   contenedor.textContent = texto;
@@ -242,6 +304,7 @@ function resetFormulario() {
   el('manga-cantidad').value = '';
   el('manga-observaciones').value = '';
   limpiarSanidad();
+  limpiarReproduccion();
 }
 
 async function onSubmit(evento) {
@@ -259,6 +322,10 @@ async function onSubmit(evento) {
   if (!rodeoId) { mostrarMensaje('Elegí un rodeo.', 'error'); return; }
   if (!propietarios.length) { mostrarMensaje('Elegí al menos un propietario.', 'error'); return; }
   if (!Number.isInteger(cantidad) || cantidad <= 0) { mostrarMensaje('La cantidad trabajada debe ser un entero mayor a 0.', 'error'); return; }
+  if (estaActivo('manga-check-reproduccion') && el('manga-estado-corporal').value) {
+    const ec = Number(el('manga-estado-corporal').value);
+    if (ec < 1 || ec > 5) { mostrarMensaje('El estado corporal debe estar entre 1 y 5.', 'error'); return; }
+  }
 
   if (!navigator.onLine) { mostrarMensaje('Necesitás conexión a internet para guardar un trabajo de manga.', 'error'); return; }
 
@@ -305,6 +372,16 @@ async function onSubmit(evento) {
     }
   }
 
+  const reproduccion = leerReproduccion();
+  if (reproduccion) {
+    try {
+      await guardarReproduccion(trabajo.id, reproduccion);
+    } catch (error) {
+      mostrarMensaje('Se guardó el trabajo, pero no se pudo guardar la reproducción: ' + error.message, 'advertencia');
+      return;
+    }
+  }
+
   if (diferenciaPendiente) {
     mostrarMensaje(
       `⚠️ Guardado, pero la cantidad trabajada (${cantidad}) no coincide con el stock del rodeo (${stockActual}). ` +
@@ -318,7 +395,7 @@ async function onSubmit(evento) {
 }
 
 export async function initTrabajoManga() {
-  await Promise.all([cargarTitulares(), cargarRodeos(), cargarCatalogo('drogas'), cargarCatalogo('vacunas'), cargarCatalogo('otras')]);
+  await Promise.all([cargarTitulares(), cargarRodeos(), cargarCatalogo('drogas'), cargarCatalogo('vacunas'), cargarCatalogo('otras'), cargarCatalogo('toros')]);
   crearGrupoBotones('manga-categoria', CATEGORIAS);
   crearGrupoBotonesMultiple('manga-propietarios', obtenerTitularesCache());
   el('manga-categoria').addEventListener('cambio', poblarSelectRodeoManga);
@@ -327,5 +404,7 @@ export async function initTrabajoManga() {
   poblarSelectCatalogo('manga-droga', 'drogas', '+ Nueva droga...');
   inicializarAgregarCatalogo('manga-vacunas-agregar', 'manga-vacunas', 'vacunas', '+ Nueva vacuna...');
   inicializarAgregarCatalogo('manga-otras-agregar', 'manga-otras', 'otras', '+ Nueva...');
+  activarBloquesReproduccion();
+  inicializarAgregarCatalogo('manga-toros-agregar', 'manga-toros', 'toros', '+ Nuevo toro...');
   el('manga-form').addEventListener('submit', onSubmit);
 }
