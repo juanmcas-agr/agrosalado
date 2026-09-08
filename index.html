@@ -2725,9 +2725,10 @@
         ? `${formatoNumero(fleteLargo)}<br><small>(-${descLargo}%)</small>`
         : formatoNumero(fleteLargo);
 
+      const productoGuardado = productoConSufijoTipo2(producto, esTipo2);
       const datos = [
         cliente || "-",
-        producto || "-",
+        productoGuardado || "-",
         destino || "-",
         precioBrutoHTML,
         `${formatoNumero(comision)}<br><small>(${comisionPct}%)</small>`,
@@ -3273,7 +3274,7 @@
     async function restaurarAlternativa(v) {
       document.getElementById('cliente').value = v.cliente || '';
       document.getElementById('chkTipo2').checked = !!v.esTipo2;
-      document.getElementById('producto').value = v.producto || 'SOJA';
+      document.getElementById('producto').value = productoSinSufijoTipo2(v.producto) || 'SOJA';
       asegurarOpcionDestino('destino', v.destino || '');
       toggleCobraFleteCorto('chkCobraFleteCorto', 'kmCorto', 'destino', 'kmLargo', v.cobraFleteCorto !== false);
       document.getElementById('moneda').value = v.moneda || 'ARS';
@@ -4180,7 +4181,7 @@
       // se copia de la compra.
       document.getElementById('ventaComisionSel').value = '0.5';
       onCambioComisionVenta();
-      document.getElementById('ventaProducto').value = elegida.producto || 'SOJA';
+      document.getElementById('ventaProducto').value = productoSinSufijoTipo2(elegida.producto) || 'SOJA';
       document.getElementById('ventaOrigen').value = '';
       asegurarOpcionDestino('ventaDestino', elegida.destino || '');
       document.getElementById('ventaMoneda').value = elegida.moneda || 'ARS';
@@ -4285,6 +4286,21 @@
       }
       if (observacionesExtra.length) datos.observaciones = observacionesExtra.join(' ');
       return datos;
+    }
+
+    // Negocio tipo 2 (interno): el producto se guarda con sufijo "_2" (ej.
+    // "MAIZ_2") para que Posición lo trackee como una categoría aparte de
+    // la normal — Posición arma sus categorías dinámicamente a partir de
+    // los valores de "producto" que encuentra (ver cargarPosicion), así
+    // que no hace falta tocar nada ahí: alcanza con guardar el string
+    // distinto. Se compensa solo con compras/ventas que también sean
+    // tipo 2 del mismo producto, porque el string ya no coincide con el
+    // de una operación normal.
+    function productoConSufijoTipo2(producto, esTipo2) {
+      return producto && esTipo2 ? `${producto}_2` : (producto || '');
+    }
+    function productoSinSufijoTipo2(producto) {
+      return (producto || '').replace(/_2$/, '');
     }
 
     function mapearProductoMail(valor) {
@@ -4977,7 +4993,7 @@
         corredor: document.getElementById('ventaCorredor').value.trim(),
         numeroContratoCorredor: document.getElementById('ventaNumeroContratoCorredor').value.trim(),
         comisionPct,
-        producto: document.getElementById('ventaProducto').value,
+        producto: productoConSufijoTipo2(document.getElementById('ventaProducto').value, document.getElementById('ventaChkTipo2').checked),
         origen: document.getElementById('ventaOrigen').value.trim(),
         destino: document.getElementById('ventaDestino').value,
         moneda: document.getElementById('ventaMoneda').value,
@@ -5026,7 +5042,7 @@
       document.getElementById('ventaComisionSel').value = esComisionFija ? comisionStr : 'otra';
       onCambioComisionVenta();
       if (!esComisionFija) document.getElementById('ventaComisionOtra').value = comisionStr;
-      document.getElementById('ventaProducto').value = b.producto || 'SOJA';
+      document.getElementById('ventaProducto').value = productoSinSufijoTipo2(b.producto) || 'SOJA';
       document.getElementById('ventaOrigen').value = b.origen || '';
       asegurarOpcionDestino('ventaDestino', b.destino || '');
       document.getElementById('ventaMoneda').value = b.moneda || 'ARS';
