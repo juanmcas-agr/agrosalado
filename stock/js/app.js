@@ -4,6 +4,7 @@ import { initMovimientos } from './movimientos.js';
 import { initTrabajoManga } from './trabajoManga.js';
 import { initDashboard } from './dashboard.js';
 import { initHistorial } from './historial.js';
+import { initReportes } from './reportes.js';
 import { initRouter } from './router.js';
 import { initConfigPanel } from './configPanel.js';
 
@@ -20,6 +21,7 @@ function iniciarPantallasDeLaApp(rol) {
   initTrabajoManga();
   initDashboard();
   initHistorial();
+  initReportes();
   initRouter(rol);
 }
 

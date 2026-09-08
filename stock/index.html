@@ -52,6 +52,7 @@
       <button data-ir="manga">Trabajo de Manga</button>
       <button data-ir="dashboard">Stock</button>
       <button data-ir="historial">Historial</button>
+      <button data-ir="reportes">Reportes</button>
     </nav>
 
     <!-- ─── CARGAR MOVIMIENTO ─── -->
@@ -450,6 +451,30 @@
           </thead>
           <tbody></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ─── REPORTES ─── -->
+    <section id="pantalla-reportes" data-screen="reportes" class="oculto">
+      <h2>Reportes</h2>
+      <div class="filtros">
+        <button type="button" class="boton-secundario reportes-tab" data-subseccion="manga">Trabajo de Manga</button>
+        <button type="button" class="boton-secundario reportes-tab" data-subseccion="feedlot">Feed Lot</button>
+        <button type="button" class="boton-secundario reportes-tab" data-subseccion="rodeo">Historia de Rodeo</button>
+        <button type="button" class="boton-secundario reportes-tab" data-subseccion="indices">Índices</button>
+      </div>
+
+      <div id="reportes-manga" class="reportes-seccion oculto">
+        <p class="ayuda">Próximamente: listado de Trabajo de Manga, exportable a PDF.</p>
+      </div>
+      <div id="reportes-feedlot" class="reportes-seccion oculto">
+        <p class="ayuda">Próximamente: informe de Feed Lot por corral (días restantes, kilos ganados).</p>
+      </div>
+      <div id="reportes-rodeo" class="reportes-seccion oculto">
+        <p class="ayuda">Próximamente: historia y evolución de un rodeo.</p>
+      </div>
+      <div id="reportes-indices" class="reportes-seccion oculto">
+        <p class="ayuda">Próximamente: índices reproductivos.</p>
       </div>
     </section>
   </div>
