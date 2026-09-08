@@ -498,6 +498,17 @@ button:active { filter: brightness(0.9); }
 .tabla .kilos-cell { color: #666; font-size: 0.85em; }
 .ayuda { font-size: 0.85em; color: #666; margin: 4px 0 8px; }
 
+.link-rodeo {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #8a5a34;
+  font-weight: bold;
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+}
+
 /* separación entre los botones de vista (Grupo/Agro/Doña/Capitalizadores)
    y la tabla que les sigue */
 #dash-categoria-vista, #dash-establecimiento-vista { margin-bottom: 10px; }

@@ -243,9 +243,15 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
             if (info?.kilosSalidaObjetivo) partes.push(`objetivo ${info.kilosSalidaObjetivo}kg`);
             if (partes.length) extra = ` [${partes.join(', ')}]`;
           }
-          return `${r.rodeo} (${cat ? cat.nombre : r.categoriaId}: ${r.cabezas})${extra}`;
+          return `<button type="button" class="link-rodeo" data-rodeo-id="${r.rodeoId}">${r.rodeo}</button> (${cat ? cat.nombre : r.categoriaId}: ${r.cabezas})${extra}`;
         }).join(' · ')
       : 'Sin rodeos con stock en este establecimiento.';
+    tdRodeos.querySelectorAll('.link-rodeo').forEach((boton) => {
+      boton.addEventListener('click', (evento) => {
+        evento.stopPropagation();
+        document.dispatchEvent(new CustomEvent('hacienda:ver-historia-rodeo', { detail: { rodeoId: boton.dataset.rodeoId } }));
+      });
+    });
     trRodeos.appendChild(tdRodeos);
 
     tr.addEventListener('click', () => trRodeos.classList.toggle('oculto'));

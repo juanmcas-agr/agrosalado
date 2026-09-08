@@ -5,6 +5,7 @@
 // navegador (contenedor .imprimible, ver estilo.css) — sin librería
 // nueva, mismo criterio minimalista que el resto de la app.
 import { supabase } from './supabaseClient.js';
+import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
 import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
@@ -24,6 +25,7 @@ function mostrarSubseccion(nombre) {
   });
   if (nombre === 'manga') cargarTrabajosManga();
   if (nombre === 'feedlot') cargarFeedLot();
+  if (nombre === 'rodeo') cargarHistoriaRodeo();
 }
 
 function hoyISO() {
@@ -211,8 +213,110 @@ export async function cargarFeedLot() {
   renderHistorialFeedLot(ciclosCerrados.data);
 }
 
+// ─── Historia de Rodeo ──────────────────────────────────────────────────
+// Una sola línea de tiempo con dos fuentes intercaladas cronológicamente:
+// movimientos donde el rodeo es origen o destino (historial_movimientos)
+// y pesadas de control (rodeo_pesadas_historial) — así se ve la
+// evolución completa de un rodeo en un solo lugar, no dos tablas
+// separadas que hay que cruzar a mano.
+
+function poblarSelectRodeoHistoria() {
+  const select = el('rep-rodeo-select');
+  const valorPrevio = select.value;
+  select.innerHTML = '<option value="">Elegir rodeo...</option>';
+  for (const r of obtenerRodeosCache()) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.codigo;
+    select.appendChild(opt);
+  }
+  if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+}
+
+function describirMovimientoTimeline(m) {
+  const origen = m.establecimiento_origen_nombre ? `${m.establecimiento_origen_nombre} (${m.categoria_origen_nombre})` : null;
+  const destino = m.establecimiento_destino_nombre ? `${m.establecimiento_destino_nombre} (${m.categoria_destino_nombre})` : null;
+  const recorrido = [origen, destino].filter(Boolean).join(' → ');
+  const titular = m.titular_origen_nombre || m.titular_destino_nombre;
+  return [
+    recorrido,
+    `${m.cantidad_cabezas} cab. (${m.kilos_promedio} kg prom.)`,
+    titular ? `titular: ${titular}` : null,
+    m.rodeo_destino ? `pasa al rodeo ${m.rodeo_destino}` : null,
+  ].filter(Boolean).join(' — ');
+}
+
+// Arma la línea de tiempo ordenada: movimientos (fecha + created_at como
+// desempate) y pesadas (fecha + creado_at) mezclados en un único array.
+function construirLineaDeTiempo(movimientos, pesadas) {
+  const eventos = [
+    ...movimientos.map((m) => ({ fecha: m.fecha, orden: m.created_at, tipo: 'movimiento', datos: m })),
+    ...pesadas.map((p) => ({ fecha: p.fecha, orden: p.creado_at, tipo: 'pesada', datos: p })),
+  ];
+  eventos.sort((a, b) => (a.fecha === b.fecha ? (a.orden || '').localeCompare(b.orden || '') : a.fecha.localeCompare(b.fecha)));
+  return eventos;
+}
+
+function renderHistoriaRodeo(rodeo, eventos) {
+  const info = el('rep-rodeo-info');
+  if (!rodeo) {
+    info.textContent = '';
+    el('rep-rodeo-tabla').querySelector('tbody').innerHTML = '';
+    return;
+  }
+  const categoriaNombre = CATEGORIAS.find((c) => c.id === rodeo.categoria_id)?.nombre || rodeo.categoria_id;
+  const establecimientoNombre = ESTABLECIMIENTOS.find((e) => e.id === rodeo.establecimiento_id)?.nombre || rodeo.establecimiento_id;
+  info.textContent = `${rodeo.codigo} — categoría actual: ${categoriaNombre} — establecimiento actual: ${establecimientoNombre}`;
+
+  const tbody = el('rep-rodeo-tabla').querySelector('tbody');
+  if (!eventos.length) {
+    tbody.innerHTML = '<tr><td colspan="4">Sin movimientos ni pesadas registradas para este rodeo.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = eventos.map((e) => {
+    if (e.tipo === 'pesada') {
+      return `<tr><td>${e.fecha}</td><td>⚖️ Pesada de control</td><td>${e.datos.kilos_promedio} kg</td><td></td></tr>`;
+    }
+    return `<tr><td>${e.fecha}</td><td>${e.datos.tipo_movimiento_nombre}</td><td>${describirMovimientoTimeline(e.datos)}</td><td>${e.datos.codigo || ''}</td></tr>`;
+  }).join('');
+}
+
+export async function cargarHistoriaRodeo() {
+  const mensaje = el('rep-rodeo-mensaje');
+  mensaje.textContent = '';
+  const rodeoId = el('rep-rodeo-select').value;
+  if (!rodeoId) {
+    renderHistoriaRodeo(null, []);
+    return;
+  }
+
+  const [movimientos, pesadas] = await Promise.all([
+    supabase.from('historial_movimientos').select('*').or(`rodeo_id.eq.${rodeoId},rodeo_destino_id.eq.${rodeoId}`).order('fecha', { ascending: true }),
+    supabase.from('rodeo_pesadas_historial').select('*').eq('rodeo_id', rodeoId).order('fecha', { ascending: true }),
+  ]);
+  if (movimientos.error || pesadas.error) {
+    const error = movimientos.error || pesadas.error;
+    mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+
+  const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
+  renderHistoriaRodeo(rodeo, construirLineaDeTiempo(movimientos.data, pesadas.data));
+}
+
 function imprimirReporte() {
   window.print();
+}
+
+// Acceso directo desde el clic en un rodeo dentro de "Por establecimiento"
+// (Stock) — ver dashboard.js, que dispara este evento en vez de importar
+// reportes.js directo (mismo criterio de siempre para no armar imports
+// circulares entre pantallas).
+function verHistoriaRodeo(rodeoId) {
+  location.hash = 'reportes';
+  el('rep-rodeo-select').value = rodeoId;
+  mostrarSubseccion('rodeo');
 }
 
 export async function initReportes() {
@@ -223,12 +327,16 @@ export async function initReportes() {
   el('rep-manga-imprimir').addEventListener('click', imprimirReporte);
   el('rep-feedlot-actualizar').addEventListener('click', cargarFeedLot);
   el('rep-feedlot-imprimir').addEventListener('click', imprimirReporte);
+  el('rep-rodeo-ver').addEventListener('click', cargarHistoriaRodeo);
+  el('rep-rodeo-imprimir').addEventListener('click', imprimirReporte);
+  document.addEventListener('hacienda:ver-historia-rodeo', (evento) => verHistoriaRodeo(evento.detail.rodeoId));
 
   // Los caches (rodeos/titulares/catálogos) tienen que estar cargados
   // ANTES de mostrar la primera sub-sección — si no, la primera carga de
   // datos corre con nombres sin resolver.
   await Promise.all([cargarRodeos(), cargarTitulares(), cargarCatalogosSanidad()]);
   poblarSelectRodeoReportes();
+  poblarSelectRodeoHistoria();
   mostrarSubseccion('manga');
 }
 
@@ -239,4 +347,5 @@ export async function refrescarReportes() {
   const activa = document.querySelector('.reportes-tab.activo')?.dataset.subseccion || 'manga';
   if (activa === 'manga') await cargarTrabajosManga();
   if (activa === 'feedlot') await cargarFeedLot();
+  if (activa === 'rodeo') await cargarHistoriaRodeo();
 }

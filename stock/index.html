@@ -542,7 +542,22 @@
         </div>
       </div>
       <div id="reportes-rodeo" class="reportes-seccion oculto">
-        <p class="ayuda">Próximamente: historia y evolución de un rodeo.</p>
+        <div class="filtros">
+          <select id="rep-rodeo-select"><option value="">Elegir rodeo...</option></select>
+          <button type="button" id="rep-rodeo-ver" class="boton-secundario">Ver</button>
+          <button type="button" id="rep-rodeo-imprimir" class="boton-secundario">Imprimir / PDF</button>
+        </div>
+        <div id="rep-rodeo-mensaje" class="mensaje"></div>
+        <div id="rep-rodeo-imprimible" class="imprimible">
+          <h3 class="solo-imprimir">Historia de Rodeo</h3>
+          <div id="rep-rodeo-info" class="ayuda"></div>
+          <div class="tabla-scroll">
+            <table id="rep-rodeo-tabla" class="tabla">
+              <thead><tr><th>Fecha</th><th>Evento</th><th>Detalle</th><th>Código</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <div id="reportes-indices" class="reportes-seccion oculto">
         <p class="ayuda">Próximamente: índices reproductivos.</p>
