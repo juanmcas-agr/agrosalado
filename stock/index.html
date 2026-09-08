@@ -290,6 +290,68 @@
           </label>
         </div>
 
+        <button type="button" id="manga-check-manejo" class="full boton-opcion boton-seccion">MANEJO DE RODEO</button>
+
+        <div id="manga-bloque-manejo" class="full bloque-condicional oculto">
+          <label class="checkbox-linea">
+            <input id="manga-aparte" type="checkbox">
+            Aparte
+          </label>
+          <label class="checkbox-linea">
+            <input id="manga-capada" type="checkbox">
+            Capada
+          </label>
+          <label>Pesada de control (kg promedio)
+            <input id="manga-pesada-control" type="number" min="0" step="0.1">
+          </label>
+
+          <label class="checkbox-linea">
+            <input id="manga-check-destete" type="checkbox">
+            Destete
+          </label>
+          <div id="manga-bloque-destete" class="campo-grupo oculto">
+            <p class="ayuda">Los machos y las hembras destetados pasan cada uno a su propio rodeo (categoría Novillito / Vaquillona).</p>
+
+            <label>Machos (cantidad)
+              <input id="manga-destete-machos" type="number" min="0" step="1">
+            </label>
+            <label>Kilos ternero (prom.)
+              <input id="manga-destete-kilos-ternero" type="number" min="0" step="0.1">
+            </label>
+            <div class="campo-grupo">
+              <div class="etiqueta-grupo">Rodeo destino (novillitos)</div>
+              <select id="manga-destete-rodeo-novillito">
+                <option value="">Elegir...</option>
+                <option value="__nuevo__">+ Crear rodeo nuevo...</option>
+              </select>
+              <div id="manga-destete-rodeo-novillito-nuevo-wrap" class="oculto">
+                <input id="manga-destete-rodeo-novillito-nombre" type="text" placeholder="Ej: Novillitos San Miguel">
+                <label>Fecha de creación <input id="manga-destete-rodeo-novillito-fecha" type="date"></label>
+                <button type="button" id="manga-destete-rodeo-novillito-crear" class="boton-secundario">Crear rodeo</button>
+              </div>
+            </div>
+
+            <label>Hembras (cantidad)
+              <input id="manga-destete-hembras" type="number" min="0" step="1">
+            </label>
+            <label>Kilos ternera (prom.)
+              <input id="manga-destete-kilos-ternera" type="number" min="0" step="0.1">
+            </label>
+            <div class="campo-grupo">
+              <div class="etiqueta-grupo">Rodeo destino (vaquillonas)</div>
+              <select id="manga-destete-rodeo-vaquillona">
+                <option value="">Elegir...</option>
+                <option value="__nuevo__">+ Crear rodeo nuevo...</option>
+              </select>
+              <div id="manga-destete-rodeo-vaquillona-nuevo-wrap" class="oculto">
+                <input id="manga-destete-rodeo-vaquillona-nombre" type="text" placeholder="Ej: Vaquillonas San Miguel">
+                <label>Fecha de creación <input id="manga-destete-rodeo-vaquillona-fecha" type="date"></label>
+                <button type="button" id="manga-destete-rodeo-vaquillona-crear" class="boton-secundario">Crear rodeo</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <label class="full">Observaciones (opcional)
           <textarea id="manga-observaciones" rows="2"></textarea>
         </label>

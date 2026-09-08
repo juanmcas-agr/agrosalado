@@ -82,6 +82,14 @@ export async function stockDelRodeo(rodeoId) {
   return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
 }
 
+// Cabezas de una categoría puntual dentro de un rodeo (ej. cuántos
+// "ternero" hay en el rodeo de la madre, para validar un Destete).
+export async function stockDelRodeoPorCategoria(rodeoId, categoriaId) {
+  const { data, error } = await supabase.from('stock_actual').select('cabezas').eq('rodeo_id', rodeoId).eq('categoria', categoriaId);
+  if (error) throw error;
+  return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
+}
+
 // ─── Feed lot: corral + ciclo ───
 // fecha/kilos de INGRESO salen del propio movimiento que trae el rodeo a
 // feed lot (no se vuelven a tipear); fecha estimada de salida y kilos

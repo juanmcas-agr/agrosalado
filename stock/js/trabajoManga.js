@@ -9,7 +9,7 @@ import { supabase } from './supabaseClient.js';
 import { CATEGORIAS } from './config.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
-import { cargarRodeos, rodeosDeCategoria, stockDelRodeo } from './rodeos.js';
+import { cargarRodeos, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
 import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
 
 function el(id) {
@@ -290,6 +290,183 @@ function limpiarReproduccion() {
   el('manga-resincronizacion').checked = false;
 }
 
+// ─── Manejo de rodeo: aparte / capada / pesada de control / Destete ───
+// Destete no es un movimiento en sí — es la bitácora de trabajo_manga_manejo
+// — pero SÍ dispara movimientos reales de cambio_categoria (ternero→
+// novillito, ternera→vaquillona) que además cambian de rodeo (cada sexo
+// pasa a su propio rodeo nuevo), ver ejecutarDestete().
+
+function poblarSelectRodeoDestino(idSelect, categoriaId) {
+  const select = el(idSelect);
+  const valorPrevio = select.value;
+  select.innerHTML = '<option value="">Elegir...</option>';
+  for (const r of rodeosDeCategoria(categoriaId)) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.codigo;
+    select.appendChild(opt);
+  }
+  const opcionNueva = document.createElement('option');
+  opcionNueva.value = '__nuevo__';
+  opcionNueva.textContent = '+ Crear rodeo nuevo...';
+  select.appendChild(opcionNueva);
+  if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+}
+
+function inicializarSelectorRodeoDestino(prefijo, categoriaId) {
+  const idSelect = `manga-destete-rodeo-${prefijo}`;
+  const idWrap = `${idSelect}-nuevo-wrap`;
+  const idNombre = `${idSelect}-nombre`;
+  const idFecha = `${idSelect}-fecha`;
+  const idCrear = `${idSelect}-crear`;
+
+  poblarSelectRodeoDestino(idSelect, categoriaId);
+
+  el(idSelect).addEventListener('change', () => {
+    const esNuevo = el(idSelect).value === '__nuevo__';
+    el(idWrap).classList.toggle('oculto', !esNuevo);
+    if (esNuevo) el(idFecha).value = new Date().toISOString().slice(0, 10);
+  });
+
+  el(idCrear).addEventListener('click', async () => {
+    const nombre = el(idNombre).value.trim();
+    if (!nombre) { alert('Ingresá un nombre para el rodeo.'); return; }
+    const rodeoMadreId = el('manga-rodeo').value;
+    const establecimientoId = obtenerRodeosCache().find((r) => r.id === rodeoMadreId)?.establecimiento_id;
+    if (!establecimientoId) { alert('Elegí primero el rodeo de arriba.'); return; }
+    try {
+      const nuevo = await crearRodeo({
+        nombre,
+        categoriaId,
+        establecimientoId,
+        fechaCreacion: el(idFecha).value || undefined,
+        usuarioId: getEstado().session.user.id,
+      });
+      poblarSelectRodeoDestino(idSelect, categoriaId);
+      el(idSelect).value = nuevo.id;
+      el(idWrap).classList.add('oculto');
+    } catch (error) {
+      alert('No se pudo crear el rodeo: ' + error.message);
+    }
+  });
+}
+
+function leerManejo() {
+  if (!estaActivo('manga-check-manejo')) return null;
+  const pesadaTexto = el('manga-pesada-control').value;
+  const destete = el('manga-check-destete').checked;
+  return {
+    aparte: el('manga-aparte').checked,
+    capada: el('manga-capada').checked,
+    pesada_control_kilos: pesadaTexto ? Number(pesadaTexto) : null,
+    destete,
+    destete_machos_cantidad: destete ? Number(el('manga-destete-machos').value) || 0 : null,
+    destete_hembras_cantidad: destete ? Number(el('manga-destete-hembras').value) || 0 : null,
+    destete_kilos_ternero: destete && el('manga-destete-kilos-ternero').value ? Number(el('manga-destete-kilos-ternero').value) : null,
+    destete_kilos_ternera: destete && el('manga-destete-kilos-ternera').value ? Number(el('manga-destete-kilos-ternera').value) : null,
+    rodeoNovillitoId: destete ? el('manga-destete-rodeo-novillito').value : null,
+    rodeoVaquillonaId: destete ? el('manga-destete-rodeo-vaquillona').value : null,
+  };
+}
+
+async function ejecutarDestete(trabajoMangaId, manejo, contexto) {
+  const establecimientoId = obtenerRodeosCache().find((r) => r.id === contexto.rodeoOrigenId)?.establecimiento_id;
+  const base = {
+    fecha: contexto.fecha,
+    establecimiento_origen: establecimientoId,
+    establecimiento_destino: establecimientoId,
+    titular_origen: contexto.titularId,
+    titular_destino: contexto.titularId,
+    rodeo_id: contexto.rodeoOrigenId,
+    usuario_id: contexto.usuarioId,
+    observaciones: 'Destete (Trabajo de Manga)',
+  };
+  if (manejo.destete_machos_cantidad > 0) {
+    const { error } = await supabase.from('movimientos').insert({
+      ...base,
+      tipo_movimiento: 'cambio_categoria',
+      categoria_origen: 'ternero',
+      categoria_destino: 'novillito',
+      rodeo_destino_id: manejo.rodeoNovillitoId,
+      cantidad_cabezas: manejo.destete_machos_cantidad,
+      kilos_promedio: manejo.destete_kilos_ternero,
+    });
+    if (error) throw new Error('movimiento de machos: ' + error.message);
+  }
+  if (manejo.destete_hembras_cantidad > 0) {
+    const { error } = await supabase.from('movimientos').insert({
+      ...base,
+      tipo_movimiento: 'cambio_categoria',
+      categoria_origen: 'ternera',
+      categoria_destino: 'vaquillona',
+      rodeo_destino_id: manejo.rodeoVaquillonaId,
+      cantidad_cabezas: manejo.destete_hembras_cantidad,
+      kilos_promedio: manejo.destete_kilos_ternera,
+    });
+    if (error) throw new Error('movimiento de hembras: ' + error.message);
+  }
+}
+
+async function guardarManejo(trabajoMangaId, manejo, contexto) {
+  const { error: errorManejo } = await supabase
+    .from('trabajo_manga_manejo')
+    .insert({
+      trabajo_manga_id: trabajoMangaId,
+      aparte: manejo.aparte,
+      capada: manejo.capada,
+      pesada_control_kilos: manejo.pesada_control_kilos,
+      destete: manejo.destete,
+      destete_machos_cantidad: manejo.destete_machos_cantidad,
+      destete_hembras_cantidad: manejo.destete_hembras_cantidad,
+      destete_kilos_ternero: manejo.destete_kilos_ternero,
+      destete_kilos_ternera: manejo.destete_kilos_ternera,
+    });
+  if (errorManejo) throw errorManejo;
+
+  if (manejo.pesada_control_kilos != null) {
+    const { error } = await supabase.from('rodeo_pesadas_historial').insert({
+      rodeo_id: contexto.rodeoOrigenId,
+      fecha: contexto.fecha,
+      kilos_promedio: manejo.pesada_control_kilos,
+      trabajo_manga_id: trabajoMangaId,
+    });
+    if (error) throw error;
+  }
+
+  if (manejo.destete) {
+    await ejecutarDestete(trabajoMangaId, manejo, contexto);
+  }
+}
+
+function activarBloquesManejo() {
+  inicializarBotonToggle('manga-check-manejo', (activo) => {
+    el('manga-bloque-manejo').classList.toggle('oculto', !activo);
+  });
+  el('manga-check-destete').addEventListener('change', () => {
+    el('manga-bloque-destete').classList.toggle('oculto', !el('manga-check-destete').checked);
+  });
+}
+
+function limpiarManejo() {
+  desactivarBoton('manga-check-manejo');
+  el('manga-bloque-manejo').classList.add('oculto');
+  el('manga-aparte').checked = false;
+  el('manga-capada').checked = false;
+  el('manga-pesada-control').value = '';
+  el('manga-check-destete').checked = false;
+  el('manga-bloque-destete').classList.add('oculto');
+  el('manga-destete-machos').value = '';
+  el('manga-destete-kilos-ternero').value = '';
+  el('manga-destete-rodeo-novillito').value = '';
+  el('manga-destete-rodeo-novillito-nuevo-wrap').classList.add('oculto');
+  el('manga-destete-rodeo-novillito-nombre').value = '';
+  el('manga-destete-hembras').value = '';
+  el('manga-destete-kilos-ternera').value = '';
+  el('manga-destete-rodeo-vaquillona').value = '';
+  el('manga-destete-rodeo-vaquillona-nuevo-wrap').classList.add('oculto');
+  el('manga-destete-rodeo-vaquillona-nombre').value = '';
+}
+
 function mostrarMensaje(texto, tipo) {
   const contenedor = el('manga-mensaje');
   contenedor.textContent = texto;
@@ -305,6 +482,7 @@ function resetFormulario() {
   el('manga-observaciones').value = '';
   limpiarSanidad();
   limpiarReproduccion();
+  limpiarManejo();
 }
 
 async function onSubmit(evento) {
@@ -327,6 +505,22 @@ async function onSubmit(evento) {
     if (ec < 1 || ec > 5) { mostrarMensaje('El estado corporal debe estar entre 1 y 5.', 'error'); return; }
   }
 
+  const manejo = leerManejo();
+  if (manejo && manejo.destete) {
+    if (propietarios.length !== 1) { mostrarMensaje('Para Destete, elegí un solo propietario (los animales destetados pasan a nombre de uno solo).', 'error'); return; }
+    const machos = manejo.destete_machos_cantidad || 0;
+    const hembras = manejo.destete_hembras_cantidad || 0;
+    if (machos <= 0 && hembras <= 0) { mostrarMensaje('En Destete, cargá al menos machos o hembras.', 'error'); return; }
+    if (machos > 0 && (!manejo.destete_kilos_ternero || !manejo.rodeoNovillitoId || manejo.rodeoNovillitoId === '__nuevo__')) {
+      mostrarMensaje('Para los machos destetados, cargá los kilos y elegí (o creá) el rodeo destino.', 'error');
+      return;
+    }
+    if (hembras > 0 && (!manejo.destete_kilos_ternera || !manejo.rodeoVaquillonaId || manejo.rodeoVaquillonaId === '__nuevo__')) {
+      mostrarMensaje('Para las hembras destetadas, cargá los kilos y elegí (o creá) el rodeo destino.', 'error');
+      return;
+    }
+  }
+
   if (!navigator.onLine) { mostrarMensaje('Necesitás conexión a internet para guardar un trabajo de manga.', 'error'); return; }
 
   let stockActual;
@@ -337,6 +531,28 @@ async function onSubmit(evento) {
     return;
   }
   const diferenciaPendiente = cantidad !== stockActual;
+
+  if (manejo && manejo.destete) {
+    try {
+      if (manejo.destete_machos_cantidad > 0) {
+        const stockTernero = await stockDelRodeoPorCategoria(rodeoId, 'ternero');
+        if (manejo.destete_machos_cantidad > stockTernero) {
+          mostrarMensaje(`No hay ${manejo.destete_machos_cantidad} terneros en ese rodeo (hay ${stockTernero}).`, 'error');
+          return;
+        }
+      }
+      if (manejo.destete_hembras_cantidad > 0) {
+        const stockTernera = await stockDelRodeoPorCategoria(rodeoId, 'ternera');
+        if (manejo.destete_hembras_cantidad > stockTernera) {
+          mostrarMensaje(`No hay ${manejo.destete_hembras_cantidad} terneras en ese rodeo (hay ${stockTernera}).`, 'error');
+          return;
+        }
+      }
+    } catch (error) {
+      mostrarMensaje('No se pudo verificar el stock de terneros/as: ' + error.message, 'error');
+      return;
+    }
+  }
 
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { mostrarMensaje('No hay sesión activa.', 'error'); return; }
@@ -382,6 +598,15 @@ async function onSubmit(evento) {
     }
   }
 
+  if (manejo) {
+    try {
+      await guardarManejo(trabajo.id, manejo, { rodeoOrigenId: rodeoId, fecha, titularId: propietarios[0], usuarioId: session.user.id });
+    } catch (error) {
+      mostrarMensaje('Se guardó el trabajo, pero no se pudo guardar el manejo de rodeo: ' + error.message, 'advertencia');
+      return;
+    }
+  }
+
   if (diferenciaPendiente) {
     mostrarMensaje(
       `⚠️ Guardado, pero la cantidad trabajada (${cantidad}) no coincide con el stock del rodeo (${stockActual}). ` +
@@ -406,5 +631,8 @@ export async function initTrabajoManga() {
   inicializarAgregarCatalogo('manga-otras-agregar', 'manga-otras', 'otras', '+ Nueva...');
   activarBloquesReproduccion();
   inicializarAgregarCatalogo('manga-toros-agregar', 'manga-toros', 'toros', '+ Nuevo toro...');
+  activarBloquesManejo();
+  inicializarSelectorRodeoDestino('novillito', 'novillito');
+  inicializarSelectorRodeoDestino('vaquillona', 'vaquillona');
   el('manga-form').addEventListener('submit', onSubmit);
 }

@@ -322,6 +322,47 @@ create policy trabajo_manga_inseminacion_toros_select on trabajo_manga_inseminac
 create policy trabajo_manga_inseminacion_toros_insert on trabajo_manga_inseminacion_toros for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
+-- ─── Trabajo de Manga: Manejo de rodeo ──────────────────────────────────
+-- 1-a-1 con trabajos_manga: solo existe si el checkbox "Manejo de rodeo"
+-- se tildó. Destete no es un movimiento en sí (esta tabla es la bitácora),
+-- pero SÍ dispara movimientos reales de cambio_categoria (con cambio de
+-- rodeo incluido, ver validar_movimiento/actualizar_rodeo_tras_movimiento
+-- más arriba) — eso lo hace el cliente, insertando directo en movimientos
+-- igual que hace el resto de Trabajo de Manga (todo requiere estar online).
+create table trabajo_manga_manejo (
+  trabajo_manga_id uuid primary key references trabajos_manga(id) on delete cascade,
+  aparte boolean not null default false,
+  capada boolean not null default false,
+  pesada_control_kilos numeric,
+  destete boolean not null default false,
+  destete_machos_cantidad int,
+  destete_hembras_cantidad int,
+  destete_kilos_ternero numeric,
+  destete_kilos_ternera numeric
+);
+
+-- Pesada de control: guarda evolución del rodeo sin pisar nada (no hay
+-- update, cada pesada es una fila nueva).
+create table rodeo_pesadas_historial (
+  id uuid primary key default gen_random_uuid(),
+  rodeo_id uuid not null references rodeos(id),
+  fecha date not null,
+  kilos_promedio numeric not null,
+  trabajo_manga_id uuid references trabajos_manga(id),
+  creado_at timestamptz not null default now()
+);
+
+alter table trabajo_manga_manejo enable row level security;
+alter table rodeo_pesadas_historial enable row level security;
+
+create policy trabajo_manga_manejo_select on trabajo_manga_manejo for select to authenticated using (true);
+create policy trabajo_manga_manejo_insert on trabajo_manga_manejo for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+create policy rodeo_pesadas_historial_select on rodeo_pesadas_historial for select to authenticated using (true);
+create policy rodeo_pesadas_historial_insert on rodeo_pesadas_historial for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
 create table perfiles (
@@ -454,6 +495,13 @@ begin
     if new.titular_origen <> new.titular_destino then
       raise exception 'En un cambio de categoría, la titularidad no cambia';
     end if;
+    -- El rodeo destino es opcional: normalmente el cambio de categoría
+    -- ocurre dentro del mismo rodeo (rodeo_destino_id null), pero Destete
+    -- (Trabajo de Manga > Manejo de rodeo) también cambia de rodeo a la
+    -- vez (los terneros/as destetados pasan a su propio rodeo nuevo).
+    if new.rodeo_destino_id is not null and new.rodeo_destino_id = new.rodeo_id then
+      raise exception 'Si el cambio de categoría también cambia de rodeo, el rodeo destino tiene que ser distinto del origen';
+    end if;
   end if;
 
   if new.tipo_movimiento = 'cambio_titular' then
@@ -484,7 +532,7 @@ begin
     if new.titular_origen <> new.titular_destino then
       raise exception 'En un cambio de rodeo, la titularidad no cambia';
     end if;
-  elsif new.rodeo_destino_id is not null then
+  elsif new.tipo_movimiento <> 'cambio_categoria' and new.rodeo_destino_id is not null then
     raise exception 'rodeo_destino_id no corresponde para %', new.tipo_movimiento;
   end if;
 
@@ -527,7 +575,11 @@ language plpgsql as $$
 begin
   if new.tipo_movimiento = 'traslado' then
     update rodeos set establecimiento_id = new.establecimiento_destino where id = new.rodeo_id;
-  elsif new.tipo_movimiento = 'cambio_categoria' then
+  elsif new.tipo_movimiento = 'cambio_categoria' and new.rodeo_destino_id is null then
+    -- Recategorización dentro del mismo rodeo (caso normal). Cuando
+    -- rodeo_destino_id no es null (Destete), el rodeo de origen NO cambia
+    -- de categoría — solo pierde cabezas hacia el rodeo nuevo, que ya
+    -- nace con la categoría correcta (se crea con esa categoría).
     update rodeos set categoria_id = new.categoria_destino where id = new.rodeo_id;
   end if;
   return new;
