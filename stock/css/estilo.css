@@ -375,6 +375,17 @@ button:active { filter: brightness(0.9); }
 .banner-sync.error { background: #f8d7da; color: #ad1e19; }
 .banner-sync.clickeable { cursor: pointer; }
 
+.banner-indices {
+  text-align: center;
+  padding: 6px;
+  border-radius: 6px;
+  font-size: 0.85em;
+  margin-bottom: 10px;
+  background: #fff3cd;
+  color: #8a6100;
+  cursor: pointer;
+}
+
 /* ─── versión ─── */
 .version-footer {
   position: fixed;

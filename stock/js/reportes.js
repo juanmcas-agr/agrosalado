@@ -10,6 +10,7 @@ import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
 import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
 import { INDICES, ordenIndices, fechaGatilloDelAnio, ventanaDestete, hoyArtISO } from './indicesConfig.js';
+import { revisarRecordatorioIndices } from './indices.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -521,6 +522,7 @@ export async function cargarIndices() {
 
   await renderIndices(anio, valoresPorTipoAnio);
   renderIndicadoresCalculados(anio, valoresPorTipoAnio);
+  revisarRecordatorioIndices();
 }
 
 async function guardarIndice(card) {
@@ -637,6 +639,7 @@ export async function initReportes() {
     evento.target.closest('.indice-card')?.querySelector('.indice-ayuda-texto')?.classList.toggle('oculto');
   });
   document.addEventListener('hacienda:ver-historia-rodeo', (evento) => verHistoriaRodeo(evento.detail.rodeoId));
+  document.addEventListener('hacienda:ver-indices', () => mostrarSubseccion('indices'));
 
   // Los caches (rodeos/titulares/catálogos) tienen que estar cargados
   // ANTES de mostrar la primera sub-sección — si no, la primera carga de
