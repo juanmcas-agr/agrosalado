@@ -104,17 +104,18 @@ exports.handler = async function () {
   const d = encodeURIComponent(desde);
   const h = encodeURIComponent(hasta);
 
-  const [cargados, anulados, trabajosCargados, trabajosAnulados, diferenciasPendientes, diferenciasResueltasHoy] = await Promise.all([
+  const [cargados, anulados, trabajosCargados, trabajosAnulados, diferenciasPendientes, diferenciasResueltasHoy, rectificacionesPendientes] = await Promise.all([
     consultarSupabase(`historial_movimientos?created_at=gte.${d}&created_at=lte.${h}&order=created_at.asc`),
     consultarSupabase(`historial_movimientos?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
     consultarSupabase(`historial_trabajos_manga?creado_at=gte.${d}&creado_at=lte.${h}&order=creado_at.asc`),
     consultarSupabase(`historial_trabajos_manga?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
     consultarSupabase(`historial_trabajos_manga?diferencia_pendiente=eq.true&anulado=eq.false&order=fecha.asc`),
     consultarSupabase(`historial_trabajos_manga?resuelto_at=gte.${d}&resuelto_at=lte.${h}&order=resuelto_at.asc`),
+    consultarSupabase(`rectificaciones_pendientes_detalle?estado=eq.pendiente&order=propuesto_at.asc`),
   ]);
 
   const hayNovedadesHoy = cargados.length || anulados.length || trabajosCargados.length || trabajosAnulados.length || diferenciasResueltasHoy.length;
-  if (!hayNovedadesHoy && !diferenciasPendientes.length) {
+  if (!hayNovedadesHoy && !diferenciasPendientes.length && !rectificacionesPendientes.length) {
     return { statusCode: 200, body: 'Sin novedades hoy, no se manda mail.' };
   }
 
@@ -174,6 +175,14 @@ exports.handler = async function () {
         ? `se resolvió con el movimiento ${t.resuelto_por_movimiento_codigo}`
         : `se rectificó la cantidad trabajada a mano (ahora: ${t.cantidad_trabajada})`;
       partes.push(`<li>${t.codigo} (rodeo ${t.rodeo || t.rodeo_id}): <strong>resuelto hoy</strong> — ${como}.</li>`);
+    }
+    partes.push('</ul>');
+  }
+
+  if (rectificacionesPendientes.length) {
+    partes.push('<p><strong>📝 Rectificaciones pendientes de aprobar (owner):</strong></p><ul>');
+    for (const r of rectificacionesPendientes) {
+      partes.push(`<li>${r.codigo} (rodeo ${r.rodeo || r.rodeo_id}): ${r.propuesto_nombre || '-'} propone cambiar ${r.cantidad_anterior} → ${r.cantidad_propuesta}.</li>`);
     }
     partes.push('</ul>');
   }

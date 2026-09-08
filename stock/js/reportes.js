@@ -130,7 +130,9 @@ function renderCorralOcupado(corral, rodeo, ciclo, cabezas, pesada) {
 
   if (pesada && ciclo?.kilos_ingreso != null) {
     const ganado = +(pesada.kilos_promedio - ciclo.kilos_ingreso).toFixed(1);
-    partes.push(`<div class="corral-linea">Última pesada: ${pesada.kilos_promedio} kg (${pesada.fecha}) — <strong>${ganado >= 0 ? '+' : ''}${ganado} kg</strong> desde el ingreso</div>`);
+    const dias = ciclo.fecha_ingreso ? diasEntre(ciclo.fecha_ingreso, pesada.fecha) : 0;
+    const gdpTexto = dias > 0 ? ` (${(ganado / dias) >= 0 ? '+' : ''}${(ganado / dias).toFixed(2)} kg/día)` : '';
+    partes.push(`<div class="corral-linea">Última pesada: ${pesada.kilos_promedio} kg (${pesada.fecha}) — <strong>${ganado >= 0 ? '+' : ''}${ganado} kg</strong> desde el ingreso${gdpTexto}</div>`);
   } else {
     partes.push('<div class="corral-linea ayuda">Sin pesada de control registrada todavía.</div>');
   }
@@ -236,6 +238,25 @@ function poblarSelectRodeoHistoria() {
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
 }
 
+// Ganancia diaria promedio (GDP) entre dos pesadas consecutivas del mismo
+// rodeo: kilos ganados desde la pesada anterior, repartidos en los días
+// que pasaron. null si no hay pesada anterior o si las fechas no avanzan
+// (no tiene sentido dividir por 0 ni por días negativos).
+function calcularGDP(anterior, actual) {
+  if (!anterior) return null;
+  const dias = diasEntre(anterior.fecha, actual.fecha);
+  if (dias <= 0) return null;
+  const ganancia = actual.kilos_promedio - anterior.kilos_promedio;
+  return { dias, ganancia: ganancia.toFixed(1), gdp: (ganancia / dias).toFixed(2) };
+}
+
+// Suma a cada pesada el GDP contra la pesada inmediatamente anterior del
+// mismo rodeo — requiere que "pesadas" venga ordenado por fecha ascendente
+// (así se pide en cargarHistoriaRodeo).
+function enriquecerPesadasConGDP(pesadas) {
+  return pesadas.map((p, i) => ({ ...p, gdp: calcularGDP(i > 0 ? pesadas[i - 1] : null, p) }));
+}
+
 function describirMovimientoTimeline(m) {
   const origen = m.establecimiento_origen_nombre ? `${m.establecimiento_origen_nombre} (${m.categoria_origen_nombre})` : null;
   const destino = m.establecimiento_destino_nombre ? `${m.establecimiento_destino_nombre} (${m.categoria_destino_nombre})` : null;
@@ -278,7 +299,11 @@ function renderHistoriaRodeo(rodeo, eventos) {
   }
   tbody.innerHTML = eventos.map((e) => {
     if (e.tipo === 'pesada') {
-      return `<tr><td>${e.fecha}</td><td>⚖️ Pesada de control</td><td>${e.datos.kilos_promedio} kg</td><td></td></tr>`;
+      const gdp = e.datos.gdp;
+      const detalle = gdp
+        ? `${e.datos.kilos_promedio} kg — ${gdp.ganancia >= 0 ? '+' : ''}${gdp.ganancia} kg en ${gdp.dias} día(s) (${gdp.gdp >= 0 ? '+' : ''}${gdp.gdp} kg/día)`
+        : `${e.datos.kilos_promedio} kg`;
+      return `<tr><td>${e.fecha}</td><td>⚖️ Pesada de control</td><td>${detalle}</td><td></td></tr>`;
     }
     return `<tr><td>${e.fecha}</td><td>${e.datos.tipo_movimiento_nombre}</td><td>${describirMovimientoTimeline(e.datos)}</td><td>${e.datos.codigo || ''}</td></tr>`;
   }).join('');
@@ -305,7 +330,7 @@ export async function cargarHistoriaRodeo() {
   }
 
   const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
-  renderHistoriaRodeo(rodeo, construirLineaDeTiempo(movimientos.data, pesadas.data));
+  renderHistoriaRodeo(rodeo, construirLineaDeTiempo(movimientos.data, enriquecerPesadasConGDP(pesadas.data)));
 }
 
 // ─── Índices reproductivos ──────────────────────────────────────────────

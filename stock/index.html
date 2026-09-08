@@ -101,30 +101,6 @@
           <div id="mov-categoria-destino"></div>
         </div>
 
-        <div data-campo="titular_origen" class="campo-grupo full">
-          <div class="etiqueta-grupo">Titularidad de origen</div>
-          <div id="mov-titular-origen-tipo"></div>
-          <div id="mov-titular-origen-cap-wrap" class="oculto" style="margin-top:8px;">
-            <select id="mov-titular-origen-cap"></select>
-          </div>
-        </div>
-
-        <div data-campo="titular_destino" class="campo-grupo full">
-          <div class="etiqueta-grupo">Titularidad de destino</div>
-          <div id="mov-titular-destino-tipo"></div>
-          <div id="mov-titular-destino-cap-wrap" class="oculto" style="margin-top:8px;">
-            <select id="mov-titular-destino-cap"></select>
-          </div>
-        </div>
-
-        <label>Cantidad de cabezas
-          <input id="mov-cabezas" type="number" min="1" step="1" required>
-        </label>
-
-        <label>Kilos promedio por cabeza
-          <input id="mov-kilos" type="number" min="1" step="0.1" required>
-        </label>
-
         <div class="campo-grupo full">
           <div class="etiqueta-grupo">Rodeo</div>
           <select id="mov-rodeo" required></select>
@@ -152,6 +128,30 @@
             <button type="button" id="mov-rodeo-destino-nuevo-crear" class="boton-secundario">Crear rodeo</button>
           </div>
         </div>
+
+        <div data-campo="titular_origen" class="campo-grupo full">
+          <div class="etiqueta-grupo">Titularidad de origen</div>
+          <div id="mov-titular-origen-tipo"></div>
+          <div id="mov-titular-origen-cap-wrap" class="oculto" style="margin-top:8px;">
+            <select id="mov-titular-origen-cap"></select>
+          </div>
+        </div>
+
+        <div data-campo="titular_destino" class="campo-grupo full">
+          <div class="etiqueta-grupo">Titularidad de destino</div>
+          <div id="mov-titular-destino-tipo"></div>
+          <div id="mov-titular-destino-cap-wrap" class="oculto" style="margin-top:8px;">
+            <select id="mov-titular-destino-cap"></select>
+          </div>
+        </div>
+
+        <label>Cantidad de cabezas
+          <input id="mov-cabezas" type="number" min="1" step="1" required>
+        </label>
+
+        <label>Kilos promedio por cabeza
+          <input id="mov-kilos" type="number" min="1" step="0.1" required>
+        </label>
 
         <div id="mov-feedlot-entrada" class="campo-grupo full oculto">
           <div class="etiqueta-grupo">🚚 Datos de Feed Lot</div>
@@ -185,6 +185,11 @@
       <div id="manga-pendientes-bloque" class="campo-grupo full oculto">
         <div class="etiqueta-grupo">⚠️ Diferencias pendientes de resolver</div>
         <div id="manga-pendientes-lista"></div>
+      </div>
+
+      <div id="manga-rectificaciones-bloque" class="campo-grupo full oculto">
+        <div class="etiqueta-grupo">📝 Rectificaciones pendientes de aprobar</div>
+        <div id="manga-rectificaciones-lista"></div>
       </div>
 
       <form id="manga-form" class="formulario">

@@ -478,20 +478,16 @@ function nombreCategoria(categoriaId) {
   return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
 }
 
-async function editarCantidadTrabajada(trabajo) {
-  const nuevaTexto = prompt(`Cantidad trabajada correcta para ${trabajo.codigo} (rodeo ${trabajo.rodeoCodigo}):`, trabajo.cantidad_trabajada);
-  if (nuevaTexto === null) return;
-  const nueva = Number(nuevaTexto);
-  if (!Number.isInteger(nueva) || nueva <= 0) {
-    alert('Tiene que ser un entero mayor a 0.');
-    return;
-  }
+// Aplica la corrección de verdad (solo se llama para el owner directo, o
+// al aprobar la propuesta de otro rol) — vuelve a chequear el stock
+// porque puede haber cambiado desde que se listó el pendiente.
+async function aplicarRectificacion(trabajo, nueva) {
   let stockActual;
   try {
     stockActual = await stockDelRodeo(trabajo.rodeo_id);
   } catch (error) {
     alert('No se pudo verificar el stock del rodeo: ' + error.message);
-    return;
+    return false;
   }
   const sigueDiferente = nueva !== stockActual;
   const { error } = await supabase
@@ -505,12 +501,44 @@ async function editarCantidadTrabajada(trabajo) {
     .eq('id', trabajo.id);
   if (error) {
     alert('No se pudo guardar: ' + error.message);
-    return;
+    return false;
   }
   if (sigueDiferente) {
     alert(`Guardado, pero ${nueva} todavía no coincide con el stock actual del rodeo (${stockActual}). Sigue pendiente.`);
   }
-  await refrescarDiferenciasPendientes();
+  return true;
+}
+
+// El owner rectifica directo (es quien aprobaría, no tiene sentido
+// aprobarse a sí mismo). Cualquier otro rol deja una propuesta pendiente
+// que un owner tiene que aprobar o rechazar (ver Rectificaciones
+// pendientes de aprobar, más abajo) — no toca trabajos_manga todavía.
+async function editarCantidadTrabajada(trabajo) {
+  const nuevaTexto = prompt(`Cantidad trabajada correcta para ${trabajo.codigo} (rodeo ${trabajo.rodeoCodigo}):`, trabajo.cantidad_trabajada);
+  if (nuevaTexto === null) return;
+  const nueva = Number(nuevaTexto);
+  if (!Number.isInteger(nueva) || nueva <= 0) {
+    alert('Tiene que ser un entero mayor a 0.');
+    return;
+  }
+
+  const { perfil, session } = getEstado();
+  if (perfil?.rol !== 'owner') {
+    const { error } = await supabase.from('rectificaciones_pendientes').insert({
+      trabajo_manga_id: trabajo.id,
+      cantidad_anterior: trabajo.cantidad_trabajada,
+      cantidad_propuesta: nueva,
+      propuesto_por: session.user.id,
+    });
+    if (error) {
+      alert('No se pudo enviar la rectificación: ' + error.message);
+      return;
+    }
+    alert('Rectificación enviada. Queda pendiente de que un owner la apruebe.');
+    return;
+  }
+
+  if (await aplicarRectificacion(trabajo, nueva)) await refrescarDiferenciasPendientes();
 }
 
 function pedirMovimientoParaDiferencia(trabajo) {
@@ -597,6 +625,92 @@ export async function refrescarDiferenciasPendientes() {
     pendientes.push({ ...trabajo, stockActualAlListar, rodeoCodigo: rodeoCache?.codigo || trabajo.rodeo_id });
   }
   renderDiferenciasPendientes(pendientes);
+}
+
+// ─── Rectificaciones pendientes de aprobar (solo owner) ────────────────
+// Cuando encargado/administrativo propone una rectificación, queda acá
+// hasta que un owner la apruebe (aplica el cambio) o la rechace (no toca
+// trabajos_manga, el trabajo sigue con su diferencia_pendiente de antes).
+
+function crearItemRectificacion(r) {
+  const div = document.createElement('div');
+  div.className = 'pendiente-item';
+  const texto = document.createElement('div');
+  texto.className = 'pendiente-texto';
+  texto.textContent =
+    `${r.codigo} (rodeo ${r.rodeo || r.rodeo_id}): ${r.propuesto_nombre || 'alguien'} propone cambiar ` +
+    `${r.cantidad_anterior} → ${r.cantidad_propuesta}.`;
+  div.appendChild(texto);
+
+  const botones = document.createElement('div');
+  botones.className = 'pendiente-botones';
+
+  const btnAprobar = document.createElement('button');
+  btnAprobar.type = 'button';
+  btnAprobar.textContent = 'Aprobar';
+  btnAprobar.addEventListener('click', () => aprobarRectificacion(r));
+  botones.appendChild(btnAprobar);
+
+  const btnRechazar = document.createElement('button');
+  btnRechazar.type = 'button';
+  btnRechazar.className = 'boton-secundario';
+  btnRechazar.textContent = 'Rechazar';
+  btnRechazar.addEventListener('click', () => rechazarRectificacion(r));
+  botones.appendChild(btnRechazar);
+
+  div.appendChild(botones);
+  return div;
+}
+
+function renderRectificacionesPendientes(pendientes) {
+  const bloque = el('manga-rectificaciones-bloque');
+  const contenedor = el('manga-rectificaciones-lista');
+  if (!bloque || !contenedor) return;
+  bloque.classList.toggle('oculto', !pendientes.length);
+  contenedor.innerHTML = '';
+  for (const r of pendientes) contenedor.appendChild(crearItemRectificacion(r));
+}
+
+async function aprobarRectificacion(r) {
+  const ok = await aplicarRectificacion({ id: r.trabajo_manga_id, rodeo_id: r.rodeo_id }, r.cantidad_propuesta);
+  if (!ok) return;
+  const { error } = await supabase.from('rectificaciones_pendientes').update({
+    estado: 'aprobada',
+    resuelto_por: getEstado().session.user.id,
+    resuelto_at: new Date().toISOString(),
+  }).eq('id', r.id);
+  if (error) {
+    alert('Se aplicó el cambio pero no se pudo marcar la rectificación como aprobada: ' + error.message);
+  }
+  await Promise.all([refrescarDiferenciasPendientes(), refrescarRectificacionesPendientes()]);
+}
+
+async function rechazarRectificacion(r) {
+  const motivo = prompt('Motivo del rechazo (opcional):');
+  if (motivo === null) return;
+  const { error } = await supabase.from('rectificaciones_pendientes').update({
+    estado: 'rechazada',
+    resuelto_por: getEstado().session.user.id,
+    resuelto_at: new Date().toISOString(),
+    motivo_rechazo: motivo || null,
+  }).eq('id', r.id);
+  if (error) {
+    alert('No se pudo rechazar: ' + error.message);
+    return;
+  }
+  await refrescarRectificacionesPendientes();
+}
+
+export async function refrescarRectificacionesPendientes() {
+  if (!navigator.onLine) return;
+  const { perfil } = getEstado();
+  if (perfil?.rol !== 'owner') {
+    renderRectificacionesPendientes([]);
+    return;
+  }
+  const { data, error } = await supabase.from('rectificaciones_pendientes_detalle').select('*').eq('estado', 'pendiente');
+  if (error) { console.warn('No se pudieron cargar las rectificaciones pendientes:', error); return; }
+  renderRectificacionesPendientes(data);
 }
 
 function mostrarMensaje(texto, tipo) {
