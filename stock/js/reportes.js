@@ -435,6 +435,25 @@ async function renderIndices(anio, valoresPorTipoAnio) {
 // servicio de octubre arranca la temporada que pare y desteta recién en
 // los dos años siguientes (ver indicesConfig.js).
 
+// Fórmulas puras (sin DOM) de los 4 indicadores — únicas, las usan tanto
+// las tarjetas de la temporada elegida como la tabla de evolución
+// histórica, para que nunca puedan desalinearse entre sí.
+function calcularPorcentajePrenez(servicio, prenadas) {
+  if (!servicio || !prenadas) return null;
+  return ((prenadas.valor_principal / servicio.valor_principal) * 100).toFixed(1);
+}
+function calcularPorcentajeMarcacion(servicio, destete) {
+  if (!servicio || !destete) return null;
+  return ((destete.valor_principal / servicio.valor_principal) * 100).toFixed(1);
+}
+function calcularMortandadPredestete(paridos, destete) {
+  if (!paridos || !destete || !paridos.valor_principal) return null;
+  return (((paridos.valor_principal - destete.valor_principal) / paridos.valor_principal) * 100).toFixed(1);
+}
+function pesoPromedioDestete(destete) {
+  return destete && destete.valor_secundario != null ? destete.valor_secundario : null;
+}
+
 function crearTarjetaCalculada(titulo, ayudaTexto, texto, faltante) {
   const card = document.createElement('div');
   card.className = 'indice-card calculado';
@@ -455,49 +474,109 @@ function renderIndicadoresCalculados(anio, valoresPorTipoAnio) {
   const paridos = obtenerValor(valoresPorTipoAnio, 'paricion_control_3', anio);
   const destete = obtenerValor(valoresPorTipoAnio, 'destete', anio + 1);
 
-  if (servicio && prenadas) {
-    const pct = ((prenadas.valor_principal / servicio.valor_principal) * 100).toFixed(1);
-    cont.appendChild(crearTarjetaCalculada(`% Preñez (temporada ${anio})`,
-      'Vacas preñadas ÷ vacas en servicio del año anterior (el servicio que generó estas preñeces), × 100.',
-      `${pct}% — ${prenadas.valor_principal} preñadas de ${servicio.valor_principal} en servicio (${anio - 1}).`));
-  } else {
-    cont.appendChild(crearTarjetaCalculada(`% Preñez (temporada ${anio})`,
-      'Vacas preñadas ÷ vacas en servicio del año anterior (el servicio que generó estas preñeces), × 100.',
-      null, `Falta cargar "Vacas en servicio" ${anio - 1} y/o "Vacas preñadas" ${anio}.`));
-  }
+  const prenez = calcularPorcentajePrenez(servicio, prenadas);
+  cont.appendChild(crearTarjetaCalculada(`% Preñez (temporada ${anio})`,
+    'Vacas preñadas ÷ vacas en servicio del año anterior (el servicio que generó estas preñeces), × 100.',
+    prenez != null ? `${prenez}% — ${prenadas.valor_principal} preñadas de ${servicio.valor_principal} en servicio (${anio - 1}).` : null,
+    prenez != null ? null : `Falta cargar "Vacas en servicio" ${anio - 1} y/o "Vacas preñadas" ${anio}.`));
 
-  if (servicio && destete) {
-    const pct = ((destete.valor_principal / servicio.valor_principal) * 100).toFixed(1);
-    cont.appendChild(crearTarjetaCalculada(`% Marcación (temporada ${anio})`,
-      'Terneros destetados ÷ vacas en servicio de la temporada, × 100 — cuántos terneros llegaron al destete por cada vaca puesta en servicio.',
-      `${pct}% — ${destete.valor_principal} destetados de ${servicio.valor_principal} en servicio (${anio - 1}).`));
-  } else {
-    cont.appendChild(crearTarjetaCalculada(`% Marcación (temporada ${anio})`,
-      'Terneros destetados ÷ vacas en servicio de la temporada, × 100 — cuántos terneros llegaron al destete por cada vaca puesta en servicio.',
-      null, `Falta cargar "Vacas en servicio" ${anio - 1} y/o "Destete" ${anio + 1}.`));
-  }
+  const marcacion = calcularPorcentajeMarcacion(servicio, destete);
+  cont.appendChild(crearTarjetaCalculada(`% Marcación (temporada ${anio})`,
+    'Terneros destetados ÷ vacas en servicio de la temporada, × 100 — cuántos terneros llegaron al destete por cada vaca puesta en servicio.',
+    marcacion != null ? `${marcacion}% — ${destete.valor_principal} destetados de ${servicio.valor_principal} en servicio (${anio - 1}).` : null,
+    marcacion != null ? null : `Falta cargar "Vacas en servicio" ${anio - 1} y/o "Destete" ${anio + 1}.`));
 
-  if (paridos && destete) {
-    const muertos = paridos.valor_principal - destete.valor_principal;
-    const pct = paridos.valor_principal ? ((muertos / paridos.valor_principal) * 100).toFixed(1) : '0.0';
-    cont.appendChild(crearTarjetaCalculada(`Mortandad predestete (temporada ${anio})`,
-      '(Terneros nacidos − terneros destetados) ÷ terneros nacidos, × 100 — mortandad entre el nacimiento y el destete.',
-      `${pct}% — ${muertos} de ${paridos.valor_principal} nacidos no llegaron al destete (${anio + 1}).`));
-  } else {
-    cont.appendChild(crearTarjetaCalculada(`Mortandad predestete (temporada ${anio})`,
-      '(Terneros nacidos − terneros destetados) ÷ terneros nacidos, × 100 — mortandad entre el nacimiento y el destete.',
-      null, `Falta cargar "Parición — cierre" ${anio} y/o "Destete" ${anio + 1}.`));
-  }
+  const mortandad = calcularMortandadPredestete(paridos, destete);
+  cont.appendChild(crearTarjetaCalculada(`Mortandad predestete (temporada ${anio})`,
+    '(Terneros nacidos − terneros destetados) ÷ terneros nacidos, × 100 — mortandad entre el nacimiento y el destete.',
+    mortandad != null ? `${mortandad}% — ${paridos.valor_principal - destete.valor_principal} de ${paridos.valor_principal} nacidos no llegaron al destete (${anio + 1}).` : null,
+    mortandad != null ? null : `Falta cargar "Parición — cierre" ${anio} y/o "Destete" ${anio + 1}.`));
 
-  if (destete && destete.valor_secundario != null) {
-    cont.appendChild(crearTarjetaCalculada(`Peso promedio al destete (temporada ${anio})`,
-      'Promedio ponderado de los kilos de destete cargados en Trabajo de Manga (machos y hembras) para esta temporada.',
-      `${destete.valor_secundario} kg promedio (Destete ${anio + 1}).`));
-  } else {
-    cont.appendChild(crearTarjetaCalculada(`Peso promedio al destete (temporada ${anio})`,
-      'Promedio ponderado de los kilos de destete cargados en Trabajo de Manga (machos y hembras) para esta temporada.',
-      null, `Falta cargar el peso promedio en "Destete" ${anio + 1}.`));
+  const peso = pesoPromedioDestete(destete);
+  cont.appendChild(crearTarjetaCalculada(`Peso promedio al destete (temporada ${anio})`,
+    'Promedio ponderado de los kilos de destete cargados en Trabajo de Manga (machos y hembras) para esta temporada.',
+    peso != null ? `${peso} kg promedio (Destete ${anio + 1}).` : null,
+    peso != null ? null : `Falta cargar el peso promedio en "Destete" ${anio + 1}.`));
+}
+
+// ─── Evolución histórica ────────────────────────────────────────────────
+// Dos tablas de solo lectura con TODOS los años cargados (sin importar el
+// "Año" elegido arriba), para ver de un vistazo cómo vino evolucionando
+// cada índice y cada indicador calculado.
+
+function renderEvolucionManual(data) {
+  const porAnio = {};
+  for (const fila of data) {
+    porAnio[fila.anio] = porAnio[fila.anio] || {};
+    porAnio[fila.anio][fila.tipo_indice] = fila;
   }
+  const anios = Object.keys(porAnio).map(Number).sort((a, b) => a - b);
+  const tabla = el('rep-indices-evolucion-tabla');
+  const tipos = ordenIndices();
+
+  tabla.querySelector('thead tr').innerHTML = '<th>Año</th>' + tipos.map((tipo) => `<th>${INDICES[tipo].nombre}</th>`).join('');
+
+  const tbody = tabla.querySelector('tbody');
+  if (!anios.length) {
+    tbody.innerHTML = `<tr><td colspan="${tipos.length + 1}">Todavía no hay índices cargados.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = anios.map((anio) => {
+    const celdas = tipos.map((tipo) => {
+      const fila = porAnio[anio][tipo];
+      if (!fila) return '<td>—</td>';
+      const secundario = fila.valor_secundario != null ? ` (${fila.valor_secundario} ${fila.unidad_secundaria || ''})` : '';
+      const pendiente = fila.corroborado ? '' : ' ⏳';
+      return `<td>${fila.valor_principal}${secundario}${pendiente}</td>`;
+    }).join('');
+    return `<tr><td>${anio}</td>${celdas}</tr>`;
+  }).join('');
+}
+
+function renderEvolucionCalculados(data) {
+  const valoresPorTipoAnio = {};
+  for (const fila of data) valoresPorTipoAnio[claveIndice(fila.tipo_indice, fila.anio)] = fila;
+
+  // Temporadas: años donde hay Preñadas y/o Parición — cierre, que son los
+  // que anclan una temporada (mismo criterio que la tarjeta de un solo año).
+  const temporadas = [...new Set(
+    data.filter((f) => f.tipo_indice === 'vacas_prenadas' || f.tipo_indice === 'paricion_control_3').map((f) => f.anio),
+  )].sort((a, b) => a - b);
+
+  const tbody = el('rep-indices-evolucion-calculados-tabla').querySelector('tbody');
+  if (!temporadas.length) {
+    tbody.innerHTML = '<tr><td colspan="5">Todavía no hay datos suficientes.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = temporadas.map((anio) => {
+    const servicio = obtenerValor(valoresPorTipoAnio, 'vacas_servicio', anio - 1);
+    const prenadas = obtenerValor(valoresPorTipoAnio, 'vacas_prenadas', anio);
+    const paridos = obtenerValor(valoresPorTipoAnio, 'paricion_control_3', anio);
+    const destete = obtenerValor(valoresPorTipoAnio, 'destete', anio + 1);
+
+    const prenez = calcularPorcentajePrenez(servicio, prenadas);
+    const marcacion = calcularPorcentajeMarcacion(servicio, destete);
+    const mortandad = calcularMortandadPredestete(paridos, destete);
+    const peso = pesoPromedioDestete(destete);
+
+    return `<tr>
+      <td>${anio}</td>
+      <td>${prenez != null ? prenez + '%' : '—'}</td>
+      <td>${marcacion != null ? marcacion + '%' : '—'}</td>
+      <td>${mortandad != null ? mortandad + '%' : '—'}</td>
+      <td>${peso != null ? peso + ' kg' : '—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function cargarEvolucionIndices() {
+  const { data, error } = await supabase.from('indices_valores').select('*').order('anio', { ascending: true });
+  if (error) {
+    console.error('No se pudo cargar la evolución histórica de índices:', error);
+    return;
+  }
+  renderEvolucionManual(data);
+  renderEvolucionCalculados(data);
 }
 
 export async function cargarIndices() {
@@ -523,6 +602,7 @@ export async function cargarIndices() {
   await renderIndices(anio, valoresPorTipoAnio);
   renderIndicadoresCalculados(anio, valoresPorTipoAnio);
   revisarRecordatorioIndices();
+  cargarEvolucionIndices();
 }
 
 async function guardarIndice(card) {

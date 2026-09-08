@@ -24,6 +24,7 @@ export const CATEGORIAS = [
   { id: 'novillo', nombre: 'Novillo' },
   { id: 'torito', nombre: 'Torito' },
   { id: 'toro', nombre: 'Toro' },
+  { id: 'vaca', nombre: 'Vaca' },
 ];
 
 // Espejo de tipos_movimiento: qué campos pedir por cada tipo.

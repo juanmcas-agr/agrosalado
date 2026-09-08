@@ -30,7 +30,8 @@ insert into categorias (id, nombre, orden) values
   ('novillito', 'Novillito', 4),
   ('novillo', 'Novillo', 5),
   ('torito', 'Torito', 6),
-  ('toro', 'Toro', 7);
+  ('toro', 'Toro', 7),
+  ('vaca', 'Vaca', 8);
 
 create table titulares (
   id text primary key,
