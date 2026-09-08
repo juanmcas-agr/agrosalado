@@ -666,7 +666,7 @@ create view stock_actual as
 
 create view historial_movimientos as
   select
-    m.id, m.codigo, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
+    m.id, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
     m.fecha,
     m.establecimiento_origen, eo.nombre as establecimiento_origen_nombre,
     m.establecimiento_destino, ed.nombre as establecimiento_destino_nombre,
@@ -680,8 +680,8 @@ create view historial_movimientos as
     m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo,
-    m.reemplazado_por, mr.codigo as reemplazado_por_codigo,
-    m.editado_de, me.codigo as editado_de_codigo
+    m.reemplazado_por, m.editado_de,
+    m.codigo, mr.codigo as reemplazado_por_codigo, me.codigo as editado_de_codigo
   from movimientos m
   join tipos_movimiento tm on tm.id = m.tipo_movimiento
   left join establecimientos eo on eo.id = m.establecimiento_origen

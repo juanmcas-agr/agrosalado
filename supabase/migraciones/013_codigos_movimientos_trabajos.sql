@@ -79,9 +79,14 @@ insert into codigo_secuencias (tipo, ultimo)
   on conflict (tipo) do update set ultimo = excluded.ultimo;
 
 -- ─── historial_movimientos: sumar el código ─────────────────────────────
+-- OJO: create or replace view exige que las columnas YA existentes
+-- mantengan el mismo nombre en la misma posición — las columnas nuevas
+-- van siempre al final, nunca intercaladas (si no, Postgres las
+-- interpreta como un intento de renombrar la columna que estaba en esa
+-- posición y lo rechaza con el error 42P16).
 create or replace view historial_movimientos as
   select
-    m.id, m.codigo, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
+    m.id, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
     m.fecha,
     m.establecimiento_origen, eo.nombre as establecimiento_origen_nombre,
     m.establecimiento_destino, ed.nombre as establecimiento_destino_nombre,
@@ -95,8 +100,8 @@ create or replace view historial_movimientos as
     m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo,
-    m.reemplazado_por, mr.codigo as reemplazado_por_codigo,
-    m.editado_de, me.codigo as editado_de_codigo
+    m.reemplazado_por, m.editado_de,
+    m.codigo, mr.codigo as reemplazado_por_codigo, me.codigo as editado_de_codigo
   from movimientos m
   join tipos_movimiento tm on tm.id = m.tipo_movimiento
   left join establecimientos eo on eo.id = m.establecimiento_origen
