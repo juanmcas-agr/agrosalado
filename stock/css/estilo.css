@@ -539,6 +539,25 @@ button:active { filter: brightness(0.9); }
    activo, ocultando el resto de la app — reusable por cualquier
    sub-sección de Reportes (Trabajo de Manga, Feed Lot, etc.), no hace
    falta CSS de impresión nuevo por cada una. ─── */
+.grid-corrales {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin: 10px 0 20px;
+}
+.corral-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+.corral-card h4 { margin: 0 0 8px; }
+.corral-card.vacio { color: #999; text-align: center; padding: 24px 12px; }
+.corral-card .corral-linea { font-size: 0.9em; margin: 3px 0; }
+.corral-card .corral-dias { font-weight: bold; }
+.corral-card .corral-dias.vencido { color: #ad1e19; }
+.corral-card .corral-dias.ok { color: #1d5236; }
+
 .solo-imprimir { display: none; }
 @media print {
   body * { visibility: hidden; }

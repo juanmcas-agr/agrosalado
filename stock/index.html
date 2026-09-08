@@ -489,7 +489,28 @@
         </div>
       </div>
       <div id="reportes-feedlot" class="reportes-seccion oculto">
-        <p class="ayuda">Próximamente: informe de Feed Lot por corral (días restantes, kilos ganados).</p>
+        <div class="filtros">
+          <button type="button" id="rep-feedlot-actualizar" class="boton-secundario">Actualizar</button>
+          <button type="button" id="rep-feedlot-imprimir" class="boton-secundario">Imprimir / PDF</button>
+        </div>
+        <div id="rep-feedlot-mensaje" class="mensaje"></div>
+        <div id="rep-feedlot-imprimible" class="imprimible">
+          <h3 class="solo-imprimir">Feed Lot</h3>
+          <div id="rep-feedlot-corrales" class="grid-corrales"></div>
+
+          <h3>Ciclos cerrados recientes</h3>
+          <div class="tabla-scroll">
+            <table id="rep-feedlot-historial-tabla" class="tabla">
+              <thead>
+                <tr>
+                  <th>Rodeo</th><th>Ingreso</th><th>Salida</th><th>Días en feed lot</th>
+                  <th>Kilos ingreso</th><th>Kilos salida</th><th>Kilos ganados</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
       </div>
       <div id="reportes-rodeo" class="reportes-seccion oculto">
         <p class="ayuda">Próximamente: historia y evolución de un rodeo.</p>
