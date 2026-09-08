@@ -574,6 +574,34 @@ button:active { filter: brightness(0.9); }
 .corral-card .corral-dias.vencido { color: #ad1e19; }
 .corral-card .corral-dias.ok { color: #1d5236; }
 
+.grid-indices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 10px 0 20px;
+}
+.indice-card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  background: white;
+}
+.indice-card h4 { margin: 0 0 4px; display: flex; align-items: center; gap: 6px; }
+.indice-card .indice-gatillo { font-size: 0.85em; color: #666; margin: 0 0 8px; }
+.indice-card .indice-ayuda-texto { margin: 0 0 8px; }
+.indice-card .icono-ayuda {
+  width: 20px; height: 20px; line-height: 18px; padding: 0;
+  border-radius: 50%; border: 1px solid #999; background: white; color: #555;
+  font-size: 0.8em; font-weight: bold; cursor: pointer;
+}
+.indice-card label { display: block; font-size: 0.9em; margin: 6px 0 2px; }
+.indice-card input, .indice-card textarea { width: 100%; box-sizing: border-box; }
+.indice-card textarea { min-height: 44px; resize: vertical; }
+.indice-card .indice-estado { display: block; font-size: 0.85em; margin: 8px 0; }
+.indice-card .indice-estado.corroborado { color: #1d5236; }
+.indice-card .indice-estado.pendiente { color: #8a6d1a; }
+.indice-card .indice-botones { display: flex; gap: 6px; flex-wrap: wrap; }
+
 .solo-imprimir { display: none; }
 @media print {
   body * { visibility: hidden; }

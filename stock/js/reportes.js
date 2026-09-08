@@ -9,6 +9,7 @@ import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
 import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
+import { INDICES, ordenIndices, fechaGatilloDelAnio, hoyArtISO } from './indicesConfig.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -26,6 +27,7 @@ function mostrarSubseccion(nombre) {
   if (nombre === 'manga') cargarTrabajosManga();
   if (nombre === 'feedlot') cargarFeedLot();
   if (nombre === 'rodeo') cargarHistoriaRodeo();
+  if (nombre === 'indices') cargarIndices();
 }
 
 function hoyISO() {
@@ -305,6 +307,148 @@ export async function cargarHistoriaRodeo() {
   renderHistoriaRodeo(rodeo, construirLineaDeTiempo(movimientos.data, pesadas.data));
 }
 
+// ─── Índices reproductivos ──────────────────────────────────────────────
+// Carga manual de los índices definidos en indicesConfig.js. Guardar
+// siempre resetea "corroborado" (aunque el índice ya estuviera cargado)
+// porque cambió el dato — corroborar es una acción aparte que el usuario
+// tiene que confirmar explícitamente, incluso si el valor no cambió (así
+// funciona la reconfirmación obligatoria del día del gatillo, M10/M11).
+
+async function usuarioActualId() {
+  const { data: { session } } = await supabase.auth.getSession();
+  return session?.user?.id;
+}
+
+function formatearFechaHora(iso) {
+  if (!iso) return '';
+  return new Date(iso).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function crearTarjetaIndice(tipo, anio, valor) {
+  const def = INDICES[tipo];
+  const card = document.createElement('div');
+  card.className = 'indice-card';
+  card.dataset.tipo = tipo;
+
+  const estadoClase = valor?.corroborado ? 'corroborado' : valor ? 'pendiente' : '';
+  const estadoTexto = valor?.corroborado
+    ? `Corroborado el ${formatearFechaHora(valor.corroborado_at)}.`
+    : valor
+      ? `Cargado el ${formatearFechaHora(valor.cargado_at)} — falta corroborar.`
+      : 'Sin cargar todavía.';
+
+  card.innerHTML = `
+    <h4>${def.nombre} <button type="button" class="icono-ayuda" title="¿Cómo se calcula?">?</button></h4>
+    <p class="indice-gatillo">Fecha gatillo ${anio}: ${fechaGatilloDelAnio(tipo, anio)}</p>
+    <p class="ayuda indice-ayuda-texto oculto">${def.ayuda}</p>
+    <label>${def.labelPrincipal} (${def.unidadPrincipal})
+      <input type="number" class="indice-valor-principal" min="0" step="1" value="${valor?.valor_principal ?? ''}">
+    </label>
+    <label>Observaciones
+      <textarea class="indice-observaciones">${valor?.observaciones ?? ''}</textarea>
+    </label>
+    <span class="indice-estado ${estadoClase}">${estadoTexto}</span>
+    <div class="indice-botones">
+      <button type="button" class="boton-secundario indice-guardar">Guardar</button>
+      <button type="button" class="boton-primario indice-corroborar${(!valor || valor.corroborado) ? ' oculto' : ''}">Corroborar</button>
+    </div>
+  `;
+  return card;
+}
+
+function renderIndices(anio, valoresPorTipo) {
+  const grid = el('rep-indices-grid');
+  grid.innerHTML = '';
+  for (const tipo of ordenIndices()) {
+    grid.appendChild(crearTarjetaIndice(tipo, anio, valoresPorTipo[tipo] || null));
+  }
+}
+
+export async function cargarIndices() {
+  const mensaje = el('rep-indices-mensaje');
+  mensaje.textContent = '';
+  const inputAnio = el('rep-indices-anio');
+  if (!inputAnio.value) inputAnio.value = Number(hoyArtISO().slice(0, 4));
+  const anio = Number(inputAnio.value);
+
+  const { data, error } = await supabase.from('indices_valores').select('*').eq('anio', anio);
+  if (error) {
+    mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+  const valoresPorTipo = {};
+  for (const fila of data) valoresPorTipo[fila.tipo_indice] = fila;
+  renderIndices(anio, valoresPorTipo);
+}
+
+async function guardarIndice(card) {
+  const tipo = card.dataset.tipo;
+  const anio = Number(el('rep-indices-anio').value);
+  const mensaje = el('rep-indices-mensaje');
+  mensaje.textContent = '';
+
+  const valorPrincipal = card.querySelector('.indice-valor-principal').value;
+  if (valorPrincipal === '') {
+    mensaje.textContent = `Falta cargar ${INDICES[tipo].labelPrincipal.toLowerCase()}.`;
+    mensaje.className = 'error';
+    return;
+  }
+  const observaciones = card.querySelector('.indice-observaciones').value.trim() || null;
+
+  const { data: existente } = await supabase.from('indices_valores').select('id')
+    .eq('tipo_indice', tipo).eq('anio', anio).maybeSingle();
+
+  let error;
+  if (existente) {
+    ({ error } = await supabase.from('indices_valores').update({
+      valor_principal: Number(valorPrincipal),
+      observaciones,
+      corroborado: false,
+      corroborado_por: null,
+      corroborado_at: null,
+    }).eq('id', existente.id));
+  } else {
+    const usuarioId = await usuarioActualId();
+    ({ error } = await supabase.from('indices_valores').insert({
+      tipo_indice: tipo,
+      anio,
+      fecha_gatillo: fechaGatilloDelAnio(tipo, anio),
+      valor_principal: Number(valorPrincipal),
+      observaciones,
+      cargado_por: usuarioId,
+    }));
+  }
+
+  if (error) {
+    mensaje.textContent = `No se pudo guardar: ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+  await cargarIndices();
+}
+
+async function corroborarIndice(card) {
+  const tipo = card.dataset.tipo;
+  const anio = Number(el('rep-indices-anio').value);
+  const mensaje = el('rep-indices-mensaje');
+  mensaje.textContent = '';
+  const usuarioId = await usuarioActualId();
+
+  const { error } = await supabase.from('indices_valores').update({
+    corroborado: true,
+    corroborado_por: usuarioId,
+    corroborado_at: new Date().toISOString(),
+  }).eq('tipo_indice', tipo).eq('anio', anio);
+
+  if (error) {
+    mensaje.textContent = `No se pudo corroborar: ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+  await cargarIndices();
+}
+
 function imprimirReporte() {
   window.print();
 }
@@ -329,6 +473,18 @@ export async function initReportes() {
   el('rep-feedlot-imprimir').addEventListener('click', imprimirReporte);
   el('rep-rodeo-ver').addEventListener('click', cargarHistoriaRodeo);
   el('rep-rodeo-imprimir').addEventListener('click', imprimirReporte);
+  el('rep-indices-actualizar').addEventListener('click', cargarIndices);
+  el('rep-indices-grid').addEventListener('click', (evento) => {
+    const card = evento.target.closest('.indice-card');
+    if (!card) return;
+    if (evento.target.classList.contains('icono-ayuda')) {
+      card.querySelector('.indice-ayuda-texto').classList.toggle('oculto');
+    } else if (evento.target.classList.contains('indice-guardar')) {
+      guardarIndice(card);
+    } else if (evento.target.classList.contains('indice-corroborar')) {
+      corroborarIndice(card);
+    }
+  });
   document.addEventListener('hacienda:ver-historia-rodeo', (evento) => verHistoriaRodeo(evento.detail.rodeoId));
 
   // Los caches (rodeos/titulares/catálogos) tienen que estar cargados
@@ -348,4 +504,5 @@ export async function refrescarReportes() {
   if (activa === 'manga') await cargarTrabajosManga();
   if (activa === 'feedlot') await cargarFeedLot();
   if (activa === 'rodeo') await cargarHistoriaRodeo();
+  if (activa === 'indices') await cargarIndices();
 }

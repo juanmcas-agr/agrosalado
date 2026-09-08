@@ -560,7 +560,12 @@
         </div>
       </div>
       <div id="reportes-indices" class="reportes-seccion oculto">
-        <p class="ayuda">Próximamente: índices reproductivos.</p>
+        <div class="filtros">
+          <label>Año <input id="rep-indices-anio" type="number" step="1"></label>
+          <button type="button" id="rep-indices-actualizar" class="boton-secundario">Actualizar</button>
+        </div>
+        <div id="rep-indices-mensaje" class="mensaje"></div>
+        <div id="rep-indices-grid" class="grid-indices"></div>
       </div>
     </section>
   </div>
