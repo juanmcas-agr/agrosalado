@@ -1,5 +1,6 @@
-// Resumen diario de novedades de Hacienda (movimientos cargados y
-// anulados en el día): corre solo, una vez por día a las 23:30 hora
+// Resumen diario de novedades de Hacienda (movimientos cargados/anulados
+// y trabajos de manga cargados en el día, más alertas de diferencias
+// pendientes/resueltas): corre solo, una vez por día a las 23:30 hora
 // Argentina, vía Netlify Scheduled Functions (ver el cron en netlify.toml).
 // No se dispara por cada carga/anulación individual — junta todo el día
 // en un solo mail para no saturar de avisos.
@@ -41,6 +42,8 @@ async function obtenerDestinatarios() {
 function rangoDeHoyArt() {
   // Corre ~23:30 ART = ~02:30 UTC del día siguiente; restamos 3hs para
   // saber a qué fecha ART corresponde el momento en que se dispara.
+  // Misma aritmética en todos lados (mail y, más adelante, el cartel de
+  // índices) para que nunca discrepen cerca de la medianoche.
   const ahoraArt = new Date(Date.now() - 3 * 60 * 60 * 1000);
   const fecha = ahoraArt.toISOString().slice(0, 10);
   return {
@@ -74,10 +77,19 @@ function describirMovimiento(m) {
   const recorrido = [origen, destino].filter(Boolean).join(' → ');
   const titular = m.titular_origen_nombre || m.titular_destino_nombre;
   return [
-    `${m.tipo_movimiento_nombre} — ${recorrido}`,
+    `${m.codigo ? m.codigo + ' — ' : ''}${m.tipo_movimiento_nombre} — ${recorrido}`,
     `${m.cantidad_cabezas} cab. (${m.kilos_promedio} kg prom.)`,
     titular ? `titular: ${titular}` : null,
     m.rodeo ? `rodeo: ${m.rodeo}` : null,
+  ].filter(Boolean).join(' — ');
+}
+
+function describirTrabajo(t) {
+  return [
+    `${t.codigo} — ${t.categoria_nombre || t.categoria_id}`,
+    `rodeo: ${t.rodeo || t.rodeo_id}`,
+    `${t.cantidad_trabajada} cab. trabajadas`,
+    t.diferencia_pendiente ? '⚠️ diferencia pendiente' : null,
   ].filter(Boolean).join(' — ');
 }
 
@@ -92,12 +104,16 @@ exports.handler = async function () {
   const d = encodeURIComponent(desde);
   const h = encodeURIComponent(hasta);
 
-  const [cargados, anulados] = await Promise.all([
+  const [cargados, anulados, trabajosCargados, diferenciasPendientes, diferenciasResueltasHoy] = await Promise.all([
     consultarSupabase(`historial_movimientos?created_at=gte.${d}&created_at=lte.${h}&order=created_at.asc`),
     consultarSupabase(`historial_movimientos?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
+    consultarSupabase(`historial_trabajos_manga?creado_at=gte.${d}&creado_at=lte.${h}&order=creado_at.asc`),
+    consultarSupabase(`historial_trabajos_manga?diferencia_pendiente=eq.true&order=fecha.asc`),
+    consultarSupabase(`historial_trabajos_manga?resuelto_at=gte.${d}&resuelto_at=lte.${h}&order=resuelto_at.asc`),
   ]);
 
-  if (!cargados.length && !anulados.length) {
+  const hayNovedadesHoy = cargados.length || anulados.length || trabajosCargados.length || diferenciasResueltasHoy.length;
+  if (!hayNovedadesHoy && !diferenciasPendientes.length) {
     return { statusCode: 200, body: 'Sin novedades hoy, no se manda mail.' };
   }
 
@@ -111,7 +127,7 @@ exports.handler = async function () {
     nombresPorId = Object.fromEntries(perfiles.map((p) => [p.user_id, p.nombre_completo]));
   }
 
-  const partes = [`<p><strong>Novedades de Hacienda — ${fecha}</strong></p>`];
+  const partes = [`<p><strong>Hacienda — novedades del ${fecha}</strong></p>`];
 
   if (cargados.length) {
     partes.push(`<p><strong>Movimientos cargados (${cargados.length}):</strong></p><ul>`);
@@ -130,6 +146,28 @@ exports.handler = async function () {
     partes.push('</ul>');
   }
 
+  if (trabajosCargados.length) {
+    partes.push(`<p><strong>Trabajos de manga cargados (${trabajosCargados.length}):</strong></p><ul>`);
+    for (const t of trabajosCargados) {
+      partes.push(`<li>${describirTrabajo(t)} — cargado por ${t.usuario_nombre || '-'}</li>`);
+    }
+    partes.push('</ul>');
+  }
+
+  if (diferenciasPendientes.length || diferenciasResueltasHoy.length) {
+    partes.push('<p><strong>⚠️ ALERTAS de stock:</strong></p><ul>');
+    for (const t of diferenciasPendientes) {
+      partes.push(`<li>${t.codigo} (rodeo ${t.rodeo || t.rodeo_id}, ${t.fecha}): sigue <strong>pendiente de resolver</strong> — se trabajaron ${t.cantidad_trabajada} y no coincidía con el stock.</li>`);
+    }
+    for (const t of diferenciasResueltasHoy) {
+      const como = t.resuelto_por_movimiento_codigo
+        ? `se resolvió con el movimiento ${t.resuelto_por_movimiento_codigo}`
+        : 'se corrigió la cantidad trabajada a mano';
+      partes.push(`<li>${t.codigo} (rodeo ${t.rodeo || t.rodeo_id}): <strong>resuelto hoy</strong> — ${como}.</li>`);
+    }
+    partes.push('</ul>');
+  }
+
   const remitente = process.env.RESEND_FROM || 'AGROSALADO <onboarding@resend.dev>';
   const destinatarios = await obtenerDestinatarios();
 
@@ -142,7 +180,7 @@ exports.handler = async function () {
     body: JSON.stringify({
       from: remitente,
       to: destinatarios,
-      subject: `Novedades de Hacienda — ${fecha}`,
+      subject: 'HACIENDA: MOVIMIENTO/TRABAJO',
       html: partes.join(''),
     }),
   });
