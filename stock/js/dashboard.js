@@ -1,9 +1,9 @@
 import { supabase } from './supabaseClient.js';
 import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { stockCacheGet, stockCacheSet } from './db-local.js';
-import { exportarMatrizStock } from './export.js';
+import { exportarMatrizStock, exportarStockEstablecimiento } from './export.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
-import { cargarInfoFeedLot } from './rodeos.js';
+import { cargarRodeos, obtenerRodeosCache, cargarInfoFeedLot } from './rodeos.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion } from './botones.js';
 
 function el(id) {
@@ -107,27 +107,55 @@ async function obtenerStock() {
   return { rows: [], offline: true, fetchedAt: null };
 }
 
-// Reconstruye el stock a una fecha pasada sumando los movimientos hasta esa
-// fecha (excluye anulados, igual que la vista stock_actual, pero sin tope inferior).
-async function calcularStockAFecha(fecha, establecimientoId) {
-  let query = supabase.from('movimiento_lineas').select('establecimiento, categoria, delta_cabezas').lte('fecha', fecha);
-  if (establecimientoId) query = query.eq('establecimiento', establecimientoId);
-  const { data, error } = await query;
-  if (error) throw error;
-
-  const acumulado = {};
-  for (const r of data) {
-    const clave = `${r.establecimiento}|${r.categoria}`;
-    acumulado[clave] = (acumulado[clave] || 0) + r.delta_cabezas;
-  }
-  return Object.entries(acumulado).map(([clave, cabezas]) => {
-    const [establecimiento, categoria] = clave.split('|');
-    return { establecimiento, categoria, cabezas };
-  });
+function hoyISO() {
+  return new Date().toISOString().slice(0, 10);
 }
 
-function renderEstado({ offline, fetchedAt }) {
+function esHoy(fecha) {
+  return !fecha || fecha === hoyISO();
+}
+
+// Reconstruye el stock a una fecha pasada sumando movimiento_lineas hasta
+// esa fecha, con la misma agregación (y misma fórmula de kilos promedio
+// ponderado) que la vista stock_actual — así el resultado tiene la misma
+// forma de fila y las tablas/exportación existentes lo pueden usar sin
+// cambios cuando la fecha elegida no es hoy.
+async function obtenerStockAFecha(fecha) {
+  const { data, error } = await supabase
+    .from('movimiento_lineas')
+    .select('establecimiento, categoria, titular, rodeo_id, delta_cabezas, kilos_promedio')
+    .lte('fecha', fecha);
+  if (error) throw error;
+
+  const grupos = {};
+  for (const r of data) {
+    const clave = `${r.establecimiento}|${r.categoria}|${r.titular}|${r.rodeo_id || ''}`;
+    if (!grupos[clave]) {
+      grupos[clave] = { establecimiento: r.establecimiento, categoria: r.categoria, titular: r.titular, rodeo_id: r.rodeo_id, cabezas: 0, sumaKg: 0 };
+    }
+    grupos[clave].cabezas += r.delta_cabezas;
+    grupos[clave].sumaKg += r.delta_cabezas * r.kilos_promedio;
+  }
+
+  const rodeosCache = obtenerRodeosCache();
+  return Object.values(grupos).map((g) => ({
+    establecimiento: g.establecimiento,
+    categoria: g.categoria,
+    titular: g.titular,
+    rodeo_id: g.rodeo_id,
+    rodeo: g.rodeo_id ? rodeosCache.find((r) => r.id === g.rodeo_id)?.codigo || null : null,
+    cabezas: g.cabezas,
+    kilos_promedio_ponderado: g.cabezas > 0 ? Math.round((g.sumaKg / g.cabezas) * 100) / 100 : null,
+  }));
+}
+
+function renderEstado({ offline, fetchedAt, fecha }) {
   const contenedor = el('dash-estado');
+  if (!esHoy(fecha)) {
+    contenedor.textContent = `Mostrando stock al ${formatearFechaDMY(fecha)}.`;
+    contenedor.className = 'ok';
+    return;
+  }
   const hora = fetchedAt ? new Date(fetchedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—';
   if (!offline) {
     contenedor.textContent = `Actualizado a las ${hora}.`;
@@ -287,59 +315,8 @@ function formatearFechaDMY(fecha) {
   return `${d}/${m}/${y}`;
 }
 
-// "Todos los establecimientos" desagregado (una fila por establecimiento,
-// misma matriz que "Por establecimiento") e integrado (fila Total al pie)
-// en la misma tabla; un establecimiento puntual muestra solo sus categorías.
-function renderTablaFecha(rows, establecimientoId, fecha) {
-  const tabla = el('dash-fecha-tabla');
-  tabla.classList.remove('oculto');
-  const tbody = tabla.querySelector('tbody');
-  tbody.innerHTML = '';
-
-  if (establecimientoId) {
-    const nombreEst = ESTABLECIMIENTOS.find((e) => e.id === establecimientoId)?.nombre || establecimientoId;
-    tabla.querySelector('thead').innerHTML =
-      `<tr><th colspan="2">${nombreEst} al ${formatearFechaDMY(fecha)}</th></tr><tr><th>Categoría</th><th>Cabezas</th></tr>`;
-    const totales = {};
-    for (const c of CATEGORIAS) totales[c.id] = 0;
-    for (const r of rows) totales[r.categoria] = (totales[r.categoria] || 0) + r.cabezas;
-    let totalGeneral = 0;
-    for (const c of CATEGORIAS) {
-      totalGeneral += totales[c.id];
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td>`;
-      tbody.appendChild(tr);
-    }
-    const trTotal = document.createElement('tr');
-    trTotal.className = 'fila-total';
-    trTotal.innerHTML = `<td><strong>Total</strong></td><td><strong>${totalGeneral}</strong></td>`;
-    tbody.appendChild(trTotal);
-    return;
-  }
-
-  const matriz = construirMatriz(rows);
-  tabla.querySelector('thead').innerHTML =
-    `<tr><th colspan="${CATEGORIAS.length + 2}">Todos los establecimientos al ${formatearFechaDMY(fecha)}</th></tr>` +
-    `<tr><th>Establecimiento</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
-  const totalesPorCategoria = {};
-  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
-  for (const e of ESTABLECIMIENTOS) {
-    const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
-    for (const c of CATEGORIAS) totalesPorCategoria[c.id] += matriz[e.id][c.id];
-    const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${e.nombre}</td>${CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}</td>`).join('')}<td><strong>${totalFila}</strong></td>`;
-    tbody.appendChild(tr);
-  }
-  const totalGeneral = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
-  const trTotal = document.createElement('tr');
-  trTotal.className = 'fila-total';
-  trTotal.innerHTML = `<td><strong>Total</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
-  tbody.appendChild(trTotal);
-}
-
-function poblarSelectFecha() {
-  const select = el('dash-fecha-establecimiento');
-  if (select.options.length) return;
+function poblarSelectExportarEstablecimiento() {
+  const select = el('dash-exportar-establecimiento');
   select.innerHTML = '<option value="">Todos los establecimientos</option>';
   for (const e of ESTABLECIMIENTOS) {
     const opt = document.createElement('option');
@@ -347,67 +324,71 @@ function poblarSelectFecha() {
     opt.textContent = e.nombre;
     select.appendChild(opt);
   }
-  el('dash-fecha').value = new Date().toISOString().slice(0, 10);
 }
 
 export async function refrescarDashboard() {
-  const { rows, offline, fetchedAt } = await obtenerStock();
+  const fecha = el('dash-fecha').value || hoyISO();
+  const hoy = esHoy(fecha);
+
+  let rows;
+  let offline = false;
+  let fetchedAt = null;
+  if (hoy) {
+    ({ rows, offline, fetchedAt } = await obtenerStock());
+  } else {
+    try {
+      rows = await obtenerStockAFecha(fecha);
+      fetchedAt = new Date().toISOString();
+    } catch (error) {
+      el('dash-estado').textContent = `No se pudo calcular el stock a esa fecha (¿sin conexión?): ${error.message}`;
+      el('dash-estado').className = 'error';
+      return;
+    }
+  }
+
   ultimasFilasStock = rows;
-  if (!offline) {
+  infoFeedLot = {};
+  if (hoy && !offline) {
     try { infoFeedLot = await cargarInfoFeedLot(); } catch (error) { console.warn('No se pudo cargar corral/ciclo de feed lot:', error); }
   }
-  renderEstado({ offline, fetchedAt });
+  renderEstado({ offline, fetchedAt, fecha });
   renderResumenTitularidad(rows);
   renderTablaCategoria();
   renderTablaEstablecimiento();
 }
 
-async function verStockAFecha() {
-  const fecha = el('dash-fecha').value;
-  const mensaje = el('dash-fecha-mensaje');
-  if (!fecha) {
-    mensaje.textContent = 'Elegí una fecha.';
-    mensaje.className = 'error';
-    return;
-  }
-  const establecimientoId = el('dash-fecha-establecimiento').value || null;
-  try {
-    const rows = await calcularStockAFecha(fecha, establecimientoId);
-    renderTablaFecha(rows, establecimientoId, fecha);
-    mensaje.textContent = '';
-  } catch (error) {
-    mensaje.textContent = `No se pudo calcular el stock a esa fecha (¿sin conexión?): ${error.message}`;
-    mensaje.className = 'error';
-  }
-}
+// Exporta la misma vista (titularidad + fecha) que está en pantalla: un
+// establecimiento puntual si se eligió uno en el selector de exportación,
+// o todos desagregados + integrados (fila Total) en una sola hoja.
+function exportarStock() {
+  const fecha = el('dash-fecha').value || hoyISO();
+  const establecimientoId = el('dash-exportar-establecimiento').value || null;
+  const { vista, capitalizadorId } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
+  const rows = filtrarPorVista(ultimasFilasStock, vista, capitalizadorId);
 
-async function exportarStockAFecha() {
-  const fecha = el('dash-fecha').value;
-  const mensaje = el('dash-fecha-mensaje');
-  if (!fecha) {
-    mensaje.textContent = 'Elegí una fecha.';
-    mensaje.className = 'error';
+  if (establecimientoId) {
+    const nombreEst = ESTABLECIMIENTOS.find((e) => e.id === establecimientoId)?.nombre || establecimientoId;
+    const totales = {};
+    for (const c of CATEGORIAS) totales[c.id] = 0;
+    for (const r of rows) {
+      if (r.establecimiento === establecimientoId) totales[r.categoria] = (totales[r.categoria] || 0) + r.cabezas;
+    }
+    exportarStockEstablecimiento(totales, nombreEst, `stock_${establecimientoId}_${fecha}`);
     return;
   }
-  const establecimientoId = el('dash-fecha-establecimiento').value || null;
-  try {
-    const rows = await calcularStockAFecha(fecha, establecimientoId);
-    const matriz = construirMatriz(rows);
-    exportarMatrizStock(matriz, `stock_al_${fecha}`, `Stock al ${fecha}`);
-    mensaje.textContent = '';
-  } catch (error) {
-    mensaje.textContent = `No se pudo calcular el stock a esa fecha (¿sin conexión?): ${error.message}`;
-    mensaje.className = 'error';
-  }
+
+  const matriz = construirMatriz(rows);
+  exportarMatrizStock(matriz, `stock_${fecha}`, `Stock al ${fecha}`);
 }
 
 export async function initDashboard() {
-  await cargarTitulares();
+  await Promise.all([cargarTitulares(), cargarRodeos()]);
   inicializarSelectorVista('dash-categoria-vista', 'dash-categoria-cap-wrap', 'dash-categoria-cap-select', renderTablaCategoria);
   inicializarSelectorVista('dash-establecimiento-vista', 'dash-establecimiento-cap-wrap', 'dash-establecimiento-cap-select', renderTablaEstablecimiento);
+  poblarSelectExportarEstablecimiento();
+  el('dash-fecha').value = hoyISO();
+  el('dash-fecha').addEventListener('change', refrescarDashboard);
   el('dash-actualizar').addEventListener('click', refrescarDashboard);
-  poblarSelectFecha();
-  el('dash-fecha-ver').addEventListener('click', verStockAFecha);
-  el('dash-fecha-exportar').addEventListener('click', exportarStockAFecha);
+  el('dash-exportar').addEventListener('click', exportarStock);
   refrescarDashboard();
 }

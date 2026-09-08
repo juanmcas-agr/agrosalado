@@ -39,6 +39,17 @@ export function exportarMatrizStock(matriz, nombreBase, tituloHoja) {
   XLSX.writeFile(wb, nombreConFecha(nombreBase));
 }
 
+export function exportarStockEstablecimiento(totalesPorCategoria, nombreEstablecimiento, nombreBase) {
+  const filas = CATEGORIAS.map((c) => ({ Categoría: c.nombre, Cabezas: totalesPorCategoria[c.id] || 0 }));
+  const total = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
+  filas.push({ Categoría: 'Total', Cabezas: total });
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(filas);
+  XLSX.utils.book_append_sheet(wb, ws, nombreEstablecimiento.slice(0, 31));
+  XLSX.writeFile(wb, nombreConFecha(nombreBase));
+}
+
 export function exportarHistorial(filasHistorial, nombreBase = 'historial_movimientos') {
   const filas = filasHistorial.map((f) => ({
     'Fecha movimiento': f.fecha,

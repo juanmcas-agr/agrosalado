@@ -268,8 +268,13 @@
     <!-- ─── DASHBOARD ─── -->
     <section id="pantalla-dashboard" data-screen="dashboard" class="oculto">
       <h2>Stock actual</h2>
+      <div class="filtros">
+        <label>Fecha <input id="dash-fecha" type="date"></label>
+        <select id="dash-exportar-establecimiento"></select>
+        <button id="dash-actualizar" class="boton-secundario">Actualizar</button>
+        <button id="dash-exportar" class="boton-secundario">Exportar Excel</button>
+      </div>
       <div id="dash-estado" class="mensaje"></div>
-      <button id="dash-actualizar" class="boton-secundario">Actualizar</button>
 
       <div class="resumen-titularidad">
         <div><span>Agro Salado</span><strong id="dash-total-agro">0</strong></div>
@@ -297,21 +302,6 @@
       </div>
       <div class="tabla-scroll">
         <table id="dash-establecimientos-tabla" class="tabla">
-          <thead></thead>
-          <tbody></tbody>
-        </table>
-      </div>
-
-      <h3>Stock a una fecha</h3>
-      <div class="filtros">
-        <label>Fecha <input id="dash-fecha" type="date"></label>
-        <select id="dash-fecha-establecimiento"></select>
-        <button id="dash-fecha-ver" class="boton-secundario">Ver</button>
-        <button id="dash-fecha-exportar" class="boton-secundario">Exportar Excel</button>
-      </div>
-      <div id="dash-fecha-mensaje" class="mensaje"></div>
-      <div class="tabla-scroll">
-        <table id="dash-fecha-tabla" class="tabla oculto">
           <thead></thead>
           <tbody></tbody>
         </table>
