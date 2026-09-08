@@ -158,6 +158,35 @@ create policy feed_lot_ciclos_insert on feed_lot_ciclos for insert to authentica
 create policy feed_lot_ciclos_update on feed_lot_ciclos for update to authenticated
   using (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
+-- ─── Códigos rastreables (movimientos y trabajos_manga) ─────────────────
+-- Contador atómico GLOBAL por tipo (no por año como rodeo_secuencias: acá
+-- el código es solo un identificador de auditoría para ubicar una carga
+-- desde el Historial, no lleva significado como el código del rodeo).
+-- Se usa como DEFAULT de columna (no trigger): movimientos se inserta vía
+-- upsert(..., { onConflict: 'id', ignoreDuplicates: true }) para que los
+-- reintentos de sincronización offline sean idempotentes — un default de
+-- columna solo se evalúa cuando la fila efectivamente se inserta (nunca
+-- en la rama de conflicto de un reintento), y si validar_movimiento()
+-- rechaza la fila, la transacción entera (incluido el contador) se revierte.
+create table codigo_secuencias (
+  tipo text primary key,
+  ultimo bigint not null default 0
+);
+
+create or replace function siguiente_codigo(p_tipo text, p_prefijo text) returns text
+language plpgsql security definer as $$
+declare
+  v_valor bigint;
+begin
+  insert into codigo_secuencias (tipo, ultimo) values (p_tipo, 1)
+  on conflict (tipo) do update set ultimo = codigo_secuencias.ultimo + 1
+  returning ultimo into v_valor;
+  return p_prefijo || '-' || lpad(v_valor::text, 6, '0');
+end;
+$$;
+
+grant execute on function siguiente_codigo(text, text) to authenticated;
+
 -- ─── Trabajo de Manga ───────────────────────────────────────────────────
 -- Bitácora de trabajo sobre un rodeo — NO es un movimiento de stock (no
 -- mueve cabezas), salvo Destete (M11), que sí dispara movimientos reales
@@ -168,6 +197,7 @@ create policy feed_lot_ciclos_update on feed_lot_ciclos for update to authentica
 -- (ver trigger resolver_diferencia_manga más abajo), no a mano.
 create table trabajos_manga (
   id uuid primary key default gen_random_uuid(),
+  codigo text not null unique default siguiente_codigo('trabajo_manga', 'T'),
   fecha date not null,
   rodeo_id uuid not null references rodeos(id),
   categoria_id text not null references categorias(id),
@@ -382,6 +412,7 @@ create table perfiles (
 
 create table movimientos (
   id uuid primary key,
+  codigo text not null unique default siguiente_codigo('movimiento', 'M'),
   tipo_movimiento text not null references tipos_movimiento(id),
   fecha date not null,
   establecimiento_origen text references establecimientos(id),
@@ -635,7 +666,7 @@ create view stock_actual as
 
 create view historial_movimientos as
   select
-    m.id, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
+    m.id, m.codigo, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
     m.fecha,
     m.establecimiento_origen, eo.nombre as establecimiento_origen_nombre,
     m.establecimiento_destino, ed.nombre as establecimiento_destino_nombre,
@@ -649,7 +680,8 @@ create view historial_movimientos as
     m.observaciones,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo,
-    m.reemplazado_por, m.editado_de
+    m.reemplazado_por, mr.codigo as reemplazado_por_codigo,
+    m.editado_de, me.codigo as editado_de_codigo
   from movimientos m
   join tipos_movimiento tm on tm.id = m.tipo_movimiento
   left join establecimientos eo on eo.id = m.establecimiento_origen
@@ -661,6 +693,8 @@ create view historial_movimientos as
   left join rodeos r on r.id = m.rodeo_id
   left join rodeos rd on rd.id = m.rodeo_destino_id
   left join perfiles p on p.user_id = m.usuario_id
+  left join movimientos mr on mr.id = m.reemplazado_por
+  left join movimientos me on me.id = m.editado_de
   order by m.fecha desc, m.created_at desc;
 
 -- ─── RLS ────────────────────────────────────────────────────────────────

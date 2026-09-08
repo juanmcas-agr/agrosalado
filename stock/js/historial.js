@@ -122,9 +122,10 @@ function renderFilas(filas) {
     if (fila.reemplazado_por) tr.classList.add('editado');
     let estado = '';
     if (fila.anulado) estado = `Anulado (${fila.anulado_motivo || 'sin motivo'})`;
-    else if (fila.reemplazado_por) estado = '✏️ Editado (ver corrección)';
-    else if (fila.editado_de) estado = '✏️ Corrección';
+    else if (fila.reemplazado_por) estado = `✏️ Editado → ${fila.reemplazado_por_codigo || '?'}`;
+    else if (fila.editado_de) estado = `✏️ Corrección de ${fila.editado_de_codigo || '?'}`;
     tr.innerHTML = `
+      <td>${fila.codigo || ''}</td>
       <td>${fila.fecha}</td>
       <td>${new Date(fila.created_at).toLocaleString('es-AR')}</td>
       <td>${fila.tipo_movimiento_nombre}</td>
@@ -162,20 +163,27 @@ let ultimasFilas = [];
 export async function cargarHistorial() {
   let query = supabase.from('historial_movimientos').select('*').limit(200);
 
+  const codigo = el('hist-filtro-codigo').value.trim();
   const establecimiento = el('hist-filtro-establecimiento').value;
   const tipo = el('hist-filtro-tipo').value;
   const estado = el('hist-filtro-estado').value;
   const desde = el('hist-filtro-desde').value;
   const hasta = el('hist-filtro-hasta').value;
 
-  if (establecimiento) {
-    query = query.or(`establecimiento_origen.eq.${establecimiento},establecimiento_destino.eq.${establecimiento}`);
+  // Buscar por código: campo autónomo, pisa el resto de los filtros (si
+  // sabés el código, querés ESE movimiento puntual, no una lista filtrada).
+  if (codigo) {
+    query = query.ilike('codigo', `%${codigo}%`);
+  } else {
+    if (establecimiento) {
+      query = query.or(`establecimiento_origen.eq.${establecimiento},establecimiento_destino.eq.${establecimiento}`);
+    }
+    if (tipo) query = query.eq('tipo_movimiento', tipo);
+    if (estado === 'activos') query = query.eq('anulado', false);
+    else if (estado === 'anulados') query = query.eq('anulado', true);
+    if (desde) query = query.gte('fecha', desde);
+    if (hasta) query = query.lte('fecha', hasta);
   }
-  if (tipo) query = query.eq('tipo_movimiento', tipo);
-  if (estado === 'activos') query = query.eq('anulado', false);
-  else if (estado === 'anulados') query = query.eq('anulado', true);
-  if (desde) query = query.gte('fecha', desde);
-  if (hasta) query = query.lte('fecha', hasta);
 
   const { data, error } = await query;
   if (error) {

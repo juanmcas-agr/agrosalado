@@ -52,6 +52,7 @@ export function exportarStockEstablecimiento(totalesPorCategoria, nombreEstablec
 
 export function exportarHistorial(filasHistorial, nombreBase = 'historial_movimientos') {
   const filas = filasHistorial.map((f) => ({
+    Código: f.codigo || '',
     'Fecha movimiento': f.fecha,
     'Fecha de registro': new Date(f.created_at).toLocaleString('es-AR'),
     Tipo: f.tipo_movimiento_nombre,
