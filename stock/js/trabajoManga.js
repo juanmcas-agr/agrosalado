@@ -580,6 +580,7 @@ export async function refrescarDiferenciasPendientes() {
     .from('trabajos_manga')
     .select('id, codigo, fecha, rodeo_id, categoria_id, cantidad_trabajada')
     .eq('diferencia_pendiente', true)
+    .eq('anulado', false)
     .order('fecha', { ascending: false });
   if (error) { console.warn('No se pudieron cargar las diferencias pendientes:', error); return; }
 

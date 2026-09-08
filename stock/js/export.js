@@ -90,6 +90,7 @@ export function exportarTrabajosManga(filasConDetalle, nombreBase = 'historial_t
     Detalle: t.detalleTexto || '',
     'Cargado por': t.usuario_nombre || '',
     Observaciones: t.observaciones || '',
+    Estado: t.anulado ? `Anulado (${t.anulado_motivo || 'sin motivo'})` : 'Activo',
   }));
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(filas);

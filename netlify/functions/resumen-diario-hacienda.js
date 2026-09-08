@@ -104,15 +104,16 @@ exports.handler = async function () {
   const d = encodeURIComponent(desde);
   const h = encodeURIComponent(hasta);
 
-  const [cargados, anulados, trabajosCargados, diferenciasPendientes, diferenciasResueltasHoy] = await Promise.all([
+  const [cargados, anulados, trabajosCargados, trabajosAnulados, diferenciasPendientes, diferenciasResueltasHoy] = await Promise.all([
     consultarSupabase(`historial_movimientos?created_at=gte.${d}&created_at=lte.${h}&order=created_at.asc`),
     consultarSupabase(`historial_movimientos?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
     consultarSupabase(`historial_trabajos_manga?creado_at=gte.${d}&creado_at=lte.${h}&order=creado_at.asc`),
-    consultarSupabase(`historial_trabajos_manga?diferencia_pendiente=eq.true&order=fecha.asc`),
+    consultarSupabase(`historial_trabajos_manga?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
+    consultarSupabase(`historial_trabajos_manga?diferencia_pendiente=eq.true&anulado=eq.false&order=fecha.asc`),
     consultarSupabase(`historial_trabajos_manga?resuelto_at=gte.${d}&resuelto_at=lte.${h}&order=resuelto_at.asc`),
   ]);
 
-  const hayNovedadesHoy = cargados.length || anulados.length || trabajosCargados.length || diferenciasResueltasHoy.length;
+  const hayNovedadesHoy = cargados.length || anulados.length || trabajosCargados.length || trabajosAnulados.length || diferenciasResueltasHoy.length;
   if (!hayNovedadesHoy && !diferenciasPendientes.length) {
     return { statusCode: 200, body: 'Sin novedades hoy, no se manda mail.' };
   }
@@ -120,7 +121,7 @@ exports.handler = async function () {
   // anulado_por es un uuid en la vista (no viene con el nombre resuelto);
   // lo buscamos aparte para poder mostrar quién anuló cada uno.
   let nombresPorId = {};
-  const idsAnuladores = [...new Set(anulados.map((m) => m.anulado_por).filter(Boolean))];
+  const idsAnuladores = [...new Set([...anulados, ...trabajosAnulados].map((m) => m.anulado_por).filter(Boolean))];
   if (idsAnuladores.length) {
     const filtro = idsAnuladores.map((id) => `"${id}"`).join(',');
     const perfiles = await consultarSupabase(`perfiles?user_id=in.(${filtro})&select=user_id,nombre_completo`);
@@ -150,6 +151,15 @@ exports.handler = async function () {
     partes.push(`<p><strong>Trabajos de manga cargados (${trabajosCargados.length}):</strong></p><ul>`);
     for (const t of trabajosCargados) {
       partes.push(`<li>${describirTrabajo(t)} — cargado por ${t.usuario_nombre || '-'}</li>`);
+    }
+    partes.push('</ul>');
+  }
+
+  if (trabajosAnulados.length) {
+    partes.push(`<p><strong>Trabajos de manga anulados (${trabajosAnulados.length}):</strong></p><ul>`);
+    for (const t of trabajosAnulados) {
+      const anuladoPor = nombresPorId[t.anulado_por] || '-';
+      partes.push(`<li>${describirTrabajo(t)} — anulado por ${anuladoPor} (motivo: ${t.anulado_motivo || 'sin motivo'})</li>`);
     }
     partes.push('</ul>');
   }

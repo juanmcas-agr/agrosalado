@@ -216,7 +216,14 @@ create table trabajos_manga (
   -- (resuelto_por_movimiento_id apunta a él) o corrigiendo la cantidad
   -- trabajada a mano (resuelto_at seteado, resuelto_por_movimiento_id null).
   resuelto_por_movimiento_id uuid references movimientos(id),
-  resuelto_at timestamptz
+  resuelto_at timestamptz,
+  -- Anulación (solo owner, ver trabajos_manga_anular más abajo) — mismo
+  -- criterio que movimientos: se marca, no se borra, para no perder
+  -- trazabilidad de códigos.
+  anulado boolean not null default false,
+  anulado_por uuid references auth.users(id),
+  anulado_at timestamptz,
+  anulado_motivo text
 );
 
 create index on trabajos_manga (rodeo_id);
@@ -724,7 +731,8 @@ create view historial_trabajos_manga as
     t.cantidad_trabajada, t.stock_al_momento, t.diferencia_pendiente,
     t.usuario_id, p.nombre_completo as usuario_nombre,
     t.observaciones, t.creado_at,
-    t.resuelto_por_movimiento_id, mv.codigo as resuelto_por_movimiento_codigo, t.resuelto_at
+    t.resuelto_por_movimiento_id, mv.codigo as resuelto_por_movimiento_codigo, t.resuelto_at,
+    t.anulado, t.anulado_por, t.anulado_at, t.anulado_motivo
   from trabajos_manga t
   left join rodeos r on r.id = t.rodeo_id
   left join categorias c on c.id = t.categoria_id

@@ -366,6 +366,14 @@ function actualizarCamposVisibles() {
   // (sin mensaje visible) para cualquier otro tipo de movimiento.
   el('mov-rodeo-destino').required = cfg.campos.includes('rodeo_destino');
 
+  // Para Mortandad, las Observaciones dejan de ser opcionales: hay que
+  // contar qué pasó (causa de la muerte) para que quede registrado.
+  const esMortandad = tipo === 'mortandad';
+  el('mov-observaciones').required = esMortandad;
+  el('mov-observaciones-label').textContent = esMortandad
+    ? 'Observaciones — obligatorio para Mortandad (contá qué pasó)'
+    : 'Observaciones (opcional)';
+
   // Siempre se reconstruye para que quede sin selección al cambiar de tipo
   // (evita arrastrar una categoría elegida que ya no corresponde).
   crearGrupoBotones(
@@ -460,6 +468,9 @@ function validar(datos) {
   }
   if (datos.tipo === 'cambio_titular' && datos.titular_origen === datos.titular_destino) {
     errores.push('En un cambio de titularidad, la titularidad de origen y destino deben ser distintas.');
+  }
+  if (datos.tipo === 'mortandad' && !datos.observaciones) {
+    errores.push('Para Mortandad, las Observaciones son obligatorias (contá qué pasó).');
   }
 
   return { errores, advertencias };

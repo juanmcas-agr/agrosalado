@@ -23,6 +23,7 @@ function filtrarPorVista(rows, vista, capitalizadorId) {
     if (capitalizadorId) return rows.filter((r) => r.titular === capitalizadorId);
     return rows.filter((r) => esCapitalizador(r.titular));
   }
+  if (vista === 'total') return rows; // AS + DJ + todos los capitalizadores, sin filtrar
   return rows.filter((r) => r.titular === 'agro_salado' || r.titular === 'dona_julia'); // 'grupo'
 }
 
@@ -332,6 +333,7 @@ function inicializarSelectorVista(idGrupo, idCapWrap, idCapSelect, onCambio) {
     { id: 'agro_salado', nombre: 'Agro Salado' },
     { id: 'dona_julia', nombre: 'Doña Julia' },
     { id: 'capitalizadores', nombre: 'Capitalizadores' },
+    { id: 'total', nombre: 'Total' },
   ]);
   poblarSelectCapitalizadores(idCapSelect);
   establecerSeleccion(idGrupo, 'grupo');

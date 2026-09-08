@@ -205,8 +205,38 @@ function exportar() {
 }
 
 // ─── Historial de Trabajos de Manga (misma lógica que el de arriba:
-// filtros, buscar por código, exportar — pero de solo lectura, sin
-// Editar/Anular todavía, trabajos_manga no tiene ese concepto hoy) ───
+// filtros, buscar por código, exportar; Anular es exclusivo de owner —
+// más simple que en movimientos, no hay ventana de 48hs para el propio
+// usuario, ni administrativo — a diferencia de movimientos, acá no hay
+// "Editar" porque trabajos_manga no tiene ese concepto) ───
+
+function puedeAnularManga(fila) {
+  const { perfil } = getEstado();
+  return !!perfil && perfil.rol === 'owner' && !fila.anulado;
+}
+
+async function anularTrabajoManga(id) {
+  if (!navigator.onLine) {
+    alert('Necesitás conexión a internet para anular un trabajo de manga.');
+    return;
+  }
+  const motivo = prompt('Motivo de la anulación:');
+  if (motivo === null) return;
+  const { error } = await supabase
+    .from('trabajos_manga')
+    .update({
+      anulado: true,
+      anulado_por: getEstado().session.user.id,
+      anulado_at: new Date().toISOString(),
+      anulado_motivo: motivo || null,
+    })
+    .eq('id', id);
+  if (error) {
+    alert(`No se pudo anular: ${error.message}`);
+    return;
+  }
+  await cargarHistorialManga();
+}
 
 function poblarSelectRodeoHistorialManga() {
   const select = el('hist-manga-filtro-rodeo');
@@ -223,12 +253,13 @@ function renderFilasManga(trabajos) {
   const tbody = el('hist-manga-tabla').querySelector('tbody');
   tbody.innerHTML = '';
   if (!trabajos.length) {
-    tbody.innerHTML = '<tr><td colspan="8">Sin trabajos de manga en el rango elegido.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10">Sin trabajos de manga en el rango elegido.</td></tr>';
     return;
   }
   for (const t of trabajos) {
     const tr = document.createElement('tr');
-    if (esRectificado(t)) tr.classList.add('rectificado');
+    if (t.anulado) tr.classList.add('anulado');
+    else if (esRectificado(t)) tr.classList.add('rectificado');
     tr.innerHTML = `
       <td>${t.codigo}</td>
       <td>${t.fecha}</td>
@@ -238,7 +269,16 @@ function renderFilasManga(trabajos) {
       <td>${t.propietariosTexto}</td>
       <td>${t.detalleTexto}</td>
       <td>${t.usuario_nombre || ''}</td>
+      <td>${t.anulado ? `Anulado (${t.anulado_motivo || 'sin motivo'})` : ''}</td>
+      <td></td>
     `;
+    if (puedeAnularManga(t)) {
+      const btnAnular = document.createElement('button');
+      btnAnular.textContent = 'Anular';
+      btnAnular.className = 'boton-anular';
+      btnAnular.addEventListener('click', () => anularTrabajoManga(t.id));
+      tr.lastElementChild.appendChild(btnAnular);
+    }
     tbody.appendChild(tr);
   }
 }
