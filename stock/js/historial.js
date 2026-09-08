@@ -1,7 +1,10 @@
 import { supabase } from './supabaseClient.js';
 import { ESTABLECIMIENTOS, TIPOS_MOVIMIENTO } from './config.js';
 import { getEstado } from './auth.js';
-import { exportarHistorial } from './export.js';
+import { exportarHistorial, exportarTrabajosManga } from './export.js';
+import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
+import { cargarTitulares } from './titulares.js';
+import { cargarCatalogosSanidad, obtenerTrabajosConDetalle } from './trabajoMangaDetalle.js';
 
 const VENTANA_ANULACION_HORAS = 48;
 
@@ -201,9 +204,79 @@ function exportar() {
   exportarHistorial(ultimasFilas);
 }
 
+// ─── Historial de Trabajos de Manga (misma lógica que el de arriba:
+// filtros, buscar por código, exportar — pero de solo lectura, sin
+// Editar/Anular todavía, trabajos_manga no tiene ese concepto hoy) ───
+
+function poblarSelectRodeoHistorialManga() {
+  const select = el('hist-manga-filtro-rodeo');
+  select.innerHTML = '<option value="">Todos los rodeos</option>';
+  for (const r of obtenerRodeosCache()) {
+    const opt = document.createElement('option');
+    opt.value = r.id;
+    opt.textContent = r.codigo;
+    select.appendChild(opt);
+  }
+}
+
+function renderFilasManga(trabajos) {
+  const tbody = el('hist-manga-tabla').querySelector('tbody');
+  tbody.innerHTML = '';
+  if (!trabajos.length) {
+    tbody.innerHTML = '<tr><td colspan="8">Sin trabajos de manga en el rango elegido.</td></tr>';
+    return;
+  }
+  for (const t of trabajos) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${t.codigo}</td>
+      <td>${t.fecha}</td>
+      <td>${t.rodeo || ''}</td>
+      <td>${t.categoriaNombre}</td>
+      <td>${t.cantidad_trabajada}${t.diferencia_pendiente ? ' ⚠️' : ''}</td>
+      <td>${t.propietariosTexto}</td>
+      <td>${t.detalleTexto}</td>
+      <td>${t.usuario_nombre || ''}</td>
+    `;
+    tbody.appendChild(tr);
+  }
+}
+
+let ultimasFilasManga = [];
+
+export async function cargarHistorialManga() {
+  const mensaje = el('hist-manga-mensaje');
+  mensaje.textContent = '';
+
+  const codigo = el('hist-manga-filtro-codigo').value.trim();
+  const rodeoId = el('hist-manga-filtro-rodeo').value;
+  const desde = el('hist-manga-filtro-desde').value;
+  const hasta = el('hist-manga-filtro-hasta').value;
+
+  try {
+    ultimasFilasManga = await obtenerTrabajosConDetalle({ codigo, rodeoId, desde, hasta });
+    renderFilasManga(ultimasFilasManga);
+  } catch (error) {
+    mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
+    mensaje.className = 'error';
+  }
+}
+
+function exportarManga() {
+  if (!ultimasFilasManga.length) return;
+  exportarTrabajosManga(ultimasFilasManga);
+}
+
 export function initHistorial() {
   poblarFiltros();
   el('hist-filtrar').addEventListener('click', cargarHistorial);
   el('hist-exportar').addEventListener('click', exportar);
   cargarHistorial();
+
+  el('hist-manga-filtrar').addEventListener('click', cargarHistorialManga);
+  el('hist-manga-exportar').addEventListener('click', exportarManga);
+  Promise.all([cargarRodeos(), cargarTitulares(), cargarCatalogosSanidad()]).then(() => {
+    poblarSelectRodeoHistorialManga();
+    cargarHistorialManga();
+  });
 }

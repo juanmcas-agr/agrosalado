@@ -74,3 +74,25 @@ export function exportarHistorial(filasHistorial, nombreBase = 'historial_movimi
   XLSX.utils.book_append_sheet(wb, ws, 'Movimientos');
   XLSX.writeFile(wb, nombreConFecha(nombreBase));
 }
+
+// filasConDetalle: salida de obtenerTrabajosConDetalle() en
+// trabajoMangaDetalle.js (ya trae categoriaNombre/propietariosTexto/
+// detalleTexto resueltos) — mismo shape para Historial y Reportes.
+export function exportarTrabajosManga(filasConDetalle, nombreBase = 'historial_trabajos_manga') {
+  const filas = filasConDetalle.map((t) => ({
+    Código: t.codigo || '',
+    Fecha: t.fecha,
+    Rodeo: t.rodeo || '',
+    Categoría: t.categoriaNombre || '',
+    'Cantidad trabajada': t.cantidad_trabajada,
+    'Diferencia pendiente': t.diferencia_pendiente ? 'Sí' : 'No',
+    'Propietario(s)': t.propietariosTexto || '',
+    Detalle: t.detalleTexto || '',
+    'Cargado por': t.usuario_nombre || '',
+    Observaciones: t.observaciones || '',
+  }));
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(filas);
+  XLSX.utils.book_append_sheet(wb, ws, 'Trabajo de Manga');
+  XLSX.writeFile(wb, nombreConFecha(nombreBase));
+}

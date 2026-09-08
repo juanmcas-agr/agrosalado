@@ -452,6 +452,30 @@
           <tbody></tbody>
         </table>
       </div>
+
+      <h2>Historial de Trabajos de Manga</h2>
+      <div class="filtros">
+        <input id="hist-manga-filtro-codigo" type="text" placeholder="Buscar por código (ej: T-000045)">
+        <select id="hist-manga-filtro-rodeo"><option value="">Todos los rodeos</option></select>
+        <label>Desde <input id="hist-manga-filtro-desde" type="date"></label>
+        <label>Hasta <input id="hist-manga-filtro-hasta" type="date"></label>
+        <button id="hist-manga-filtrar" class="boton-secundario">Filtrar</button>
+        <button id="hist-manga-exportar" class="boton-secundario">Exportar Excel</button>
+      </div>
+
+      <div id="hist-manga-mensaje" class="mensaje"></div>
+
+      <div class="tabla-scroll">
+        <table id="hist-manga-tabla" class="tabla">
+          <thead>
+            <tr>
+              <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categoría</th><th>Cantidad</th>
+              <th>Propietario(s)</th><th>Detalle</th><th>Cargado por</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </section>
 
     <!-- ─── REPORTES ─── -->

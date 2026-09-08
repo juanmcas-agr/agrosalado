@@ -1,5 +1,5 @@
 import { refrescarDashboard } from './dashboard.js';
-import { cargarHistorial } from './historial.js';
+import { cargarHistorial, cargarHistorialManga } from './historial.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { refrescarReportes } from './reportes.js';
 
@@ -29,7 +29,7 @@ function renderRoute(rol) {
   });
 
   if (pantalla === 'dashboard') refrescarDashboard();
-  if (pantalla === 'historial') cargarHistorial();
+  if (pantalla === 'historial') { cargarHistorial(); cargarHistorialManga(); }
   if (pantalla === 'manga') refrescarDiferenciasPendientes();
   if (pantalla === 'reportes') refrescarReportes();
 }
