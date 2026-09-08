@@ -574,6 +574,22 @@ function precargarParaEditar(fila) {
   location.hash = 'cargar';
 }
 
+// Precarga "Cargar movimiento" con tipo Mortandad para resolver una
+// diferencia pendiente de Trabajo de Manga (pedido desde el botón
+// "Cargar movimiento que lo explica" — ver trabajoManga.js). Deja la
+// cantidad como punto de partida, no como definitiva: el usuario la
+// puede ajustar antes de guardar.
+function precargarParaMortandad({ establecimientoId, categoriaId, rodeoId, cantidad }) {
+  establecerSeleccion('mov-tipo', 'mortandad');
+  if (establecimientoId) establecerSeleccion('mov-establecimiento-origen', establecimientoId);
+  if (categoriaId) establecerSeleccion('mov-categoria-origen', categoriaId);
+  actualizarSelectsRodeo();
+  if (rodeoId) el('mov-rodeo').value = rodeoId;
+  actualizarTitularesOrigenDisponibles();
+  if (cantidad) el('mov-cabezas').value = cantidad;
+  location.hash = 'cargar';
+}
+
 // Salida/interna sacan cabezas del rodeo de origen — no puede haber más
 // saliendo que las que tiene. Solo se puede chequear con conexión (pide el
 // stock real a Supabase); si está offline se deja pasar como hasta ahora
@@ -687,4 +703,5 @@ export async function initMovimientos() {
   el('mov-form').addEventListener('submit', onSubmit);
   el('mov-editando-cancelar').addEventListener('click', cancelarEdicion);
   document.addEventListener('hacienda:editar-movimiento', (evento) => precargarParaEditar(evento.detail));
+  document.addEventListener('hacienda:precargar-mortandad', (evento) => precargarParaMortandad(evento.detail));
 }

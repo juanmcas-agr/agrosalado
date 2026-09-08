@@ -467,6 +467,124 @@ function limpiarManejo() {
   el('manga-destete-rodeo-vaquillona-nombre').value = '';
 }
 
+// ─── Diferencias pendientes: lista con acceso directo a resolverlas ───
+// Dos formas de resolver: corregir la cantidad trabajada (si fue un
+// error de tipeo, ej. "500" en vez de "50") o cargar el movimiento real
+// que explica la diferencia (mortandad, faltante, etc.) — para esto
+// último se precarga "Cargar movimiento" vía evento, mismo patrón que
+// usa historial.js para pedir la edición de un movimiento.
+
+function nombreCategoria(categoriaId) {
+  return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
+}
+
+async function editarCantidadTrabajada(trabajo) {
+  const nuevaTexto = prompt(`Cantidad trabajada correcta para ${trabajo.codigo} (rodeo ${trabajo.rodeoCodigo}):`, trabajo.cantidad_trabajada);
+  if (nuevaTexto === null) return;
+  const nueva = Number(nuevaTexto);
+  if (!Number.isInteger(nueva) || nueva <= 0) {
+    alert('Tiene que ser un entero mayor a 0.');
+    return;
+  }
+  let stockActual;
+  try {
+    stockActual = await stockDelRodeo(trabajo.rodeo_id);
+  } catch (error) {
+    alert('No se pudo verificar el stock del rodeo: ' + error.message);
+    return;
+  }
+  const sigueDiferente = nueva !== stockActual;
+  const { error } = await supabase
+    .from('trabajos_manga')
+    .update({
+      cantidad_trabajada: nueva,
+      diferencia_pendiente: sigueDiferente,
+      resuelto_por_movimiento_id: null,
+      resuelto_at: sigueDiferente ? null : new Date().toISOString(),
+    })
+    .eq('id', trabajo.id);
+  if (error) {
+    alert('No se pudo guardar: ' + error.message);
+    return;
+  }
+  if (sigueDiferente) {
+    alert(`Guardado, pero ${nueva} todavía no coincide con el stock actual del rodeo (${stockActual}). Sigue pendiente.`);
+  }
+  await refrescarDiferenciasPendientes();
+}
+
+function pedirMovimientoParaDiferencia(trabajo) {
+  const rodeoCache = obtenerRodeosCache().find((r) => r.id === trabajo.rodeo_id);
+  document.dispatchEvent(new CustomEvent('hacienda:precargar-mortandad', {
+    detail: {
+      establecimientoId: rodeoCache?.establecimiento_id || null,
+      categoriaId: trabajo.categoria_id,
+      rodeoId: trabajo.rodeo_id,
+      cantidad: Math.abs(trabajo.cantidad_trabajada - trabajo.stockActualAlListar),
+    },
+  }));
+}
+
+function renderDiferenciasPendientes(pendientes) {
+  const bloque = el('manga-pendientes-bloque');
+  const contenedor = el('manga-pendientes-lista');
+  bloque.classList.toggle('oculto', !pendientes.length);
+  contenedor.innerHTML = '';
+  for (const trabajo of pendientes) {
+    const div = document.createElement('div');
+    div.className = 'pendiente-item';
+    const texto = document.createElement('div');
+    texto.className = 'pendiente-texto';
+    texto.textContent =
+      `${trabajo.codigo} — ${trabajo.fecha} — rodeo ${trabajo.rodeoCodigo} (${nombreCategoria(trabajo.categoria_id)}): ` +
+      `se trabajaron ${trabajo.cantidad_trabajada}, el rodeo tiene ${trabajo.stockActualAlListar} ahora.`;
+    div.appendChild(texto);
+
+    const botones = document.createElement('div');
+    botones.className = 'pendiente-botones';
+
+    const btnEditar = document.createElement('button');
+    btnEditar.type = 'button';
+    btnEditar.textContent = 'Corregir cantidad';
+    btnEditar.addEventListener('click', () => editarCantidadTrabajada(trabajo));
+    botones.appendChild(btnEditar);
+
+    const btnMovimiento = document.createElement('button');
+    btnMovimiento.type = 'button';
+    btnMovimiento.className = 'boton-secundario';
+    btnMovimiento.textContent = 'Cargar movimiento que lo explica';
+    btnMovimiento.addEventListener('click', () => pedirMovimientoParaDiferencia(trabajo));
+    botones.appendChild(btnMovimiento);
+
+    div.appendChild(botones);
+    contenedor.appendChild(div);
+  }
+}
+
+export async function refrescarDiferenciasPendientes() {
+  if (!navigator.onLine) return;
+  const { data, error } = await supabase
+    .from('trabajos_manga')
+    .select('id, codigo, fecha, rodeo_id, categoria_id, cantidad_trabajada')
+    .eq('diferencia_pendiente', true)
+    .order('fecha', { ascending: false });
+  if (error) { console.warn('No se pudieron cargar las diferencias pendientes:', error); return; }
+
+  const pendientes = [];
+  for (const trabajo of data) {
+    let stockActualAlListar = null;
+    try {
+      stockActualAlListar = await stockDelRodeo(trabajo.rodeo_id);
+    } catch (error) {
+      console.warn('No se pudo verificar el stock de un pendiente:', error);
+      continue;
+    }
+    const rodeoCache = obtenerRodeosCache().find((r) => r.id === trabajo.rodeo_id);
+    pendientes.push({ ...trabajo, stockActualAlListar, rodeoCodigo: rodeoCache?.codigo || trabajo.rodeo_id });
+  }
+  renderDiferenciasPendientes(pendientes);
+}
+
 function mostrarMensaje(texto, tipo) {
   const contenedor = el('manga-mensaje');
   contenedor.textContent = texto;
@@ -617,6 +735,7 @@ async function onSubmit(evento) {
     mostrarMensaje('✅ Trabajo de manga guardado.', 'ok');
   }
   resetFormulario();
+  refrescarDiferenciasPendientes();
 }
 
 export async function initTrabajoManga() {
@@ -635,4 +754,5 @@ export async function initTrabajoManga() {
   inicializarSelectorRodeoDestino('novillito', 'novillito');
   inicializarSelectorRodeoDestino('vaquillona', 'vaquillona');
   el('manga-form').addEventListener('submit', onSubmit);
+  refrescarDiferenciasPendientes();
 }

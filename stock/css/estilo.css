@@ -241,6 +241,24 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 
 .boton-seccion { width: 100%; font-size: 1em; }
 
+.pendiente-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  border: 1px solid #f0c36d;
+  border-radius: 8px;
+  background: #fff8e6;
+}
+.pendiente-item .pendiente-texto { font-size: 0.92em; }
+.pendiente-item .pendiente-botones { display: flex; gap: 8px; flex-wrap: wrap; }
+.pendiente-item .pendiente-botones button {
+  width: auto;
+  padding: 6px 10px;
+  font-size: 0.9em;
+}
+
 .bloque-condicional {
   display: flex;
   flex-direction: column;

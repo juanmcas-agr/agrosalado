@@ -261,6 +261,52 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   tbody.appendChild(trTotal);
 }
 
+// Detalle de rodeos de UN establecimiento — cabezas y kilos promedio
+// ponderado por rodeo (a diferencia de rodeosPorEstablecimiento, que solo
+// suma cabezas para el detalle plegable de "Por establecimiento").
+function rodeosDetalladosPorEstablecimiento(rows, establecimientoId) {
+  const acumulado = {};
+  for (const r of rows) {
+    if (r.establecimiento !== establecimientoId || !r.rodeo_id || r.cabezas <= 0) continue;
+    if (!acumulado[r.rodeo_id]) acumulado[r.rodeo_id] = { rodeoId: r.rodeo_id, rodeo: r.rodeo, categorias: new Set(), cabezas: 0, sumaKg: 0 };
+    const acc = acumulado[r.rodeo_id];
+    acc.categorias.add(r.categoria);
+    acc.cabezas += r.cabezas;
+    if (r.kilos_promedio_ponderado != null) acc.sumaKg += r.cabezas * r.kilos_promedio_ponderado;
+  }
+  return Object.values(acumulado)
+    .map((acc) => ({
+      rodeo: acc.rodeo,
+      categorias: [...acc.categorias].map((id) => CATEGORIAS.find((c) => c.id === id)?.nombre || id).join(', '),
+      cabezas: acc.cabezas,
+      kilosPromedio: acc.cabezas > 0 ? acc.sumaKg / acc.cabezas : null,
+    }))
+    .sort((a, b) => (a.rodeo || '').localeCompare(b.rodeo || ''));
+}
+
+function poblarSelectRodeosEstablecimiento() {
+  const select = el('dash-rodeos-establecimiento');
+  select.innerHTML = '<option value="">Elegir establecimiento...</option>';
+  for (const e of ESTABLECIMIENTOS) {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.nombre;
+    select.appendChild(opt);
+  }
+}
+
+function renderRodeosEstablecimiento() {
+  const establecimientoId = el('dash-rodeos-establecimiento').value;
+  const tabla = el('dash-rodeos-tabla');
+  if (!establecimientoId) { tabla.classList.add('oculto'); return; }
+  tabla.classList.remove('oculto');
+  const rodeos = rodeosDetalladosPorEstablecimiento(ultimasFilasStock, establecimientoId);
+  const tbody = tabla.querySelector('tbody');
+  tbody.innerHTML = rodeos.length
+    ? rodeos.map((r) => `<tr><td>${r.rodeo || ''}</td><td>${r.categorias}</td><td>${r.cabezas}</td><td>${formatearKilos(r.kilosPromedio)}</td></tr>`).join('')
+    : '<tr><td colspan="4">Sin rodeos con stock en este establecimiento.</td></tr>';
+}
+
 // ─── selectores de vista (Grupo / Agro Salado / Doña Julia / Capitalizadores) ───
 
 function poblarSelectCapitalizadores(idSelect) {
@@ -355,6 +401,7 @@ export async function refrescarDashboard() {
   renderResumenTitularidad(rows);
   renderTablaCategoria();
   renderTablaEstablecimiento();
+  renderRodeosEstablecimiento();
 }
 
 // Exporta la misma vista (titularidad + fecha) que está en pantalla: un
@@ -386,9 +433,11 @@ export async function initDashboard() {
   inicializarSelectorVista('dash-categoria-vista', 'dash-categoria-cap-wrap', 'dash-categoria-cap-select', renderTablaCategoria);
   inicializarSelectorVista('dash-establecimiento-vista', 'dash-establecimiento-cap-wrap', 'dash-establecimiento-cap-select', renderTablaEstablecimiento);
   poblarSelectExportarEstablecimiento();
+  poblarSelectRodeosEstablecimiento();
   el('dash-fecha').value = hoyISO();
   el('dash-fecha').addEventListener('change', refrescarDashboard);
   el('dash-actualizar').addEventListener('click', refrescarDashboard);
   el('dash-exportar').addEventListener('click', exportarStock);
+  el('dash-rodeos-establecimiento').addEventListener('change', renderRodeosEstablecimiento);
   refrescarDashboard();
 }

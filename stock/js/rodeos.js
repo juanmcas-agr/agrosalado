@@ -28,11 +28,14 @@ export function rodeosDeCategoria(categoriaId) {
 // El código (ej. "Vaquillona San Miguel 202601") se arma acá, no en la
 // base: año + secuencia salen de siguiente_secuencia_rodeo(), que es
 // atómica (RPC con función security definer) para que dos altas
-// simultáneas no puedan pisarse el mismo número.
+// simultáneas no puedan pisarse el mismo número. La secuencia es por
+// (año, nombre) — no un contador global compartido por todos los
+// rodeos del año — así "San Miguel" cuenta 01, 02, 03... indepen-
+// dientemente de "San Juan" 01, 02, 03...
 export async function crearRodeo({ nombre, categoriaId, establecimientoId, fechaCreacion, usuarioId }) {
   const fecha = fechaCreacion || new Date().toISOString().slice(0, 10);
   const anio = Number(fecha.slice(0, 4));
-  const { data: secuencia, error: errorSecuencia } = await supabase.rpc('siguiente_secuencia_rodeo', { p_anio: anio });
+  const { data: secuencia, error: errorSecuencia } = await supabase.rpc('siguiente_secuencia_rodeo', { p_anio: anio, p_nombre: nombre });
   if (errorSecuencia) throw errorSecuencia;
   const codigo = `${nombre} ${anio}${String(secuencia).padStart(2, '0')}`;
 

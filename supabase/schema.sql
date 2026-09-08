@@ -80,29 +80,33 @@ insert into tipos_movimiento
 -- reforma de Hacienda (rodeos/feed lot/trabajo de manga) gira en torno a
 -- esto — a partir de ahora todo movimiento de stock exige un rodeo_id.
 
--- Secuencia del código del rodeo, POR AÑO (reinicia a 01 cada año nuevo).
--- Función atómica (security definer) para que dos altas simultáneas no
--- puedan pisarse el mismo número — mismo criterio que
--- siguiente_numero_orden() de Granos, pero parametrizada por año en vez
--- de una sequence global.
+-- Secuencia del código del rodeo, POR AÑO Y NOMBRE (reinicia a 01 cada
+-- año nuevo, y cuenta aparte para cada nombre — "San Miguel" 01,02,03...
+-- no comparte contador con "San Juan" 01,02,03...). Función atómica
+-- (security definer) para que dos altas simultáneas no puedan pisarse
+-- el mismo número — mismo criterio que siguiente_numero_orden() de
+-- Granos, pero parametrizada por (año, nombre) en vez de una sequence
+-- global.
 create table rodeo_secuencias (
-  anio int primary key,
-  ultimo int not null default 0
+  anio int not null,
+  nombre text not null,
+  ultimo int not null default 0,
+  primary key (anio, nombre)
 );
 
-create or replace function siguiente_secuencia_rodeo(p_anio int) returns int
+create or replace function siguiente_secuencia_rodeo(p_anio int, p_nombre text) returns int
 language plpgsql security definer as $$
 declare
   v_valor int;
 begin
-  insert into rodeo_secuencias (anio, ultimo) values (p_anio, 1)
-  on conflict (anio) do update set ultimo = rodeo_secuencias.ultimo + 1
+  insert into rodeo_secuencias (anio, nombre, ultimo) values (p_anio, p_nombre, 1)
+  on conflict (anio, nombre) do update set ultimo = rodeo_secuencias.ultimo + 1
   returning ultimo into v_valor;
   return v_valor;
 end;
 $$;
 
-grant execute on function siguiente_secuencia_rodeo(int) to authenticated;
+grant execute on function siguiente_secuencia_rodeo(int, text) to authenticated;
 
 create table rodeos (
   id uuid primary key default gen_random_uuid(),
@@ -206,7 +210,12 @@ create table trabajos_manga (
   diferencia_pendiente boolean not null default false,
   usuario_id uuid not null references auth.users(id),
   observaciones text,
-  creado_at timestamptz not null default now()
+  creado_at timestamptz not null default now(),
+  -- Cómo se resolvió una diferencia pendiente: con un movimiento real
+  -- (resuelto_por_movimiento_id apunta a él) o corrigiendo la cantidad
+  -- trabajada a mano (resuelto_at seteado, resuelto_por_movimiento_id null).
+  resuelto_por_movimiento_id uuid references movimientos(id),
+  resuelto_at timestamptz
 );
 
 create index on trabajos_manga (rodeo_id);
@@ -224,6 +233,8 @@ alter table trabajo_manga_propietarios enable row level security;
 create policy trabajos_manga_select on trabajos_manga for select to authenticated using (true);
 create policy trabajos_manga_insert on trabajos_manga for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner') and usuario_id = auth.uid());
+create policy trabajos_manga_update on trabajos_manga for update to authenticated
+  using (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
 create policy trabajo_manga_propietarios_select on trabajo_manga_propietarios for select to authenticated using (true);
 create policy trabajo_manga_propietarios_insert on trabajo_manga_propietarios for insert to authenticated
@@ -243,7 +254,9 @@ begin
   loop
     select coalesce(sum(cabezas), 0) into v_stock from stock_actual where rodeo_id = v_rodeo_id;
     update trabajos_manga
-      set diferencia_pendiente = false
+      set diferencia_pendiente = false,
+          resuelto_por_movimiento_id = new.id,
+          resuelto_at = now()
       where rodeo_id = v_rodeo_id and diferencia_pendiente = true and cantidad_trabajada = v_stock;
   end loop;
   return new;
