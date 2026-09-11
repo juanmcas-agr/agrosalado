@@ -126,7 +126,7 @@ create table rodeos (
 
 alter table rodeos enable row level security;
 
-create policy rodeos_select on rodeos for select to authenticated using (true);
+create policy rodeos_select on rodeos for select to authenticated using (rol_actual() is not null);
 create policy rodeos_insert on rodeos for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner') and creado_por = auth.uid());
 create policy rodeos_update on rodeos for update to authenticated
@@ -157,7 +157,7 @@ create index on feed_lot_ciclos (activo) where activo = true;
 
 alter table feed_lot_ciclos enable row level security;
 
-create policy feed_lot_ciclos_select on feed_lot_ciclos for select to authenticated using (true);
+create policy feed_lot_ciclos_select on feed_lot_ciclos for select to authenticated using (rol_actual() is not null);
 create policy feed_lot_ciclos_insert on feed_lot_ciclos for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 create policy feed_lot_ciclos_update on feed_lot_ciclos for update to authenticated
@@ -238,13 +238,13 @@ create table trabajo_manga_propietarios (
 alter table trabajos_manga enable row level security;
 alter table trabajo_manga_propietarios enable row level security;
 
-create policy trabajos_manga_select on trabajos_manga for select to authenticated using (true);
+create policy trabajos_manga_select on trabajos_manga for select to authenticated using (rol_actual() is not null);
 create policy trabajos_manga_insert on trabajos_manga for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner') and usuario_id = auth.uid());
 create policy trabajos_manga_update on trabajos_manga for update to authenticated
   using (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy trabajo_manga_propietarios_select on trabajo_manga_propietarios for select to authenticated using (true);
+create policy trabajo_manga_propietarios_select on trabajo_manga_propietarios for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_propietarios_insert on trabajo_manga_propietarios for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
@@ -271,7 +271,7 @@ create unique index rectificaciones_pendientes_una_activa
 
 alter table rectificaciones_pendientes enable row level security;
 
-create policy rectificaciones_pendientes_select on rectificaciones_pendientes for select to authenticated using (true);
+create policy rectificaciones_pendientes_select on rectificaciones_pendientes for select to authenticated using (rol_actual() is not null);
 create policy rectificaciones_pendientes_insert on rectificaciones_pendientes for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner') and propuesto_por = auth.uid());
 create policy rectificaciones_pendientes_update on rectificaciones_pendientes for update to authenticated
@@ -355,27 +355,27 @@ alter table trabajo_manga_sanidad enable row level security;
 alter table trabajo_manga_vacunas enable row level security;
 alter table trabajo_manga_otras_sanidades enable row level security;
 
-create policy catalogo_drogas_select on catalogo_drogas for select to authenticated using (true);
+create policy catalogo_drogas_select on catalogo_drogas for select to authenticated using (rol_actual() is not null);
 create policy catalogo_drogas_insert on catalogo_drogas for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy catalogo_vacunas_reproductivas_select on catalogo_vacunas_reproductivas for select to authenticated using (true);
+create policy catalogo_vacunas_reproductivas_select on catalogo_vacunas_reproductivas for select to authenticated using (rol_actual() is not null);
 create policy catalogo_vacunas_reproductivas_insert on catalogo_vacunas_reproductivas for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy catalogo_otras_sanidades_select on catalogo_otras_sanidades for select to authenticated using (true);
+create policy catalogo_otras_sanidades_select on catalogo_otras_sanidades for select to authenticated using (rol_actual() is not null);
 create policy catalogo_otras_sanidades_insert on catalogo_otras_sanidades for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy trabajo_manga_sanidad_select on trabajo_manga_sanidad for select to authenticated using (true);
+create policy trabajo_manga_sanidad_select on trabajo_manga_sanidad for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_sanidad_insert on trabajo_manga_sanidad for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy trabajo_manga_vacunas_select on trabajo_manga_vacunas for select to authenticated using (true);
+create policy trabajo_manga_vacunas_select on trabajo_manga_vacunas for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_vacunas_insert on trabajo_manga_vacunas for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy trabajo_manga_otras_sanidades_select on trabajo_manga_otras_sanidades for select to authenticated using (true);
+create policy trabajo_manga_otras_sanidades_select on trabajo_manga_otras_sanidades for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_otras_sanidades_insert on trabajo_manga_otras_sanidades for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
@@ -404,15 +404,15 @@ alter table catalogo_toros enable row level security;
 alter table trabajo_manga_reproduccion enable row level security;
 alter table trabajo_manga_inseminacion_toros enable row level security;
 
-create policy catalogo_toros_select on catalogo_toros for select to authenticated using (true);
+create policy catalogo_toros_select on catalogo_toros for select to authenticated using (rol_actual() is not null);
 create policy catalogo_toros_insert on catalogo_toros for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy trabajo_manga_reproduccion_select on trabajo_manga_reproduccion for select to authenticated using (true);
+create policy trabajo_manga_reproduccion_select on trabajo_manga_reproduccion for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_reproduccion_insert on trabajo_manga_reproduccion for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy trabajo_manga_inseminacion_toros_select on trabajo_manga_inseminacion_toros for select to authenticated using (true);
+create policy trabajo_manga_inseminacion_toros_select on trabajo_manga_inseminacion_toros for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_inseminacion_toros_insert on trabajo_manga_inseminacion_toros for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
@@ -449,11 +449,11 @@ create table rodeo_pesadas_historial (
 alter table trabajo_manga_manejo enable row level security;
 alter table rodeo_pesadas_historial enable row level security;
 
-create policy trabajo_manga_manejo_select on trabajo_manga_manejo for select to authenticated using (true);
+create policy trabajo_manga_manejo_select on trabajo_manga_manejo for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_manejo_insert on trabajo_manga_manejo for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy rodeo_pesadas_historial_select on rodeo_pesadas_historial for select to authenticated using (true);
+create policy rodeo_pesadas_historial_select on rodeo_pesadas_historial for select to authenticated using (rol_actual() is not null);
 create policy rodeo_pesadas_historial_insert on rodeo_pesadas_historial for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
@@ -796,18 +796,29 @@ create or replace function rol_actual() returns text
 language sql security definer stable as
   $$ select rol from perfiles where user_id = auth.uid() $$;
 
-create policy perfiles_select on perfiles for select to authenticated using (true);
+-- Todas las políticas "for select ... using (true)" de este esquema se
+-- cambiaron a "using (rol_actual() is not null)" (mismo efecto para el
+-- personal interno — siempre tiene fila en perfiles con un rol — pero
+-- bloquea a cualquier autenticado que NO esté en perfiles). Hasta ahora eso
+-- no importaba porque la única forma de crear una cuenta autenticada era
+-- admin-crear-usuario.js (owner-only, siempre gente de la empresa). Con
+-- Logística se empiezan a dar de alta cuentas de transportistas (tabla
+-- aparte, no perfiles) que van a compartir el mismo proyecto de Supabase —
+-- sin este cambio, cualquiera de ellos podría leer directo, con las
+-- herramientas del navegador, datos de Hacienda/Granos/$Rel que no le
+-- corresponden (el gate de cada app hoy es solo de UI, no de datos).
+create policy perfiles_select on perfiles for select to authenticated using (rol_actual() is not null);
 create policy perfiles_update_self on perfiles for update to authenticated using (user_id = auth.uid());
 
-create policy lookup_select_establecimientos on establecimientos for select to authenticated using (true);
-create policy lookup_select_categorias on categorias for select to authenticated using (true);
-create policy lookup_select_tipos_movimiento on tipos_movimiento for select to authenticated using (true);
+create policy lookup_select_establecimientos on establecimientos for select to authenticated using (rol_actual() is not null);
+create policy lookup_select_categorias on categorias for select to authenticated using (rol_actual() is not null);
+create policy lookup_select_tipos_movimiento on tipos_movimiento for select to authenticated using (rol_actual() is not null);
 
-create policy titulares_select on titulares for select to authenticated using (true);
+create policy titulares_select on titulares for select to authenticated using (rol_actual() is not null);
 create policy titulares_insert on titulares for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
 
-create policy movimientos_select on movimientos for select to authenticated using (true);
+create policy movimientos_select on movimientos for select to authenticated using (rol_actual() is not null);
 
 create policy movimientos_insert on movimientos for insert to authenticated
   with check (
@@ -1124,7 +1135,7 @@ create table precios_relativos_productos (
 alter table precios_relativos_productos enable row level security;
 
 create policy precios_relativos_productos_select on precios_relativos_productos for select to authenticated
-  using (true);
+  using (rol_actual() is not null);
 create policy precios_relativos_productos_insert on precios_relativos_productos for insert to authenticated
   with check (rol_actual() = 'owner');
 create policy precios_relativos_productos_update on precios_relativos_productos for update to authenticated
@@ -1166,7 +1177,7 @@ create index precios_relativos_historial_fecha_idx on precios_relativos_historia
 alter table precios_relativos_historial enable row level security;
 
 create policy precios_relativos_historial_select on precios_relativos_historial for select to authenticated
-  using (true);
+  using (rol_actual() is not null);
 create policy precios_relativos_historial_insert on precios_relativos_historial for insert to authenticated
   with check (rol_actual() in ('encargado','administrativo','owner'));
 create policy precios_relativos_historial_update on precios_relativos_historial for update to authenticated
@@ -1192,7 +1203,7 @@ create table precios_relativos_indices (
 alter table precios_relativos_indices enable row level security;
 
 create policy precios_relativos_indices_select on precios_relativos_indices for select to authenticated
-  using (true);
+  using (rol_actual() is not null);
 create policy precios_relativos_indices_insert on precios_relativos_indices for insert to authenticated
   with check (rol_actual() = 'owner');
 create policy precios_relativos_indices_update on precios_relativos_indices for update to authenticated
@@ -1222,7 +1233,7 @@ create table precios_relativos_ratios_config (
 alter table precios_relativos_ratios_config enable row level security;
 
 create policy precios_relativos_ratios_config_select on precios_relativos_ratios_config for select to authenticated
-  using (true);
+  using (rol_actual() is not null);
 create policy precios_relativos_ratios_config_insert on precios_relativos_ratios_config for insert to authenticated
   with check (rol_actual() in ('encargado','administrativo','owner'));
 create policy precios_relativos_ratios_config_update on precios_relativos_ratios_config for update to authenticated
@@ -1339,7 +1350,7 @@ create table indices_valores (
 
 alter table indices_valores enable row level security;
 
-create policy indices_valores_select on indices_valores for select to authenticated using (true);
+create policy indices_valores_select on indices_valores for select to authenticated using (rol_actual() is not null);
 create policy indices_valores_insert on indices_valores for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner') and cargado_por = auth.uid());
 create policy indices_valores_update on indices_valores for update to authenticated
