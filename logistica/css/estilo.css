@@ -171,6 +171,14 @@ button:active { filter: brightness(0.9); }
 .tabla { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }
 .tabla th, .tabla td { padding: 8px 10px; border-bottom: 1px solid #eee; text-align: left; font-size: 0.85em; }
 .tabla thead th { background: #f2f2f2; color: #2c3e50; }
+.tabla tr.anulado { color: #999; }
+
+/* ─── grupos de checkbox/radio inline ─── */
+.check-inline { display: flex; align-items: center; gap: 8px; font-size: 0.9em; }
+.check-inline input[type="checkbox"], .check-inline input[type="radio"] {
+  width: auto; height: auto; margin: 0; -webkit-appearance: auto; appearance: auto;
+}
+.radio-grupo { display: flex; gap: 16px; }
 
 /* ─── mensajes / banners ─── */
 .mensaje { font-size: 0.9em; min-height: 1.2em; margin: 4px 0; }

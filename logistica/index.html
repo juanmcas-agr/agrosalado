@@ -50,8 +50,52 @@
     <!-- Vista de personal interno (owner/administrativo/encargado con
          acceso_logistica) — se completa en los próximos milestones. -->
     <div id="modo-staff" class="oculto">
-      <section id="pantalla-panel" data-screen="panel" class="oculto">
-        <p class="en-construccion">Panel de Logística — en construcción.</p>
+      <section id="pantalla-catalogo" data-screen="catalogo" class="oculto">
+        <h2>Transportistas</h2>
+        <div id="cat-transportistas-mensaje" class="mensaje"></div>
+        <div class="tabla-scroll">
+          <table id="cat-transportistas-tabla" class="tabla">
+            <thead>
+              <tr><th>Nombre</th><th>Email</th><th>Categoría</th><th>Empresa</th><th>CUIT</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <button type="button" id="cat-transportista-nuevo" class="boton-secundario">+ Nuevo transportista</button>
+
+        <div id="cat-transportista-form-bloque" class="oculto">
+          <h3 id="cat-transportista-form-titulo">Nuevo transportista</h3>
+          <form id="cat-transportista-form" class="formulario">
+            <input type="hidden" id="cat-transportista-user-id">
+            <label>Nombre completo <input id="cat-transportista-nombre" type="text" required></label>
+            <label>Email <input id="cat-transportista-email" type="email" required></label>
+            <label>Teléfono <input id="cat-transportista-telefono" type="tel"></label>
+            <div class="full radio-grupo">
+              <label class="check-inline"><input type="radio" name="cat-transportista-categoria" value="propio"> Propio</label>
+              <label class="check-inline"><input type="radio" name="cat-transportista-categoria" value="externo"> Externo</label>
+            </div>
+            <label class="full">Empresa (razón social, solo externos) <input id="cat-transportista-empresa" type="text"></label>
+            <label class="full">CUIT (solo externos) <input id="cat-transportista-cuit" type="text"></label>
+            <label class="full" id="cat-transportista-password-wrap">Contraseña <input id="cat-transportista-password" type="password" autocomplete="new-password"></label>
+            <label class="check-inline full"><input type="checkbox" id="cat-transportista-activo" checked> Activo</label>
+            <button type="submit" class="full">Guardar</button>
+            <button type="button" id="cat-transportista-cancelar" class="boton-secundario full">Cancelar</button>
+          </form>
+        </div>
+
+        <h2>Camiones</h2>
+        <div id="cat-camiones-mensaje" class="mensaje"></div>
+        <div class="tabla-scroll">
+          <table id="cat-camiones-tabla" class="tabla">
+            <thead><tr><th>Patente</th><th>Descripción</th><th>Estado</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <form id="cat-camion-form" class="formulario">
+          <label>Patente <input id="cat-camion-patente" type="text" required style="text-transform:uppercase;"></label>
+          <label>Descripción <input id="cat-camion-descripcion" type="text"></label>
+          <button type="submit" class="full">Agregar camión</button>
+        </form>
       </section>
     </div>
 
