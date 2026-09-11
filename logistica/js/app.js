@@ -1,13 +1,5 @@
 import { initAuth, onAuthChange, iniciarSesion, cerrarSesion, getEstado } from './auth.js';
-import { initSync, onSyncChange, reintentarErrores } from './sync.js';
-import { initMovimientos } from './movimientos.js';
-import { initTrabajoManga } from './trabajoManga.js';
-import { initDashboard } from './dashboard.js';
-import { initHistorial } from './historial.js';
-import { initReportes } from './reportes.js';
-import { initIndicesRecordatorio } from './indices.js';
 import { initRouter } from './router.js';
-import { initConfigPanel } from './configPanel.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -15,51 +7,10 @@ function el(id) {
 
 let appIniciada = false;
 
-function iniciarPantallasDeLaApp(rol) {
+function iniciarPantallasDeLaApp(modo) {
   if (appIniciada) return;
   appIniciada = true;
-  initMovimientos();
-  initTrabajoManga();
-  initDashboard();
-  initHistorial();
-  initReportes();
-  initIndicesRecordatorio();
-  initRouter(rol);
-}
-
-function actualizarBannerSync({ pendientes, conError }) {
-  const banner = el('sync-estado');
-  if (conError) {
-    banner.textContent = `${conError} movimiento(s) con error de sincronización. Tocá para reintentar.`;
-    banner.className = 'banner-sync error clickeable';
-  } else if (pendientes) {
-    banner.textContent = `${pendientes} movimiento(s) pendiente(s) de sincronizar...`;
-    banner.className = 'banner-sync advertencia';
-  } else {
-    banner.textContent = 'Todo sincronizado.';
-    banner.className = 'banner-sync ok';
-  }
-}
-
-let reintentando = false;
-
-function wireSyncBanner() {
-  el('sync-estado').addEventListener('click', async () => {
-    if (reintentando) return;
-    reintentando = true;
-    const banner = el('sync-estado');
-    const original = banner.textContent;
-    banner.textContent = 'Reintentando...';
-    try {
-      const erroresRestantes = await reintentarErrores();
-      if (erroresRestantes.length) {
-        alert('Todavía no se pudieron sincronizar. Error de Supabase:\n\n' + erroresRestantes.join('\n'));
-      }
-    } finally {
-      reintentando = false;
-      if (banner.textContent === 'Reintentando...') banner.textContent = original;
-    }
-  });
+  initRouter(modo);
 }
 
 function mostrarLogin(mensajeError) {
@@ -69,13 +20,34 @@ function mostrarLogin(mensajeError) {
     el('login-mensaje').textContent = mensajeError;
     el('login-mensaje').className = 'error';
   }
+  // A diferencia de las otras 3 apps (un solo modo posible), acá la
+  // siguiente sesión en esta misma pestaña podría ser de un modo distinto
+  // (staff -> transportista o viceversa) — hay que permitir que
+  // iniciarPantallasDeLaApp() vuelva a correr para el modo nuevo.
+  appIniciada = false;
 }
 
-function mostrarApp(perfil) {
+// A diferencia de las otras 3 apps (un solo tipo de pantalla), acá hay dos
+// vistas completamente distintas según el modo — personal interno ve la
+// barra de navegación cruzada a las otras apps, un transportista no (no es
+// personal de la empresa, no tiene por qué ver Hacienda/Granos/$Rel).
+function mostrarApp(estado) {
   el('pantalla-login').classList.add('oculto');
   el('app-shell').classList.remove('oculto');
-  el('usuario-nombre').textContent = `${perfil.nombre_completo} (${perfil.rol})`;
-  iniciarPantallasDeLaApp(perfil.rol);
+
+  const esStaff = estado.modo === 'staff';
+  el('modo-staff').classList.toggle('oculto', !esStaff);
+  el('modo-transportista').classList.toggle('oculto', esStaff);
+  el('tab-bar-logistica').classList.toggle('oculto', !esStaff);
+
+  if (esStaff) {
+    el('usuario-nombre').textContent = `${estado.perfil.nombre_completo} (${estado.perfil.rol})`;
+  } else {
+    const etiqueta = estado.transportista.categoria === 'propio' ? 'chofer propio' : 'transportista externo';
+    el('usuario-nombre').textContent = `${estado.transportista.nombre_completo} (${etiqueta})`;
+  }
+
+  iniciarPantallasDeLaApp(estado.modo);
 }
 
 function wireTabBar() {
@@ -86,6 +58,14 @@ function wireTabBar() {
       return;
     }
     window.location.href = '/';
+  });
+  el('tabbar-hacienda').addEventListener('click', () => {
+    const perfil = getEstado().perfil;
+    if (perfil?.rol !== 'owner' && !perfil?.acceso_hacienda) {
+      alert('No tenés permisos para acceder a Hacienda.');
+      return;
+    }
+    window.location.href = '/stock/';
   });
   el('tabbar-posgranaria').addEventListener('click', () => {
     if (getEstado().perfil?.rol !== 'owner') {
@@ -101,14 +81,6 @@ function wireTabBar() {
       return;
     }
     window.location.href = '/rel/';
-  });
-  el('tabbar-logistica').addEventListener('click', () => {
-    const perfil = getEstado().perfil;
-    if (perfil?.rol !== 'owner' && !perfil?.acceso_logistica) {
-      alert('No tenés permisos para acceder a Logística.');
-      return;
-    }
-    window.location.href = '/logistica/';
   });
 }
 
@@ -154,24 +126,29 @@ function wireAuth() {
       mostrarLogin();
       return;
     }
-    if (!estado.perfil) {
-      mostrarLogin('Tu usuario no tiene un perfil asignado en el sistema. Contactá al administrador.');
+    if (!estado.modo) {
+      mostrarLogin('Tu usuario no tiene un perfil ni una cuenta de transportista asignada en el sistema. Contactá al administrador.');
       return;
     }
-    // Un owner siempre tiene acceso total; para el resto hace falta el
-    // tilde explícito de "Acceso a Hacienda" (Configuración > Administrar
-    // usuarios, en Granos).
-    if (estado.perfil.rol !== 'owner' && estado.perfil.acceso_hacienda === false) {
-      mostrarLogin('No tenés acceso a Hacienda. Contactá al administrador.');
+    if (estado.modo === 'staff') {
+      // Un owner siempre tiene acceso total; para el resto hace falta el
+      // tilde explícito de "Acceso a Logística".
+      if (estado.perfil.rol !== 'owner' && estado.perfil.acceso_logistica === false) {
+        mostrarLogin('No tenés acceso a Logística. Contactá al administrador.');
+        return;
+      }
+    } else if (estado.transportista.activo === false) {
+      mostrarLogin('Tu cuenta de transportista está inactiva. Contactá al administrador.');
       return;
     }
-    mostrarApp(estado.perfil);
+    mostrarApp(estado);
   });
 }
 
 async function main() {
-  // Versión única compartida con Granos: /version.json en la raíz del sitio
-  // (funciona igual desde /stock/ porque es una ruta absoluta).
+  // Versión única compartida con Granos/Hacienda/$Rel: /version.json en la
+  // raíz del sitio (funciona igual desde /logistica/ porque es una ruta
+  // absoluta).
   fetch('/version.json').then((r) => r.json()).then((d) => {
     el('version-footer').textContent = `v.${d.version}`;
   }).catch(() => {});
@@ -179,11 +156,7 @@ async function main() {
   wireLogin();
   wireMostrarClave();
   wireAuth();
-  wireSyncBanner();
-  initConfigPanel();
-  onSyncChange(actualizarBannerSync);
   await initAuth();
-  initSync();
 }
 
 main();

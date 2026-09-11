@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AGROSALADO Logística</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="AGROSALADO Logística">
+  <link rel="apple-touch-icon" href="/assets/icon-512.png">
+  <link rel="icon" href="/assets/icon-64.png">
+  <link rel="stylesheet" href="css/estilo.css">
+</head>
+<body>
+
+  <div class="fondo-fijo"></div>
+
+  <div id="version-footer" class="version-footer"></div>
+
+  <div class="app-layout">
+  <div class="app-scroll">
+
+  <!-- ─── LOGIN ─── (mismo mecanismo que las otras 3 apps: Supabase Auth,
+       email + contraseña — acá el login es compartido por personal interno
+       y transportistas, auth.js decide el modo según dónde encuentre el
+       user_id) -->
+  <section id="pantalla-login" class="pantalla-login">
+    <img src="/assets/logo-full.png" alt="AGROSALADO" class="login-logo">
+    <form id="login-form" class="formulario">
+      <input id="login-email" type="email" placeholder="Email" required autocomplete="username">
+      <div class="campo-password">
+        <input id="login-password" type="password" placeholder="Contraseña" required autocomplete="current-password">
+        <button type="button" id="login-mostrar-clave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
+      </div>
+      <button type="submit">Ingresar</button>
+      <div id="login-mensaje" class="mensaje"></div>
+    </form>
+  </section>
+
+  <!-- ─── APP ─── -->
+  <div id="app-shell" class="oculto">
+    <header class="encabezado">
+      <h1 class="titulo-app">LOGÍSTICA</h1>
+      <div class="encabezado-rincon">
+        <button id="logout-boton" class="boton-secundario">Salir</button>
+        <span id="usuario-nombre"></span>
+      </div>
+    </header>
+
+    <!-- Vista de personal interno (owner/administrativo/encargado con
+         acceso_logistica) — se completa en los próximos milestones. -->
+    <div id="modo-staff" class="oculto">
+      <section id="pantalla-panel" data-screen="panel" class="oculto">
+        <p class="en-construccion">Panel de Logística — en construcción.</p>
+      </section>
+    </div>
+
+    <!-- Vista de transportista (propio o externo) — se completa en los
+         próximos milestones. -->
+    <div id="modo-transportista" class="oculto">
+      <section id="pantalla-mis-viajes" data-screen="mis-viajes" class="oculto">
+        <p class="en-construccion">Mis viajes — en construcción.</p>
+      </section>
+    </div>
+  </div>
+
+  </div>
+
+  <nav id="tab-bar-logistica" class="tab-bar-inferior oculto">
+    <button type="button" id="tabbar-granos"><span class="tab-icono">🌾</span> Granos</button>
+    <button type="button" id="tabbar-hacienda"><span class="tab-icono">🐄</span> Hacienda</button>
+    <button type="button" id="tabbar-posgranaria"><span class="tab-icono">📈</span> Pos. Granaria</button>
+    <button type="button" id="tabbar-rel"><span class="tab-icono">💹</span> $Rel</button>
+    <button type="button" class="activo" disabled><span class="tab-icono">🚚</span> Logística</button>
+  </nav>
+
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

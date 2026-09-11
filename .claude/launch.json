@@ -18,6 +18,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["http-server", "rel", "-p", "8082", "-c-1"],
       "port": 8082
+    },
+    {
+      "name": "logistica-app",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["http-server", "logistica", "-p", "8083", "-c-1"],
+      "port": 8083
     }
   ]
 }

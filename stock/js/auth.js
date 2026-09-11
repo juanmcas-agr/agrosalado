@@ -21,7 +21,7 @@ export function onAuthChange(callback) {
 async function cargarPerfil(userId) {
   const { data, error } = await supabase
     .from('perfiles')
-    .select('user_id, nombre_completo, rol, activo, acceso_hacienda, acceso_granos, acceso_precios_relativos')
+    .select('user_id, nombre_completo, rol, activo, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica')
     .eq('user_id', userId)
     .single();
   if (error) {
