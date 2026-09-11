@@ -112,13 +112,19 @@ function estaBloqueado(v) {
 function renderMisViajes() {
   const tbody = el('mv-tabla').querySelector('tbody');
   if (!viajesCache.length) {
-    tbody.innerHTML = '<tr><td colspan="10">Sin viajes cargados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11">Sin viajes cargados.</td></tr>';
     return;
   }
   tbody.innerHTML = '';
   for (const v of viajesCache) {
     const tr = document.createElement('tr');
+    // Solo un externo puede seleccionar, y solo si el viaje todavía no
+    // forma parte de ninguna liquidación (pendiente, aceptada o
+    // rechazada) — una vez liberado por un rechazo (M7) vuelve a tener
+    // liquidacion_id null y se puede volver a seleccionar.
+    const puedeSeleccionar = esExterno() && !v.liquidacion_id;
     tr.innerHTML = `
+      <td>${puedeSeleccionar ? `<input type="checkbox" class="mv-check" value="${v.id}">` : ''}</td>
       <td>${v.codigo}</td>
       <td>${v.fecha_carga}</td>
       <td>${v.camion_patente}</td>
@@ -173,6 +179,82 @@ export async function cargarMisViajes() {
   }
   viajesCache = data;
   renderMisViajes();
+}
+
+// ─── Enviar a liquidar / Mis liquidaciones (solo externos) ─────────────
+
+function textoEstadoCorto(estado) {
+  if (estado === 'aceptada') return 'Apto para facturar';
+  if (estado === 'pendiente') return 'Pendiente de revisión';
+  return 'Rechazada';
+}
+
+function renderMisLiquidaciones(liquidaciones) {
+  const tbody = el('mv-liquidaciones-tabla').querySelector('tbody');
+  if (!liquidaciones.length) {
+    tbody.innerHTML = '<tr><td colspan="7">Todavía no enviaste ninguna liquidación.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = liquidaciones.map((l) => `
+    <tr>
+      <td>${l.codigo || '—'}</td>
+      <td>${textoEstadoCorto(l.estado)}</td>
+      <td>${new Date(l.enviado_at).toLocaleDateString('es-AR')}</td>
+      <td>${l.cantidad_viajes}</td>
+      <td>${l.total_tn}</td>
+      <td>${l.total_km}</td>
+      <td>${l.motivo_rechazo || ''}</td>
+    </tr>
+  `).join('');
+}
+
+export async function cargarMisLiquidaciones() {
+  if (!esExterno()) return;
+  const mensaje = el('mv-liquidaciones-mensaje');
+  mensaje.textContent = '';
+  const { data, error } = await supabase.from('liquidaciones_transporte_detalle').select('*').order('enviado_at', { ascending: false });
+  if (error) {
+    mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+  renderMisLiquidaciones(data);
+}
+
+async function enviarALiquidar() {
+  const mensaje = el('mv-mensaje');
+  mensaje.textContent = '';
+  const seleccionados = [...document.querySelectorAll('.mv-check:checked')].map((c) => c.value);
+  if (!seleccionados.length) {
+    mensaje.textContent = 'Elegí al menos un viaje para enviar a liquidar.';
+    mensaje.className = 'error';
+    return;
+  }
+  if (!confirm(`¿Enviar ${seleccionados.length} viaje(s) a liquidar? Mientras esté pendiente de revisión los vas a poder seguir editando.`)) return;
+
+  const { session } = getEstado();
+  const { data: liquidacion, error: errorLiq } = await supabase
+    .from('liquidaciones_transporte')
+    .insert({ transportista_id: session.user.id, enviado_por: session.user.id })
+    .select()
+    .single();
+  if (errorLiq) {
+    mensaje.textContent = `No se pudo crear la liquidación: ${errorLiq.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+
+  const { error: errorUpdate } = await supabase.from('viajes').update({ liquidacion_id: liquidacion.id }).in('id', seleccionados);
+  if (errorUpdate) {
+    mensaje.textContent = `La liquidación se creó pero no se pudieron vincular los viajes: ${errorUpdate.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+
+  await cargarMisViajes();
+  await cargarMisLiquidaciones();
+  mensaje.textContent = `Liquidación enviada con ${seleccionados.length} viaje(s) — queda pendiente de revisión.`;
+  mensaje.className = 'ok';
 }
 
 async function guardarViaje(evento) {
@@ -246,6 +328,7 @@ async function guardarViaje(evento) {
 export async function cargarPantallaMisViajes() {
   await cargarCamionesSelect();
   await cargarMisViajes();
+  await cargarMisLiquidaciones();
 }
 
 export function initMisViajes() {
@@ -253,4 +336,9 @@ export function initMisViajes() {
   el('viaje-form').addEventListener('submit', guardarViaje);
   el('viaje-cancelar-edicion').addEventListener('click', resetFormulario);
   el('mv-filtrar').addEventListener('click', cargarMisViajes);
+  el('mv-enviar-liquidar').addEventListener('click', enviarALiquidar);
+  // Solo externos agrupan viajes en liquidaciones — un propio no ve ni el
+  // botón ni el historial (para ellos no hay nada que facturar).
+  el('mv-liquidar-bloque').classList.toggle('oculto', !esExterno());
+  el('mv-liquidaciones-bloque').classList.toggle('oculto', !esExterno());
 }

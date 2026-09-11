@@ -190,13 +190,29 @@
           <button type="button" id="mv-filtrar" class="boton-secundario">Filtrar</button>
         </div>
         <div id="mv-mensaje" class="mensaje"></div>
+        <div id="mv-liquidar-bloque" class="oculto" style="margin-bottom:10px;">
+          <button type="button" id="mv-enviar-liquidar" class="boton-secundario">Enviar a liquidar los seleccionados</button>
+        </div>
         <div class="tabla-scroll">
           <table id="mv-tabla" class="tabla">
             <thead>
-              <tr><th>Código</th><th>Fecha</th><th>Camión</th><th>Origen → Destino</th><th>Mercadería</th><th>Km</th><th>Tn</th><th>Docs</th><th>Estado</th><th></th></tr>
+              <tr><th></th><th>Código</th><th>Fecha</th><th>Camión</th><th>Origen → Destino</th><th>Mercadería</th><th>Km</th><th>Tn</th><th>Docs</th><th>Estado</th><th></th></tr>
             </thead>
             <tbody></tbody>
           </table>
+        </div>
+
+        <div id="mv-liquidaciones-bloque" class="oculto">
+          <h2>Mis liquidaciones</h2>
+          <div id="mv-liquidaciones-mensaje" class="mensaje"></div>
+          <div class="tabla-scroll">
+            <table id="mv-liquidaciones-tabla" class="tabla">
+              <thead>
+                <tr><th>Código</th><th>Estado</th><th>Enviada</th><th>Viajes</th><th>Tn</th><th>Km</th><th>Motivo rechazo</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
         </div>
       </section>
     </div>
