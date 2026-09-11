@@ -53,6 +53,7 @@
       <nav class="tab-bar-inferior" style="position:static;box-shadow:none;margin-bottom:10px;border-radius:8px;overflow:hidden;">
         <button type="button" class="staff-tab" data-subpantalla="catalogo">Catálogo</button>
         <button type="button" class="staff-tab" data-subpantalla="viajes">Viajes</button>
+        <button type="button" class="staff-tab" data-subpantalla="liquidaciones">Liquidaciones</button>
       </nav>
 
       <section id="pantalla-catalogo" data-screen="catalogo" class="oculto">
@@ -147,6 +148,30 @@
             <button type="submit" class="full">Guardar cambios</button>
             <button type="button" id="av-cancelar" class="boton-secundario full">Cancelar</button>
           </form>
+        </div>
+      </section>
+
+      <section id="pantalla-liquidaciones" data-screen="liquidaciones" class="oculto">
+        <h2>Liquidaciones</h2>
+        <div class="filtros">
+          <label>Estado
+            <select id="al-filtro-estado">
+              <option value="pendiente" selected>Pendientes</option>
+              <option value="aceptada">Aceptadas</option>
+              <option value="rechazada">Rechazadas</option>
+              <option value="">Todas</option>
+            </select>
+          </label>
+          <button type="button" id="al-filtrar" class="boton-secundario">Filtrar</button>
+        </div>
+        <div id="al-mensaje" class="mensaje"></div>
+        <div class="tabla-scroll">
+          <table id="al-tabla" class="tabla">
+            <thead>
+              <tr><th>Código</th><th>Transportista</th><th>Estado</th><th>Enviada</th><th>Viajes</th><th>Tn</th><th>Km</th><th>Motivo rechazo</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </section>
     </div>

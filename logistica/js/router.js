@@ -3,9 +3,10 @@
 // próximos milestones (liquidaciones/cerrar-mes).
 import { cargarCatalogo, initCatalogo } from './catalogo.js';
 import { cargarPantallaViajesStaff, initViajesStaff } from './adminViajes.js';
+import { cargarLiquidacionesStaff, initLiquidacionesStaff } from './adminLiquidaciones.js';
 import { cargarPantallaMisViajes, initMisViajes } from './viajes.js';
 
-const PANTALLAS_STAFF = ['catalogo', 'viajes'];
+const PANTALLAS_STAFF = ['catalogo', 'viajes', 'liquidaciones'];
 const PANTALLAS_TRANSPORTISTA = ['mis-viajes'];
 
 function el(id) {
@@ -35,6 +36,7 @@ function renderRoute() {
     });
     if (pantalla === 'catalogo') cargarCatalogo();
     if (pantalla === 'viajes') cargarPantallaViajesStaff();
+    if (pantalla === 'liquidaciones') cargarLiquidacionesStaff();
   }
   if (modoActual === 'transportista' && pantalla === 'mis-viajes') cargarPantallaMisViajes();
 }
@@ -44,6 +46,7 @@ export function initRouter(modo) {
   if (modo === 'staff') {
     initCatalogo();
     initViajesStaff();
+    initLiquidacionesStaff();
     document.querySelectorAll('.staff-tab').forEach((btn) => {
       btn.addEventListener('click', () => { location.hash = btn.dataset.subpantalla; });
     });
