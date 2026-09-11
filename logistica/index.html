@@ -101,7 +101,7 @@
 
     <!-- Vista de transportista (propio o externo). Adjuntos (carta de
          porte / ticket de pesada) se agregan en el próximo milestone —
-         acá todavía no hay forma de subirlos. -->
+         acá se suben a Storage. -->
     <div id="modo-transportista" class="oculto">
       <section id="pantalla-mis-viajes" data-screen="mis-viajes" class="oculto">
         <h2 id="viaje-form-titulo">Cargar viaje</h2>
@@ -117,6 +117,15 @@
           <label>Km <input id="viaje-km" type="number" min="0" step="1"></label>
           <label>Tn <input id="viaje-tn" type="number" min="0" step="0.01"></label>
           <label class="full">Observaciones <textarea id="viaje-observaciones" rows="2"></textarea></label>
+          <label class="full">Carta de porte <span id="viaje-carta-porte-requerido" class="oculto">(obligatorio)</span>
+            <input id="viaje-carta-porte" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf">
+          </label>
+          <div id="viaje-carta-porte-actual" class="ayuda full oculto"></div>
+          <label class="full">Ticket de pesada <span id="viaje-ticket-pesada-requerido" class="oculto">(obligatorio)</span>
+            <input id="viaje-ticket-pesada" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf">
+          </label>
+          <div id="viaje-ticket-pesada-actual" class="ayuda full oculto"></div>
+          <p class="ayuda full">Formatos aceptados: PNG, JPG, JPEG o PDF — hasta 10 MB por archivo.</p>
           <button type="submit" class="full" id="viaje-guardar-btn">Guardar viaje</button>
           <button type="button" id="viaje-cancelar-edicion" class="boton-secundario full oculto">Cancelar edición</button>
           <div id="viaje-form-mensaje" class="mensaje full"></div>
@@ -132,7 +141,7 @@
         <div class="tabla-scroll">
           <table id="mv-tabla" class="tabla">
             <thead>
-              <tr><th>Código</th><th>Fecha</th><th>Camión</th><th>Origen → Destino</th><th>Mercadería</th><th>Km</th><th>Tn</th><th>Estado</th><th></th></tr>
+              <tr><th>Código</th><th>Fecha</th><th>Camión</th><th>Origen → Destino</th><th>Mercadería</th><th>Km</th><th>Tn</th><th>Docs</th><th>Estado</th><th></th></tr>
             </thead>
             <tbody></tbody>
           </table>

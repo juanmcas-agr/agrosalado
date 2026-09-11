@@ -1,6 +1,6 @@
 // Lado chofer (propio o externo): cargar/editar/eliminar sus propios
-// viajes. Adjuntos (carta de porte / ticket de pesada) se agregan en el
-// próximo milestone junto con Storage — acá quedan nullable.
+// viajes, con carta de porte / ticket de pesada obligatorios para
+// externos (opcionales para propios).
 //
 // La RLS es la que realmente decide qué se puede tocar (ver
 // supabase/schema.sql, viajes_update/viajes_delete): un propio nunca
@@ -9,8 +9,15 @@
 // hace falta ocultar los botones de Editar/Eliminar para un externo cuya
 // liquidación ya fue aceptada (sigue viendo el viaje, para ver el código,
 // pero ya no lo puede tocar).
+//
+// Los adjuntos se suben a Storage ANTES de insertar la fila: el id del
+// viaje se genera acá mismo (crypto.randomUUID()), no lo asigna la base,
+// para poder armar la ruta viajes/{transportista}/{viaje}/... y que el
+// insert ya llegue con los dos paths cargados (el trigger validar_viaje()
+// exige ambos para externos — ver schema.sql).
 import { supabase } from './supabaseClient.js';
 import { getEstado } from './auth.js';
+import { subirDocumento, urlFirmadaDocumento } from './storage.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -19,6 +26,10 @@ function el(id) {
 let camionesCache = [];
 let viajesCache = [];
 let editandoId = null;
+
+function esExterno() {
+  return getEstado().transportista.categoria === 'externo';
+}
 
 async function cargarCamionesSelect() {
   const { data, error } = await supabase.from('camiones').select('*').eq('activo', true).order('patente');
@@ -33,6 +44,12 @@ async function cargarCamionesSelect() {
     + camionesCache.map((c) => `<option value="${c.id}">${c.patente}</option>`).join('');
 }
 
+function actualizarRequeridosAdjuntos() {
+  const requerido = esExterno();
+  el('viaje-carta-porte-requerido').classList.toggle('oculto', !requerido);
+  el('viaje-ticket-pesada-requerido').classList.toggle('oculto', !requerido);
+}
+
 function resetFormulario() {
   editandoId = null;
   el('viaje-form').reset();
@@ -42,6 +59,26 @@ function resetFormulario() {
   el('viaje-guardar-btn').textContent = 'Guardar viaje';
   el('viaje-cancelar-edicion').classList.add('oculto');
   el('viaje-form-mensaje').textContent = '';
+  el('viaje-carta-porte-actual').classList.add('oculto');
+  el('viaje-ticket-pesada-actual').classList.add('oculto');
+  actualizarRequeridosAdjuntos();
+}
+
+async function mostrarLinkActual(idContenedor, path, etiqueta) {
+  const div = el(idContenedor);
+  if (!path) {
+    div.classList.add('oculto');
+    div.innerHTML = '';
+    return;
+  }
+  div.classList.remove('oculto');
+  div.textContent = `${etiqueta} ya cargado(a) — generando enlace...`;
+  try {
+    const url = await urlFirmadaDocumento(path);
+    div.innerHTML = `${etiqueta} ya cargado(a) — <a href="${url}" target="_blank" rel="noopener">ver archivo actual</a>. Elegí uno nuevo abajo solo si lo querés reemplazar.`;
+  } catch (error) {
+    div.textContent = `${etiqueta}: no se pudo generar el enlace (${error.message})`;
+  }
 }
 
 function editarViaje(v) {
@@ -55,9 +92,14 @@ function editarViaje(v) {
   el('viaje-km').value = v.km ?? '';
   el('viaje-tn').value = v.tn ?? '';
   el('viaje-observaciones').value = v.observaciones || '';
+  el('viaje-carta-porte').value = '';
+  el('viaje-ticket-pesada').value = '';
+  mostrarLinkActual('viaje-carta-porte-actual', v.carta_porte_path, 'Carta de porte');
+  mostrarLinkActual('viaje-ticket-pesada-actual', v.ticket_pesada_path, 'Ticket de pesada');
   el('viaje-form-titulo').textContent = `Editar viaje ${v.codigo}`;
   el('viaje-guardar-btn').textContent = 'Guardar cambios';
   el('viaje-cancelar-edicion').classList.remove('oculto');
+  actualizarRequeridosAdjuntos();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -88,13 +130,43 @@ function textoEstado(v) {
   if (!v.liquidacion_estado) return 'Sin liquidar';
   if (v.liquidacion_estado === 'aceptada') return `Apto para facturar (${v.liquidacion_codigo})`;
   if (v.liquidacion_estado === 'pendiente') return 'En liquidación pendiente';
-  return `Liquidación rechazada`;
+  return 'Liquidación rechazada';
+}
+
+async function verDocumento(path) {
+  try {
+    const url = await urlFirmadaDocumento(path);
+    window.open(url, '_blank', 'noopener');
+  } catch (error) {
+    alert('No se pudo abrir el archivo: ' + error.message);
+  }
+}
+
+function celdaDocs(v) {
+  const td = document.createElement('td');
+  if (v.carta_porte_path) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'boton-secundario';
+    btn.textContent = 'C. porte';
+    btn.addEventListener('click', () => verDocumento(v.carta_porte_path));
+    td.appendChild(btn);
+  }
+  if (v.ticket_pesada_path) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'boton-secundario';
+    btn.textContent = 'T. pesada';
+    btn.addEventListener('click', () => verDocumento(v.ticket_pesada_path));
+    td.appendChild(btn);
+  }
+  return td;
 }
 
 function renderMisViajes() {
   const tbody = el('mv-tabla').querySelector('tbody');
   if (!viajesCache.length) {
-    tbody.innerHTML = '<tr><td colspan="9">Sin viajes cargados.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10">Sin viajes cargados.</td></tr>';
     return;
   }
   tbody.innerHTML = '';
@@ -108,23 +180,27 @@ function renderMisViajes() {
       <td>${v.mercaderia}</td>
       <td>${v.km ?? ''}</td>
       <td>${v.tn ?? ''}</td>
-      <td>${textoEstado(v)}</td>
-      <td></td>
     `;
+    tr.appendChild(celdaDocs(v));
+    const tdEstado = document.createElement('td');
+    tdEstado.textContent = textoEstado(v);
+    tr.appendChild(tdEstado);
+    const tdAcciones = document.createElement('td');
+    tr.appendChild(tdAcciones);
     if (!estaBloqueado(v)) {
       const btnEditar = document.createElement('button');
       btnEditar.type = 'button';
       btnEditar.className = 'boton-secundario';
       btnEditar.textContent = 'Editar';
       btnEditar.addEventListener('click', () => editarViaje(v));
-      tr.lastElementChild.appendChild(btnEditar);
+      tdAcciones.appendChild(btnEditar);
 
       const btnEliminar = document.createElement('button');
       btnEliminar.type = 'button';
       btnEliminar.className = 'boton-anular';
       btnEliminar.textContent = 'Eliminar';
       btnEliminar.addEventListener('click', () => eliminarViaje(v));
-      tr.lastElementChild.appendChild(btnEliminar);
+      tdAcciones.appendChild(btnEliminar);
     }
     tbody.appendChild(tr);
   }
@@ -166,6 +242,8 @@ async function guardarViaje(evento) {
   const km = el('viaje-km').value ? Number(el('viaje-km').value) : null;
   const tn = el('viaje-tn').value ? Number(el('viaje-tn').value) : null;
   const observaciones = el('viaje-observaciones').value.trim() || null;
+  const archivoCartaPorte = el('viaje-carta-porte').files[0] || null;
+  const archivoTicketPesada = el('viaje-ticket-pesada').files[0] || null;
 
   if (!fecha_carga || !camion_id || !origen || !destino || !mercaderia) {
     mensaje.textContent = 'Completá fecha, camión, origen, destino y mercadería.';
@@ -177,14 +255,35 @@ async function guardarViaje(evento) {
     mensaje.className = 'error';
     return;
   }
+  if (esExterno()) {
+    const viajeActual = editandoId ? viajesCache.find((v) => v.id === editandoId) : null;
+    const tieneCartaPorte = !!archivoCartaPorte || !!viajeActual?.carta_porte_path;
+    const tieneTicketPesada = !!archivoTicketPesada || !!viajeActual?.ticket_pesada_path;
+    if (!tieneCartaPorte || !tieneTicketPesada) {
+      mensaje.textContent = 'Para transportistas externos, la carta de porte y el ticket de pesada son obligatorios.';
+      mensaje.className = 'error';
+      return;
+    }
+  }
 
+  const { session } = getEstado();
+  const viajeId = editandoId || crypto.randomUUID();
   const datos = { fecha_carga, camion_id, origen, destino, mercaderia, km, tn, observaciones };
+
+  try {
+    if (archivoCartaPorte) datos.carta_porte_path = await subirDocumento(session.user.id, viajeId, 'carta_porte', archivoCartaPorte);
+    if (archivoTicketPesada) datos.ticket_pesada_path = await subirDocumento(session.user.id, viajeId, 'ticket_pesada', archivoTicketPesada);
+  } catch (error) {
+    mensaje.textContent = `No se pudo subir el archivo: ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+
   let error;
   if (editandoId) {
     ({ error } = await supabase.from('viajes').update(datos).eq('id', editandoId));
   } else {
-    const { session } = getEstado();
-    ({ error } = await supabase.from('viajes').insert({ ...datos, transportista_id: session.user.id, cargado_por: session.user.id }));
+    ({ error } = await supabase.from('viajes').insert({ id: viajeId, ...datos, transportista_id: session.user.id, cargado_por: session.user.id }));
   }
   if (error) {
     mensaje.textContent = `No se pudo guardar: ${error.message}`;

@@ -1620,6 +1620,56 @@ create view liquidaciones_transporte_detalle with (security_invoker = true) as
   join transportistas t on t.user_id = lt.transportista_id
   order by lt.enviado_at desc;
 
+-- Para externos, carta de porte y ticket de pesada son obligatorios — se
+-- valida acá (server-side, no solo en el formulario) porque un externo
+-- podría llamar a la API directo. El cliente sube los archivos a Storage
+-- ANTES de insertar la fila (genera el id del viaje del lado del cliente,
+-- ver logistica/js/viajes.js), así que en el insert normal ya vienen los
+-- dos paths cargados y el trigger no bloquea nada.
+create or replace function validar_viaje() returns trigger
+language plpgsql as $$
+begin
+  if (select categoria from transportistas where user_id = new.transportista_id) = 'externo' then
+    if new.carta_porte_path is null or new.ticket_pesada_path is null then
+      raise exception 'Para transportistas externos, la carta de porte y el ticket de pesada son obligatorios.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_validar_viaje
+  before insert or update on viajes
+  for each row execute function validar_viaje();
+
+-- ─── Storage: documentos de Logística (M4) ───────────────────────────────
+-- Bucket privado — todo se sirve vía signed URL (createSignedUrl), nunca
+-- una URL pública directa. Ruta: viajes/{transportista_id}/{viaje_id}/
+-- carta_porte.<ext> y .../ticket_pesada.<ext> — cada transportista solo
+-- puede leer/escribir bajo su propia carpeta, el personal interno lee
+-- todo (y puede corregir, mismo criterio de "administración siempre
+-- puede arreglar un error" que rige el resto de Logística).
+insert into storage.buckets (id, name, public)
+values ('logistica-documentos', 'logistica-documentos', false)
+on conflict (id) do nothing;
+
+create policy logistica_documentos_select on storage.objects for select to authenticated using (
+  bucket_id = 'logistica-documentos'
+  and (rol_actual() is not null or (storage.foldername(name))[2] = transportista_actual()::text)
+);
+create policy logistica_documentos_insert on storage.objects for insert to authenticated with check (
+  bucket_id = 'logistica-documentos'
+  and (rol_actual() in ('encargado', 'administrativo', 'owner') or (storage.foldername(name))[2] = transportista_actual()::text)
+);
+create policy logistica_documentos_update on storage.objects for update to authenticated using (
+  bucket_id = 'logistica-documentos'
+  and (rol_actual() in ('encargado', 'administrativo', 'owner') or (storage.foldername(name))[2] = transportista_actual()::text)
+);
+create policy logistica_documentos_delete on storage.objects for delete to authenticated using (
+  bucket_id = 'logistica-documentos'
+  and (rol_actual() in ('encargado', 'administrativo', 'owner') or (storage.foldername(name))[2] = transportista_actual()::text)
+);
+
 -- ─── Después de correr este script ──────────────────────────────────────
 -- 1. Crear los usuarios reales en Authentication > Users (email + password).
 -- 2. Por cada uno, insertar su fila en perfiles, por ejemplo:
