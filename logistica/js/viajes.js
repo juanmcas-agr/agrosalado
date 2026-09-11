@@ -19,6 +19,7 @@ import { supabase } from './supabaseClient.js';
 import { getEstado } from './auth.js';
 import { subirDocumento } from './storage.js';
 import { rangoMes, celdaDocs, textoEstadoLiquidacion, mostrarLinkActual } from './viajesComun.js';
+import { cargarMisCierres, initCierreMensual } from './cierreMensual.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -328,7 +329,8 @@ async function guardarViaje(evento) {
 export async function cargarPantallaMisViajes() {
   await cargarCamionesSelect();
   await cargarMisViajes();
-  await cargarMisLiquidaciones();
+  if (esExterno()) await cargarMisLiquidaciones();
+  else await cargarMisCierres();
 }
 
 export function initMisViajes() {
@@ -337,8 +339,11 @@ export function initMisViajes() {
   el('viaje-cancelar-edicion').addEventListener('click', resetFormulario);
   el('mv-filtrar').addEventListener('click', cargarMisViajes);
   el('mv-enviar-liquidar').addEventListener('click', enviarALiquidar);
-  // Solo externos agrupan viajes en liquidaciones — un propio no ve ni el
-  // botón ni el historial (para ellos no hay nada que facturar).
+  initCierreMensual();
+  // Solo externos agrupan viajes en liquidaciones (para propios no hay
+  // nada que facturar); solo propios cierran meses (para externos ese
+  // candado lo pone la liquidación aceptada, no un cierre de calendario).
   el('mv-liquidar-bloque').classList.toggle('oculto', !esExterno());
   el('mv-liquidaciones-bloque').classList.toggle('oculto', !esExterno());
+  el('cm-propio-bloque').classList.toggle('oculto', esExterno());
 }

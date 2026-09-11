@@ -54,6 +54,7 @@
         <button type="button" class="staff-tab" data-subpantalla="catalogo">Catálogo</button>
         <button type="button" class="staff-tab" data-subpantalla="viajes">Viajes</button>
         <button type="button" class="staff-tab" data-subpantalla="liquidaciones">Liquidaciones</button>
+        <button type="button" class="staff-tab oculto" id="staff-tab-cierres" data-subpantalla="cierres">Cierres</button>
       </nav>
 
       <section id="pantalla-catalogo" data-screen="catalogo" class="oculto">
@@ -174,6 +175,25 @@
           </table>
         </div>
       </section>
+
+      <section id="pantalla-cierres" data-screen="cierres" class="oculto">
+        <h2>Cierre mensual de propios</h2>
+        <div class="filtros">
+          <label>Transportista propio <select id="cm-transportista"></select></label>
+        </div>
+        <div id="cm-mensaje" class="mensaje"></div>
+        <div class="filtros">
+          <label>Cerrar mes <input type="month" id="cm-mes-nuevo"></label>
+          <button type="button" id="cm-cerrar-btn" class="boton-secundario">Cerrar este mes</button>
+        </div>
+        <h3>Meses cerrados</h3>
+        <div class="tabla-scroll">
+          <table id="cm-tabla" class="tabla">
+            <thead><tr><th>Año</th><th>Mes</th><th>Cerrado el</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
     </div>
 
     <!-- Vista de transportista (propio o externo). Adjuntos (carta de
@@ -235,6 +255,23 @@
               <thead>
                 <tr><th>Código</th><th>Estado</th><th>Enviada</th><th>Viajes</th><th>Tn</th><th>Km</th><th>Motivo rechazo</th></tr>
               </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div id="cm-propio-bloque" class="oculto">
+          <h2>Cerrar mi mes</h2>
+          <p class="ayuda">Una vez que cerrás un mes, dejás de ver esos viajes acá — si necesitás corregir algo después, pedile a administración que lo reabra.</p>
+          <div class="filtros">
+            <label>Mes <input type="month" id="cm-propio-mes"></label>
+            <button type="button" id="cm-propio-cerrar-btn" class="boton-secundario">Cerrar este mes</button>
+          </div>
+          <div id="cm-propio-mensaje" class="mensaje"></div>
+          <h3>Meses ya cerrados</h3>
+          <div class="tabla-scroll">
+            <table id="cm-propio-tabla" class="tabla">
+              <thead><tr><th>Año</th><th>Mes</th><th>Cerrado el</th></tr></thead>
               <tbody></tbody>
             </table>
           </div>

@@ -1,12 +1,15 @@
-// Router de hash — staff ya tiene sub-navegación (Catálogo/Viajes);
-// transportista sigue con una sola pantalla por ahora, se amplía en los
-// próximos milestones (liquidaciones/cerrar-mes).
+// Router de hash — staff con sub-navegación (Catálogo/Viajes/
+// Liquidaciones/Cierres — esta última solo visible con
+// acceso_logistica_sueldos u owner); transportista sigue con una sola
+// pantalla por ahora.
 import { cargarCatalogo, initCatalogo } from './catalogo.js';
 import { cargarPantallaViajesStaff, initViajesStaff } from './adminViajes.js';
 import { cargarLiquidacionesStaff, initLiquidacionesStaff } from './adminLiquidaciones.js';
+import { cargarPantallaCierres, initCierres } from './adminCierres.js';
 import { cargarPantallaMisViajes, initMisViajes } from './viajes.js';
+import { getEstado } from './auth.js';
 
-const PANTALLAS_STAFF = ['catalogo', 'viajes', 'liquidaciones'];
+const PANTALLAS_STAFF = ['catalogo', 'viajes', 'liquidaciones', 'cierres'];
 const PANTALLAS_TRANSPORTISTA = ['mis-viajes'];
 
 function el(id) {
@@ -37,6 +40,7 @@ function renderRoute() {
     if (pantalla === 'catalogo') cargarCatalogo();
     if (pantalla === 'viajes') cargarPantallaViajesStaff();
     if (pantalla === 'liquidaciones') cargarLiquidacionesStaff();
+    if (pantalla === 'cierres') cargarPantallaCierres();
   }
   if (modoActual === 'transportista' && pantalla === 'mis-viajes') cargarPantallaMisViajes();
 }
@@ -47,9 +51,15 @@ export function initRouter(modo) {
     initCatalogo();
     initViajesStaff();
     initLiquidacionesStaff();
+    initCierres();
     document.querySelectorAll('.staff-tab').forEach((btn) => {
       btn.addEventListener('click', () => { location.hash = btn.dataset.subpantalla; });
     });
+    // "Cierres" toca datos de sueldo de propios — solo se muestra el
+    // botón a quien realmente puede usarlo (la RLS igual lo exigiría,
+    // pero así no aparece una pestaña que de entrada no sirve para nada).
+    const perfil = getEstado().perfil;
+    el('staff-tab-cierres').classList.toggle('oculto', perfil.rol !== 'owner' && !perfil.acceso_logistica_sueldos);
   } else {
     initMisViajes();
   }
