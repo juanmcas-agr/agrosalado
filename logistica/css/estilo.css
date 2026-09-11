@@ -166,6 +166,29 @@ button:active { filter: brightness(0.9); }
   margin-bottom: 10px;
 }
 
+/* ─── filtros ─── */
+.filtros {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 10px;
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+}
+.filtros label {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.85em;
+  gap: 2px;
+}
+.filtros select, .filtros input {
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+}
+
 /* ─── tablas ─── */
 .tabla-scroll { overflow-x: auto; }
 .tabla { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; }

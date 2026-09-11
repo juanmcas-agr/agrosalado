@@ -3,6 +3,7 @@
 // (staff: viajes/liquidaciones/reportes; transportista: mis-viajes/
 // liquidaciones/cerrar-mes).
 import { cargarCatalogo, initCatalogo } from './catalogo.js';
+import { cargarPantallaMisViajes, initMisViajes } from './viajes.js';
 
 const PANTALLAS_STAFF = ['catalogo'];
 const PANTALLAS_TRANSPORTISTA = ['mis-viajes'];
@@ -29,11 +30,13 @@ function renderRoute() {
     el(`pantalla-${nombre}`)?.classList.toggle('oculto', nombre !== pantalla);
   }
   if (modoActual === 'staff' && pantalla === 'catalogo') cargarCatalogo();
+  if (modoActual === 'transportista' && pantalla === 'mis-viajes') cargarPantallaMisViajes();
 }
 
 export function initRouter(modo) {
   modoActual = modo;
   if (modo === 'staff') initCatalogo();
+  else initMisViajes();
   window.addEventListener('hashchange', renderRoute);
   renderRoute();
 }

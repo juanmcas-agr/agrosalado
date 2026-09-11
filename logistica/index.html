@@ -99,11 +99,44 @@
       </section>
     </div>
 
-    <!-- Vista de transportista (propio o externo) — se completa en los
-         próximos milestones. -->
+    <!-- Vista de transportista (propio o externo). Adjuntos (carta de
+         porte / ticket de pesada) se agregan en el próximo milestone —
+         acá todavía no hay forma de subirlos. -->
     <div id="modo-transportista" class="oculto">
       <section id="pantalla-mis-viajes" data-screen="mis-viajes" class="oculto">
-        <p class="en-construccion">Mis viajes — en construcción.</p>
+        <h2 id="viaje-form-titulo">Cargar viaje</h2>
+        <form id="viaje-form" class="formulario">
+          <input type="hidden" id="viaje-id">
+          <label>Fecha de carga <input id="viaje-fecha" type="date" required></label>
+          <label>Camión
+            <select id="viaje-camion" required></select>
+          </label>
+          <label>Origen <input id="viaje-origen" type="text" required></label>
+          <label>Destino <input id="viaje-destino" type="text" required></label>
+          <label>Mercadería <input id="viaje-mercaderia" type="text" required></label>
+          <label>Km <input id="viaje-km" type="number" min="0" step="1"></label>
+          <label>Tn <input id="viaje-tn" type="number" min="0" step="0.01"></label>
+          <label class="full">Observaciones <textarea id="viaje-observaciones" rows="2"></textarea></label>
+          <button type="submit" class="full" id="viaje-guardar-btn">Guardar viaje</button>
+          <button type="button" id="viaje-cancelar-edicion" class="boton-secundario full oculto">Cancelar edición</button>
+          <div id="viaje-form-mensaje" class="mensaje full"></div>
+        </form>
+
+        <h2>Mis viajes</h2>
+        <div class="filtros">
+          <label>Camión <select id="mv-filtro-camion"><option value="">Todos</option></select></label>
+          <label>Mes <input type="month" id="mv-filtro-mes"></label>
+          <button type="button" id="mv-filtrar" class="boton-secundario">Filtrar</button>
+        </div>
+        <div id="mv-mensaje" class="mensaje"></div>
+        <div class="tabla-scroll">
+          <table id="mv-tabla" class="tabla">
+            <thead>
+              <tr><th>Código</th><th>Fecha</th><th>Camión</th><th>Origen → Destino</th><th>Mercadería</th><th>Km</th><th>Tn</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </section>
     </div>
   </div>
