@@ -50,6 +50,11 @@
     <!-- Vista de personal interno (owner/administrativo/encargado con
          acceso_logistica) — se completa en los próximos milestones. -->
     <div id="modo-staff" class="oculto">
+      <nav class="tab-bar-inferior" style="position:static;box-shadow:none;margin-bottom:10px;border-radius:8px;overflow:hidden;">
+        <button type="button" class="staff-tab" data-subpantalla="catalogo">Catálogo</button>
+        <button type="button" class="staff-tab" data-subpantalla="viajes">Viajes</button>
+      </nav>
+
       <section id="pantalla-catalogo" data-screen="catalogo" class="oculto">
         <h2>Transportistas</h2>
         <div id="cat-transportistas-mensaje" class="mensaje"></div>
@@ -96,6 +101,53 @@
           <label>Descripción <input id="cat-camion-descripcion" type="text"></label>
           <button type="submit" class="full">Agregar camión</button>
         </form>
+      </section>
+
+      <section id="pantalla-viajes" data-screen="viajes" class="oculto">
+        <h2>Viajes</h2>
+        <div class="filtros">
+          <label>Camión <select id="av-filtro-camion"><option value="">Todos</option></select></label>
+          <label>Transportista <select id="av-filtro-transportista"><option value="">Todos</option></select></label>
+          <label>Categoría
+            <select id="av-filtro-categoria">
+              <option value="">Todas</option>
+              <option value="propio">Propio</option>
+              <option value="externo">Externo</option>
+            </select>
+          </label>
+          <label>Mes <input type="month" id="av-filtro-mes"></label>
+          <button type="button" id="av-filtrar" class="boton-secundario">Filtrar</button>
+        </div>
+        <div id="av-mensaje" class="mensaje"></div>
+        <div class="tabla-scroll">
+          <table id="av-tabla" class="tabla">
+            <thead>
+              <tr><th>Código</th><th>Fecha</th><th>Transportista</th><th>Camión</th><th>Origen → Destino</th><th>Mercadería</th><th>Km</th><th>Tn</th><th>Docs</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div id="av-form-bloque" class="oculto">
+          <h3 id="av-form-titulo">Editar viaje</h3>
+          <form id="av-form" class="formulario">
+            <input type="hidden" id="av-id">
+            <label>Fecha de carga <input id="av-fecha" type="date" required></label>
+            <label>Camión <select id="av-camion" required></select></label>
+            <label>Origen <input id="av-origen" type="text" required></label>
+            <label>Destino <input id="av-destino" type="text" required></label>
+            <label>Mercadería <input id="av-mercaderia" type="text" required></label>
+            <label>Km <input id="av-km" type="number" min="0" step="1"></label>
+            <label>Tn <input id="av-tn" type="number" min="0" step="0.01"></label>
+            <label class="full">Observaciones <textarea id="av-observaciones" rows="2"></textarea></label>
+            <label class="full">Carta de porte <input id="av-carta-porte" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"></label>
+            <div id="av-carta-porte-actual" class="ayuda full oculto"></div>
+            <label class="full">Ticket de pesada <input id="av-ticket-pesada" type="file" accept=".png,.jpg,.jpeg,.pdf,image/png,image/jpeg,application/pdf"></label>
+            <div id="av-ticket-pesada-actual" class="ayuda full oculto"></div>
+            <button type="submit" class="full">Guardar cambios</button>
+            <button type="button" id="av-cancelar" class="boton-secundario full">Cancelar</button>
+          </form>
+        </div>
       </section>
     </div>
 

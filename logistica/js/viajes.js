@@ -17,7 +17,8 @@
 // exige ambos para externos — ver schema.sql).
 import { supabase } from './supabaseClient.js';
 import { getEstado } from './auth.js';
-import { subirDocumento, urlFirmadaDocumento } from './storage.js';
+import { subirDocumento } from './storage.js';
+import { rangoMes, celdaDocs, textoEstadoLiquidacion, mostrarLinkActual } from './viajesComun.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -64,23 +65,6 @@ function resetFormulario() {
   actualizarRequeridosAdjuntos();
 }
 
-async function mostrarLinkActual(idContenedor, path, etiqueta) {
-  const div = el(idContenedor);
-  if (!path) {
-    div.classList.add('oculto');
-    div.innerHTML = '';
-    return;
-  }
-  div.classList.remove('oculto');
-  div.textContent = `${etiqueta} ya cargado(a) — generando enlace...`;
-  try {
-    const url = await urlFirmadaDocumento(path);
-    div.innerHTML = `${etiqueta} ya cargado(a) — <a href="${url}" target="_blank" rel="noopener">ver archivo actual</a>. Elegí uno nuevo abajo solo si lo querés reemplazar.`;
-  } catch (error) {
-    div.textContent = `${etiqueta}: no se pudo generar el enlace (${error.message})`;
-  }
-}
-
 function editarViaje(v) {
   editandoId = v.id;
   el('viaje-id').value = v.id;
@@ -125,44 +109,6 @@ function estaBloqueado(v) {
   return v.liquidacion_estado === 'aceptada';
 }
 
-function textoEstado(v) {
-  if (getEstado().transportista.categoria === 'propio') return '';
-  if (!v.liquidacion_estado) return 'Sin liquidar';
-  if (v.liquidacion_estado === 'aceptada') return `Apto para facturar (${v.liquidacion_codigo})`;
-  if (v.liquidacion_estado === 'pendiente') return 'En liquidación pendiente';
-  return 'Liquidación rechazada';
-}
-
-async function verDocumento(path) {
-  try {
-    const url = await urlFirmadaDocumento(path);
-    window.open(url, '_blank', 'noopener');
-  } catch (error) {
-    alert('No se pudo abrir el archivo: ' + error.message);
-  }
-}
-
-function celdaDocs(v) {
-  const td = document.createElement('td');
-  if (v.carta_porte_path) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'boton-secundario';
-    btn.textContent = 'C. porte';
-    btn.addEventListener('click', () => verDocumento(v.carta_porte_path));
-    td.appendChild(btn);
-  }
-  if (v.ticket_pesada_path) {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'boton-secundario';
-    btn.textContent = 'T. pesada';
-    btn.addEventListener('click', () => verDocumento(v.ticket_pesada_path));
-    td.appendChild(btn);
-  }
-  return td;
-}
-
 function renderMisViajes() {
   const tbody = el('mv-tabla').querySelector('tbody');
   if (!viajesCache.length) {
@@ -183,7 +129,7 @@ function renderMisViajes() {
     `;
     tr.appendChild(celdaDocs(v));
     const tdEstado = document.createElement('td');
-    tdEstado.textContent = textoEstado(v);
+    tdEstado.textContent = textoEstadoLiquidacion(getEstado().transportista.categoria, v);
     tr.appendChild(tdEstado);
     const tdAcciones = document.createElement('td');
     tr.appendChild(tdAcciones);
@@ -215,8 +161,8 @@ export async function cargarMisViajes() {
   const mes = el('mv-filtro-mes').value; // "YYYY-MM"
   if (camionId) query = query.eq('camion_id', camionId);
   if (mes) {
-    const [anio, mesNum] = mes.split('-').map(Number);
-    query = query.gte('fecha_carga', `${mes}-01`).lte('fecha_carga', new Date(anio, mesNum, 0).toISOString().slice(0, 10));
+    const { desde, hasta } = rangoMes(mes);
+    query = query.gte('fecha_carga', desde).lte('fecha_carga', hasta);
   }
 
   const { data, error } = await query.order('fecha_carga', { ascending: false });
