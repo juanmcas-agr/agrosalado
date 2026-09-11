@@ -277,9 +277,17 @@ create policy rectificaciones_pendientes_insert on rectificaciones_pendientes fo
 create policy rectificaciones_pendientes_update on rectificaciones_pendientes for update to authenticated
   using (rol_actual() = 'owner');
 
+-- Toda vista de este esquema lleva "with (security_invoker = true)": por
+-- default, en Postgres una vista corre con los permisos de quien la CREÓ
+-- (acá, un rol que salta RLS), no de quien la consulta — sin esta marca,
+-- cualquier autenticado podría leer a través de la vista datos que la
+-- política RLS de la tabla de base le tendría que estar negando. Con
+-- security_invoker=true la vista respeta la RLS de quien pregunta, como
+-- corresponde.
+--
 -- Vista con nombres resueltos, la usa el cartel de "Rectificaciones
 -- pendientes de aprobar" en Trabajo de Manga.
-create view rectificaciones_pendientes_detalle as
+create view rectificaciones_pendientes_detalle with (security_invoker = true) as
   select
     rp.id, rp.trabajo_manga_id, t.codigo, t.rodeo_id, r.codigo as rodeo,
     rp.cantidad_anterior, rp.cantidad_propuesta,
@@ -691,7 +699,7 @@ create trigger trg_actualizar_rodeo_tras_movimiento
 -- tipos "normales" rodeo_destino_id es null y no cambia nada (destino usa
 -- el mismo rodeo que origen); solo 'cambio_rodeo' lo completa, y ahí el
 -- lado que ENTRA cabezas debe acreditarse al rodeo nuevo, no al de origen.
-create view movimiento_lineas as
+create view movimiento_lineas with (security_invoker = true) as
   select id, fecha, establecimiento_destino as establecimiento, categoria_destino as categoria,
          coalesce(titular_destino, 'agro_salado') as titular,
          coalesce(rodeo_destino_id, rodeo_id) as rodeo_id,
@@ -715,7 +723,7 @@ create view movimiento_lineas as
 -- cálculo), y ahora también puede desagregar por rodeo y mostrar kilos
 -- promedio ponderado (sum(cabezas×kilos)/sum(cabezas) de los movimientos
 -- que componen el stock, no un dato cargado aparte).
-create view stock_actual as
+create view stock_actual with (security_invoker = true) as
   select
     ml.establecimiento, ml.categoria, ml.titular, ml.rodeo_id, r.codigo as rodeo,
     sum(ml.delta_cabezas) as cabezas,
@@ -728,7 +736,7 @@ create view stock_actual as
 
 -- ─── Vista de historial (con etiquetas legibles para la UI) ─────────────
 
-create view historial_movimientos as
+create view historial_movimientos with (security_invoker = true) as
   select
     m.id, m.tipo_movimiento, tm.nombre as tipo_movimiento_nombre, tm.clase,
     m.fecha,
@@ -766,7 +774,7 @@ create view historial_movimientos as
 -- diferencia pendiente, si corresponde) — la usa el mail diario (M3) y
 -- más adelante Reportes > Trabajo de Manga (M5). No suma el detalle de
 -- Sanidad/Reproducción/Manejo de cada trabajo, solo los datos base.
-create view historial_trabajos_manga as
+create view historial_trabajos_manga with (security_invoker = true) as
   select
     t.id, t.codigo, t.fecha,
     t.rodeo_id, r.codigo as rodeo,
