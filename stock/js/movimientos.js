@@ -325,9 +325,11 @@ function actualizarEstablecimientosDestinoDisponibles() {
 // ─── formulario ───
 
 // Un puestero carga datos pero con un subset acotado de tipos de
-// movimiento — el resto (traslados, cambios de rodeo/titular, ventas,
-// compras, apertura de stock) queda para encargado/administrativo/owner.
-const TIPOS_PUESTERO = ['paricion', 'mortandad', 'cambio_categoria'];
+// movimiento — el resto (traslados, cambio de titular, ventas, compras,
+// apertura de stock) queda para encargado/administrativo/owner. Cambio
+// de rodeo entra en el subset porque no requiere crear un rodeo nuevo
+// (elige entre los que ya existen en el mismo establecimiento).
+const TIPOS_PUESTERO = ['paricion', 'mortandad', 'cambio_categoria', 'cambio_rodeo'];
 
 function tiposVisibles() {
   const rol = getEstado().perfil?.rol;
