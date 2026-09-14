@@ -120,6 +120,7 @@ function onSeleccionUsuarioLista() {
     el('cfgUsuarioAccesoHacienda').checked = false;
     el('cfgUsuarioAccesoGranos').checked = false;
     el('cfgUsuarioAccesoRel').checked = false;
+    el('cfgUsuarioAccesoLogistica').checked = false;
     el('cfgUsuarioRecibeLiq').checked = false;
     el('cfgUsuarioRecibeHacienda').checked = false;
     el('cfgUsuarioRecibeWhatsapp').checked = false;
@@ -142,6 +143,8 @@ function onSeleccionUsuarioLista() {
   el('cfgUsuarioAccesoGranos').disabled = esOwner;
   el('cfgUsuarioAccesoRel').checked = esOwner || !!usuario.acceso_precios_relativos;
   el('cfgUsuarioAccesoRel').disabled = esOwner;
+  el('cfgUsuarioAccesoLogistica').checked = esOwner || !!usuario.acceso_logistica;
+  el('cfgUsuarioAccesoLogistica').disabled = esOwner;
   el('cfgUsuarioRecibeLiq').checked = !!(destinatario && destinatario.recibe_liquidaciones);
   el('cfgUsuarioRecibeHacienda').checked = !!(destinatario && destinatario.recibe_hacienda);
   el('cfgUsuarioEditTelefono').value = (destinatario && destinatario.telefono) || '';
@@ -162,6 +165,7 @@ async function guardarCambiosUsuario() {
   const acceso_hacienda = el('cfgUsuarioAccesoHacienda').checked;
   const acceso_granos = el('cfgUsuarioAccesoGranos').checked;
   const acceso_precios_relativos = el('cfgUsuarioAccesoRel').checked;
+  const acceso_logistica = el('cfgUsuarioAccesoLogistica').checked;
   const recibe_liquidaciones = el('cfgUsuarioRecibeLiq').checked;
   const recibe_hacienda = el('cfgUsuarioRecibeHacienda').checked;
   const recibe_whatsapp = el('cfgUsuarioRecibeWhatsapp').checked;
@@ -176,7 +180,7 @@ async function guardarCambiosUsuario() {
     const res = await fetch('/.netlify/functions/admin-actualizar-usuario', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
+      body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
     });
     const datos = await res.json();
     if (!res.ok) {
@@ -203,6 +207,7 @@ async function crearUsuario() {
   const acceso_hacienda = el('cfgNuevoAccesoHacienda').checked;
   const acceso_granos = el('cfgNuevoAccesoGranos').checked;
   const acceso_precios_relativos = el('cfgNuevoAccesoRel').checked;
+  const acceso_logistica = el('cfgNuevoAccesoLogistica').checked;
   const recibe_liquidaciones = el('cfgNuevoRecibeLiq').checked;
   const recibe_hacienda = el('cfgNuevoRecibeHacienda').checked;
   const recibe_whatsapp = el('cfgNuevoRecibeWhatsapp').checked;
@@ -228,7 +233,7 @@ async function crearUsuario() {
     const res = await fetch('/.netlify/functions/admin-crear-usuario', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
+      body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
     });
     const datos = await res.json();
     if (!res.ok) {
@@ -245,6 +250,7 @@ async function crearUsuario() {
     el('cfgNuevoAccesoHacienda').checked = true;
     el('cfgNuevoAccesoGranos').checked = false;
     el('cfgNuevoAccesoRel').checked = false;
+    el('cfgNuevoAccesoLogistica').checked = false;
     el('cfgNuevoRecibeLiq').checked = true;
     el('cfgNuevoRecibeHacienda').checked = false;
     el('cfgNuevoRecibeWhatsapp').checked = false;

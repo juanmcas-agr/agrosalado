@@ -63,7 +63,7 @@ exports.handler = async function (event) {
   try {
     const {
       email, password, nombre_completo, telefono, rol,
-      acceso_hacienda, acceso_granos, acceso_precios_relativos,
+      acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica,
       recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios,
     } = JSON.parse(event.body);
     if (!email || !password || !nombre_completo || !rol) {
@@ -107,6 +107,7 @@ exports.handler = async function (event) {
         acceso_hacienda: !!acceso_hacienda,
         acceso_granos: !!acceso_granos,
         acceso_precios_relativos: !!acceso_precios_relativos,
+        acceso_logistica: !!acceso_logistica,
       }),
     });
     if (!resPerfil.ok) {
