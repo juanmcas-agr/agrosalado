@@ -306,10 +306,14 @@ function poblarSelectRodeoDestino(idSelect, categoriaId) {
     opt.textContent = r.codigo;
     select.appendChild(opt);
   }
-  const opcionNueva = document.createElement('option');
-  opcionNueva.value = '__nuevo__';
-  opcionNueva.textContent = '+ Crear rodeo nuevo...';
-  select.appendChild(opcionNueva);
+  // Un puestero no da de alta rodeos — solo puede elegir entre los que
+  // ya existen.
+  if (getEstado().perfil?.rol !== 'puestero') {
+    const opcionNueva = document.createElement('option');
+    opcionNueva.value = '__nuevo__';
+    opcionNueva.textContent = '+ Crear rodeo nuevo...';
+    select.appendChild(opcionNueva);
+  }
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
 }
 

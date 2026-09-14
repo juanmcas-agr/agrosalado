@@ -40,16 +40,24 @@ export const TIPOS_MOVIMIENTO = {
     campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
     categoriasPermitidas: ['ternero', 'ternera'],
   },
+  venta: {
+    nombre: 'Venta', clase: 'salida',
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
+  },
+  // Unificadas en "venta" de arriba — la categoría elegida ya distingue
+  // de qué venta se trataba. Se dejan acá con oculto:true (no aparecen
+  // como botón nuevo) solo para que editar un movimiento viejo cargado
+  // con alguno de estos 3 tipos siga funcionando.
   venta_gordo: {
-    nombre: 'Venta de gordo', clase: 'salida',
+    nombre: 'Venta de gordo', clase: 'salida', oculto: true,
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   venta_vaca_prenada: {
-    nombre: 'Venta de vaca preñada', clase: 'salida',
+    nombre: 'Venta de vaca preñada', clase: 'salida', oculto: true,
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   venta_invernada: {
-    nombre: 'Venta de invernada', clase: 'salida',
+    nombre: 'Venta de invernada', clase: 'salida', oculto: true,
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   faena_conserva: {

@@ -73,7 +73,10 @@ insert into tipos_movimiento
   ('cambio_categoria',    'Cambio de categoría',                'interna', true,  true,  true,  true,  true,  true,  9),
   ('cambio_titular',      'Cambio de titularidad',              'interna', true,  true,  true,  true,  true,  true,  10),
   ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  false, true,  11),
-  ('cambio_rodeo',        'Cambio de rodeo',                    'interna', true,  true,  true,  true,  true,  true,  12);
+  ('cambio_rodeo',        'Cambio de rodeo',                    'interna', true,  true,  true,  true,  true,  true,  12),
+  -- Unifica venta_gordo/venta_vaca_prenada/venta_invernada (quedan en la
+  -- tabla por trazabilidad histórica, pero el cliente ya no las ofrece).
+  ('venta',               'Venta',                              'salida',  true,  false, true,  false, true,  false, 13);
 
 -- ─── Rodeos ─────────────────────────────────────────────────────────────
 -- Un rodeo es el grupo real de animales que se trackea como unidad (nace,
@@ -127,8 +130,10 @@ create table rodeos (
 alter table rodeos enable row level security;
 
 create policy rodeos_select on rodeos for select to authenticated using (rol_actual() is not null);
+-- Un puestero no puede dar de alta rodeos (sí puede seguir renombrando
+-- los que ya existen, eso queda en rodeos_update).
 create policy rodeos_insert on rodeos for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero') and creado_por = auth.uid());
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner') and creado_por = auth.uid());
 create policy rodeos_update on rodeos for update to authenticated
   using (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 

@@ -231,10 +231,14 @@ function poblarSelectRodeo(ids, excluirId) {
       select.appendChild(opt);
     }
   }
-  const opcionNueva = document.createElement('option');
-  opcionNueva.value = '__nuevo__';
-  opcionNueva.textContent = '+ Crear rodeo nuevo...';
-  select.appendChild(opcionNueva);
+  // Un puestero no da de alta rodeos — solo puede elegir entre los que
+  // ya existen.
+  if (getEstado().perfil?.rol !== 'puestero') {
+    const opcionNueva = document.createElement('option');
+    opcionNueva.value = '__nuevo__';
+    opcionNueva.textContent = '+ Crear rodeo nuevo...';
+    select.appendChild(opcionNueva);
+  }
 
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
 }
@@ -320,8 +324,19 @@ function actualizarEstablecimientosDestinoDisponibles() {
 
 // ─── formulario ───
 
+// Un puestero carga datos pero con un subset acotado de tipos de
+// movimiento — el resto (traslados, cambios de rodeo/titular, ventas,
+// compras, apertura de stock) queda para encargado/administrativo/owner.
+const TIPOS_PUESTERO = ['paricion', 'mortandad', 'cambio_categoria'];
+
+function tiposVisibles() {
+  const rol = getEstado().perfil?.rol;
+  const entradas = Object.entries(TIPOS_MOVIMIENTO).filter(([, cfg]) => !cfg.oculto);
+  return rol === 'puestero' ? entradas.filter(([id]) => TIPOS_PUESTERO.includes(id)) : entradas;
+}
+
 function poblarGrupos() {
-  crearGrupoBotones('mov-tipo', Object.entries(TIPOS_MOVIMIENTO).map(([id, cfg]) => ({ id, nombre: cfg.nombre })));
+  crearGrupoBotones('mov-tipo', tiposVisibles().map(([id, cfg]) => ({ id, nombre: cfg.nombre })));
   aplicarBloqueoAperturaStock();
   crearGrupoBotones('mov-establecimiento-origen', ESTABLECIMIENTOS);
   crearGrupoBotones('mov-establecimiento-destino', ESTABLECIMIENTOS);
@@ -520,7 +535,7 @@ function armarFila(datos) {
 
 function primerTipoPermitido() {
   const rol = getEstado().perfil?.rol;
-  return Object.entries(TIPOS_MOVIMIENTO).find(([, cfg]) => !cfg.soloOwner || rol === 'owner')[0];
+  return tiposVisibles().find(([, cfg]) => !cfg.soloOwner || rol === 'owner')[0];
 }
 
 function mostrarMensaje(texto, tipo) {
