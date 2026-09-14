@@ -591,6 +591,15 @@ begin
     if new.titular_origen <> new.titular_destino then
       raise exception 'En un traslado, la titularidad no cambia (usá "Cambio de titularidad" para eso)';
     end if;
+    -- Un rodeo queda atado para siempre al establecimiento donde se
+    -- creó: mover animales a otro establecimiento significa sumarlos a
+    -- un rodeo (existente o nuevo) DE ESE establecimiento.
+    if new.rodeo_destino_id is null then
+      raise exception 'Falta rodeo_destino_id para traslado';
+    end if;
+    if new.rodeo_destino_id = new.rodeo_id then
+      raise exception 'En un traslado, el rodeo destino tiene que ser distinto del origen';
+    end if;
   end if;
 
   if new.tipo_movimiento = 'cambio_categoria' then
@@ -640,7 +649,7 @@ begin
     if new.titular_origen <> new.titular_destino then
       raise exception 'En un cambio de rodeo, la titularidad no cambia';
     end if;
-  elsif new.tipo_movimiento <> 'cambio_categoria' and new.rodeo_destino_id is not null then
+  elsif new.tipo_movimiento not in ('cambio_categoria', 'traslado') and new.rodeo_destino_id is not null then
     raise exception 'rodeo_destino_id no corresponde para %', new.tipo_movimiento;
   end if;
 
@@ -674,14 +683,18 @@ create trigger trg_bloquear_created_at
   before update on movimientos
   for each row execute function bloquear_cambio_created_at();
 
--- Mantiene rodeos.establecimiento_id / categoria_id al día cuando el
--- rodeo se traslada o cambia de categoría — si no, el selector de rodeos
--- de "Cargar movimiento" (que filtra por establecimiento+categoría
--- actuales) dejaría de encontrar un rodeo que ya se movió.
+-- Mantiene rodeos.categoria_id al día cuando el rodeo cambia de
+-- categoría dentro de sí mismo (Recategorización sin cambio de rodeo) —
+-- si no, el selector de rodeos de "Cargar movimiento" (que filtra por
+-- establecimiento+categoría actuales) dejaría de encontrar un rodeo que
+-- ya cambió. El caso "traslado" queda solo como resguardo: con
+-- rodeo_destino_id ahora siempre presente (el cliente lo exige), las
+-- cabezas se acreditan al rodeo destino vía movimiento_lineas — el rodeo
+-- de origen no se reubica.
 create or replace function actualizar_rodeo_tras_movimiento() returns trigger
 language plpgsql as $$
 begin
-  if new.tipo_movimiento = 'traslado' then
+  if new.tipo_movimiento = 'traslado' and new.rodeo_destino_id is null then
     update rodeos set establecimiento_id = new.establecimiento_destino where id = new.rodeo_id;
   elsif new.tipo_movimiento = 'cambio_categoria' and new.rodeo_destino_id is null then
     -- Recategorización dentro del mismo rodeo (caso normal). Cuando
@@ -700,10 +713,11 @@ create trigger trg_actualizar_rodeo_tras_movimiento
 
 -- ─── Vistas de stock ────────────────────────────────────────────────────
 
--- coalesce(rodeo_destino_id, rodeo_id) en la rama de destino: para los 11
--- tipos "normales" rodeo_destino_id es null y no cambia nada (destino usa
--- el mismo rodeo que origen); solo 'cambio_rodeo' lo completa, y ahí el
--- lado que ENTRA cabezas debe acreditarse al rodeo nuevo, no al de origen.
+-- coalesce(rodeo_destino_id, rodeo_id) en la rama de destino: para la
+-- mayoría de los tipos rodeo_destino_id es null y no cambia nada (destino
+-- usa el mismo rodeo que origen); 'cambio_rodeo' y 'traslado' sí lo
+-- completan, y ahí el lado que ENTRA cabezas debe acreditarse al rodeo
+-- destino, no al de origen.
 create view movimiento_lineas with (security_invoker = true) as
   select id, fecha, establecimiento_destino as establecimiento, categoria_destino as categoria,
          coalesce(titular_destino, 'agro_salado') as titular,
