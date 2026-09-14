@@ -1,15 +1,16 @@
 // Router de hash — staff con sub-navegación (Catálogo/Viajes/
-// Liquidaciones/Cierres — esta última solo visible con
+// Liquidaciones/Cierres/Reportes — "Cierres" solo visible con
 // acceso_logistica_sueldos u owner); transportista sigue con una sola
 // pantalla por ahora.
 import { cargarCatalogo, initCatalogo } from './catalogo.js';
 import { cargarPantallaViajesStaff, initViajesStaff } from './adminViajes.js';
 import { cargarLiquidacionesStaff, initLiquidacionesStaff } from './adminLiquidaciones.js';
 import { cargarPantallaCierres, initCierres } from './adminCierres.js';
+import { cargarPantallaReportes, initReportes } from './reportes.js';
 import { cargarPantallaMisViajes, initMisViajes } from './viajes.js';
 import { getEstado } from './auth.js';
 
-const PANTALLAS_STAFF = ['catalogo', 'viajes', 'liquidaciones', 'cierres'];
+const PANTALLAS_STAFF = ['catalogo', 'viajes', 'liquidaciones', 'cierres', 'reportes'];
 const PANTALLAS_TRANSPORTISTA = ['mis-viajes'];
 
 function el(id) {
@@ -41,6 +42,7 @@ function renderRoute() {
     if (pantalla === 'viajes') cargarPantallaViajesStaff();
     if (pantalla === 'liquidaciones') cargarLiquidacionesStaff();
     if (pantalla === 'cierres') cargarPantallaCierres();
+    if (pantalla === 'reportes') cargarPantallaReportes();
   }
   if (modoActual === 'transportista' && pantalla === 'mis-viajes') cargarPantallaMisViajes();
 }
@@ -52,6 +54,7 @@ export function initRouter(modo) {
     initViajesStaff();
     initLiquidacionesStaff();
     initCierres();
+    initReportes();
     document.querySelectorAll('.staff-tab').forEach((btn) => {
       btn.addEventListener('click', () => { location.hash = btn.dataset.subpantalla; });
     });

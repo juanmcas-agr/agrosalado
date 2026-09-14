@@ -55,6 +55,7 @@
         <button type="button" class="staff-tab" data-subpantalla="viajes">Viajes</button>
         <button type="button" class="staff-tab" data-subpantalla="liquidaciones">Liquidaciones</button>
         <button type="button" class="staff-tab oculto" id="staff-tab-cierres" data-subpantalla="cierres">Cierres</button>
+        <button type="button" class="staff-tab" data-subpantalla="reportes">Reportes</button>
       </nav>
 
       <section id="pantalla-catalogo" data-screen="catalogo" class="oculto">
@@ -190,6 +191,34 @@
         <div class="tabla-scroll">
           <table id="cm-tabla" class="tabla">
             <thead><tr><th>Año</th><th>Mes</th><th>Cerrado el</th><th></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="pantalla-reportes" data-screen="reportes" class="oculto">
+        <div id="rp-sueldo-bloque" class="oculto">
+          <h2>Sueldo de propios</h2>
+          <div class="filtros">
+            <label>Mes <input type="month" id="rp-sueldo-mes"></label>
+            <button type="button" id="rp-sueldo-buscar" class="boton-secundario">Buscar</button>
+          </div>
+          <div id="rp-sueldo-mensaje" class="mensaje"></div>
+          <div class="tabla-scroll">
+            <table id="rp-sueldo-tabla" class="tabla">
+              <thead><tr><th>Transportista</th><th>Viajes</th><th>Tn</th><th>Km</th><th>Mes cerrado</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <h2>Pendientes de facturar (externos)</h2>
+        <p class="ayuda">Liquidaciones ya aceptadas — el transportista ya puede facturar citando el código.</p>
+        <div id="rp-facturar-mensaje" class="mensaje"></div>
+        <button type="button" id="rp-facturar-actualizar" class="boton-secundario">Actualizar</button>
+        <div class="tabla-scroll">
+          <table id="rp-facturar-tabla" class="tabla">
+            <thead><tr><th>Código</th><th>Transportista</th><th>Aceptada el</th><th>Viajes</th><th>Tn</th><th>Km</th></tr></thead>
             <tbody></tbody>
           </table>
         </div>
