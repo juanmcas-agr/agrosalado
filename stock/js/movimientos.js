@@ -291,14 +291,21 @@ function inicializarSelectorRodeo(ids) {
 // En un traslado, origen y destino nunca pueden ser el mismo
 // establecimiento — en vez de dejar clickear y recién avisar al guardar,
 // se nubla (deshabilita) la opción de destino que coincide con el
-// origen elegido. No aplica a cambio_rodeo, que si puede compartir
-// establecimiento (mover animales de un rodeo a otro sin cambiar de
-// campo).
+// origen elegido. En cambio_rodeo es al revés: solo puede compartir
+// establecimiento (mover animales de un rodeo a otro DENTRO del mismo
+// campo; para cambiar de establecimiento existe "Traslado"), así que acá
+// se fuerza el mismo valor que el origen y se nubla el resto.
 function actualizarEstablecimientosDestinoDisponibles() {
   const tipo = obtenerSeleccion('mov-tipo');
-  const origenId = tipo === 'traslado' ? obtenerSeleccion('mov-establecimiento-origen') : '';
+  const esCambioRodeo = tipo === 'cambio_rodeo';
+  const origenId = (tipo === 'traslado' || esCambioRodeo) ? obtenerSeleccion('mov-establecimiento-origen') : '';
   el('mov-establecimiento-destino').querySelectorAll('.boton-opcion').forEach((boton) => {
-    const excluir = !!origenId && boton.dataset.value === origenId;
+    if (!origenId) {
+      boton.disabled = false;
+      boton.classList.remove('deshabilitado');
+      return;
+    }
+    const excluir = esCambioRodeo ? boton.dataset.value !== origenId : boton.dataset.value === origenId;
     boton.disabled = excluir;
     boton.classList.toggle('deshabilitado', excluir);
     if (excluir && boton.classList.contains('seleccionado')) {
@@ -306,6 +313,9 @@ function actualizarEstablecimientosDestinoDisponibles() {
       el('mov-establecimiento-destino').dispatchEvent(new Event('cambio'));
     }
   });
+  if (esCambioRodeo && origenId && obtenerSeleccion('mov-establecimiento-destino') !== origenId) {
+    establecerSeleccion('mov-establecimiento-destino', origenId);
+  }
 }
 
 // ─── formulario ───
@@ -462,6 +472,9 @@ function validar(datos) {
 
   if (datos.tipo === 'traslado' && datos.establecimiento_origen === datos.establecimiento_destino) {
     errores.push('En un traslado, el establecimiento de origen y destino deben ser distintos.');
+  }
+  if (datos.tipo === 'cambio_rodeo' && datos.establecimiento_origen !== datos.establecimiento_destino) {
+    errores.push('Un cambio de rodeo tiene que ser dentro del mismo establecimiento (para cambiar de establecimiento usá "Traslado").');
   }
   if (datos.tipo === 'cambio_categoria' && datos.categoria_origen === datos.categoria_destino) {
     errores.push('En un cambio de categoría, la categoría de origen y destino deben ser distintas.');

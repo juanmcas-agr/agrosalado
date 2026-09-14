@@ -62,7 +62,12 @@ export const TIPOS_MOVIMIENTO = {
   },
   traslado: {
     nombre: 'Traslado entre establecimientos', clase: 'interna',
-    campos: ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen', 'titular_origen'],
+    // rodeo_destino es obligatorio acá: un rodeo queda atado para siempre
+    // al establecimiento donde se creó (rodeos.establecimiento_id), así
+    // que mover animales a otro establecimiento significa sumarlos a un
+    // rodeo (existente o nuevo) DE ESE establecimiento, no arrastrar el
+    // rodeo de origen.
+    campos: ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen', 'titular_origen', 'rodeo_destino'],
     duplicarCategoriaEnDestino: true,
     duplicarTitularEnDestino: true,
   },
