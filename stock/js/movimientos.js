@@ -378,6 +378,23 @@ function actualizarBloqueFeedLot() {
   el('mov-feedlot-entrada').classList.toggle('oculto', !entrada);
 }
 
+// A feed lot no hace falta elegir un rodeo destino aparte: las cabezas
+// entran directo al corral (bloque de arriba), quedándose en el mismo
+// rodeo de origen (ver registrarEntradaFeedLot/armarFila) — la excepción
+// solo aplica a "Traslado", el único tipo que puede tener feed_lot como
+// destino y a la vez pedir rodeo_destino.
+function trasladoAFeedLot() {
+  return obtenerSeleccion('mov-tipo') === 'traslado' && obtenerSeleccion('mov-establecimiento-destino') === 'feed_lot';
+}
+
+function actualizarRequeridoRodeoDestino() {
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (!cfg) return;
+  const aplica = cfg.campos.includes('rodeo_destino') && !trasladoAFeedLot();
+  document.querySelector('[data-campo="rodeo_destino"]').classList.toggle('oculto', !aplica);
+  el('mov-rodeo-destino').required = aplica;
+}
+
 function actualizarCamposVisibles() {
   const tipo = obtenerSeleccion('mov-tipo');
   if (!tipo) return;
@@ -388,10 +405,11 @@ function actualizarCamposVisibles() {
     contenedor.classList.toggle('oculto', !cfg.campos.includes(campo));
   }
   // mov-rodeo-destino es "required" en el HTML, pero solo corresponde para
-  // los tipos que lo usan (cambio_rodeo) — si queda required mientras su
-  // contenedor está oculto, el navegador bloquea el submit en SILENCIO
-  // (sin mensaje visible) para cualquier otro tipo de movimiento.
-  el('mov-rodeo-destino').required = cfg.campos.includes('rodeo_destino');
+  // los tipos que lo usan (y no a feed lot, ver trasladoAFeedLot) — si
+  // queda required mientras su contenedor está oculto, el navegador
+  // bloquea el submit en SILENCIO (sin mensaje visible) para cualquier
+  // otro caso.
+  actualizarRequeridoRodeoDestino();
 
   // Para Mortandad, las Observaciones dejan de ser opcionales: hay que
   // contar qué pasó (causa de la muerte) para que quede registrado.
@@ -436,7 +454,7 @@ function leerFormulario() {
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
     rodeo_id: el('mov-rodeo').value,
-    rodeo_destino: cfg.campos.includes('rodeo_destino') ? el('mov-rodeo-destino').value : null,
+    rodeo_destino: (cfg.campos.includes('rodeo_destino') && !trasladoAFeedLot()) ? el('mov-rodeo-destino').value : null,
     observaciones: el('mov-observaciones').value.trim() || null,
     feedlotEntrada: calcularEstadoFeedLot().entrada,
     feedlotSalida: calcularEstadoFeedLot().salida,
@@ -460,16 +478,20 @@ function validar(datos) {
   else if (datos.fecha > new Date().toISOString().slice(0, 10)) errores.push('La fecha no puede ser futura.');
 
   for (const campo of datos.cfg.campos) {
+    if (campo === 'rodeo_destino') continue; // se valida aparte, abajo (no aplica a un traslado a feed lot)
     if (!datos[campo]) errores.push('Falta completar un campo obligatorio.');
   }
 
   if (!datos.rodeo_id || datos.rodeo_id === '__nuevo__') {
     errores.push('Elegí un rodeo (o creá uno nuevo con "+ Crear rodeo nuevo...").');
   }
-  if (datos.cfg.campos.includes('rodeo_destino')) {
-    if (datos.rodeo_destino === '__nuevo__') {
+  const esTrasladoAFeedLot = datos.tipo === 'traslado' && datos.establecimiento_destino === 'feed_lot';
+  if (datos.cfg.campos.includes('rodeo_destino') && !esTrasladoAFeedLot) {
+    if (!datos.rodeo_destino) {
+      errores.push('Elegí un rodeo destino (o creá uno nuevo con "+ Crear rodeo nuevo...").');
+    } else if (datos.rodeo_destino === '__nuevo__') {
       errores.push('Terminá de crear el rodeo destino (o elegí uno existente).');
-    } else if (datos.rodeo_destino && datos.rodeo_destino === datos.rodeo_id) {
+    } else if (datos.rodeo_destino === datos.rodeo_id) {
       errores.push('El rodeo destino tiene que ser distinto del rodeo de origen.');
     }
   }
@@ -742,7 +764,7 @@ export async function initMovimientos() {
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
-    el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); });
+    el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); actualizarRequeridoRodeoDestino(); });
   }
   el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
   establecerSeleccion('mov-tipo', primerTipoPermitido());

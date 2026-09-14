@@ -593,12 +593,17 @@ begin
     end if;
     -- Un rodeo queda atado para siempre al establecimiento donde se
     -- creó: mover animales a otro establecimiento significa sumarlos a
-    -- un rodeo (existente o nuevo) DE ESE establecimiento.
-    if new.rodeo_destino_id is null then
-      raise exception 'Falta rodeo_destino_id para traslado';
-    end if;
-    if new.rodeo_destino_id = new.rodeo_id then
-      raise exception 'En un traslado, el rodeo destino tiene que ser distinto del origen';
+    -- un rodeo (existente o nuevo) DE ESE establecimiento. Excepción:
+    -- feed lot no organiza por rodeo destino sino por corral (bloque
+    -- aparte del formulario) — ahí el rodeo de origen se reubica tal
+    -- cual, ver actualizar_rodeo_tras_movimiento().
+    if new.establecimiento_destino <> 'feed_lot' then
+      if new.rodeo_destino_id is null then
+        raise exception 'Falta rodeo_destino_id para traslado';
+      end if;
+      if new.rodeo_destino_id = new.rodeo_id then
+        raise exception 'En un traslado, el rodeo destino tiene que ser distinto del origen';
+      end if;
     end if;
   end if;
 
