@@ -65,6 +65,8 @@ function wireSyncBanner() {
 function mostrarLogin(mensajeError) {
   el('pantalla-login').classList.remove('oculto');
   el('app-shell').classList.add('oculto');
+  el('login-cargando').classList.add('oculto');
+  el('login-form').classList.remove('oculto');
   if (mensajeError) {
     el('login-mensaje').textContent = mensajeError;
     el('login-mensaje').className = 'error';
