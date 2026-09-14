@@ -8,6 +8,50 @@
 // (ver app.js).
 import { supabase } from './supabaseClient.js';
 
+// Cache de la identidad resuelta en localStorage, para no esperar la red
+// en CADA cambio de app: se muestra de entrada la última identidad
+// conocida (si hay) y se revalida enseguida en segundo plano, así un
+// cambio real de rol/accesos se termina reflejando igual, solo que sin
+// el parpadeo de "Verificando acceso..." en el caso común (nada cambió
+// desde la última vez). Dos claves porque son dos identidades excluyentes
+// (staff vs. transportista) — la de perfil es la MISMA que usan Granos/
+// Hacienda/$Rel (comparten origen en producción), así que loguearse acá
+// también acelera el primer ingreso a esas otras apps.
+const CACHE_KEY_PERFIL = 'agrosalado_perfil_cache';
+const CACHE_KEY_TRANSPORTISTA = 'agrosalado_transportista_cache';
+
+function leerCache(key, userId) {
+  try {
+    const cache = JSON.parse(localStorage.getItem(key) || 'null');
+    return cache && cache.user_id === userId ? cache : null;
+  } catch {
+    return null;
+  }
+}
+
+function guardarCache(key, valor) {
+  try {
+    if (valor) localStorage.setItem(key, JSON.stringify(valor));
+    else localStorage.removeItem(key);
+  } catch {
+    // localStorage puede fallar (modo privado, cuota llena) — no es
+    // crítico, se vuelve a pedir por red la próxima vez.
+  }
+}
+
+function leerIdentidadCache(userId) {
+  const perfil = leerCache(CACHE_KEY_PERFIL, userId);
+  if (perfil) return { modo: 'staff', perfil, transportista: null };
+  const transportista = leerCache(CACHE_KEY_TRANSPORTISTA, userId);
+  if (transportista) return { modo: 'transportista', perfil: null, transportista };
+  return null;
+}
+
+function guardarIdentidadCache(identidad) {
+  guardarCache(CACHE_KEY_PERFIL, identidad.modo === 'staff' ? identidad.perfil : null);
+  guardarCache(CACHE_KEY_TRANSPORTISTA, identidad.modo === 'transportista' ? identidad.transportista : null);
+}
+
 const estado = {
   session: null,
   modo: null, // 'staff' | 'transportista' | null
@@ -81,13 +125,23 @@ export function getEstado() {
 export async function initAuth() {
   const { data: { session } } = await supabase.auth.getSession();
   estado.session = session;
-  Object.assign(estado, session ? await resolverIdentidad(session.user.id) : { modo: null, perfil: null, transportista: null });
+  const cache = session ? leerIdentidadCache(session.user.id) : null;
+  if (cache) {
+    Object.assign(estado, cache);
+    estado.listo = true;
+    notificar();
+  }
+  const identidad = session ? await resolverIdentidad(session.user.id) : { modo: null, perfil: null, transportista: null };
+  Object.assign(estado, identidad);
+  guardarIdentidadCache(identidad);
   estado.listo = true;
   notificar();
 
   supabase.auth.onAuthStateChange(async (_evento, session) => {
     estado.session = session;
-    Object.assign(estado, session ? await resolverIdentidad(session.user.id) : { modo: null, perfil: null, transportista: null });
+    const identidad = session ? await resolverIdentidad(session.user.id) : { modo: null, perfil: null, transportista: null };
+    Object.assign(estado, identidad);
+    guardarIdentidadCache(identidad);
     notificar();
   });
 }

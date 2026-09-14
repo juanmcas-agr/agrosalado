@@ -758,25 +758,33 @@
 
     let perfilActual = null;
 
-    async function verificarAcceso() {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        mostrarFormulario();
-        return;
+    // Cache del perfil en localStorage (misma clave que usan Hacienda/
+    // $Rel/Logística — comparten origen en producción) para no esperar la
+    // red en CADA cambio de app: se muestra de entrada el último perfil
+    // conocido (si lo hay y ya tenía acceso a Granos) y se revalida
+    // enseguida en segundo plano, así un cambio real de rol/accesos se
+    // termina reflejando igual, solo que sin el parpadeo de "Verificando
+    // acceso..." en el caso común (nada cambió desde la última vez).
+    const CACHE_KEY = 'agrosalado_perfil_cache';
+    function leerPerfilCache(userId) {
+      try {
+        const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || 'null');
+        return cache && cache.user_id === userId ? cache : null;
+      } catch {
+        return null;
       }
-      const { data: perfil } = await supabase
-        .from('perfiles')
-        .select('rol, acceso_granos')
-        .eq('user_id', session.user.id)
-        .single();
+    }
+    function guardarPerfilCache(perfil) {
+      try {
+        if (perfil) localStorage.setItem(CACHE_KEY, JSON.stringify(perfil));
+        else localStorage.removeItem(CACHE_KEY);
+      } catch {
+        // localStorage puede fallar (modo privado, cuota llena) — no es
+        // crítico, se vuelve a pedir por red la próxima vez.
+      }
+    }
 
-      // Un owner siempre tiene acceso total; para el resto hace falta el
-      // tilde explícito de "Acceso a Granos" (Configuración > Administrar
-      // usuarios).
-      if (!perfil || (perfil.rol !== 'owner' && !perfil.acceso_granos)) {
-        window.location.replace('/stock/');
-        return;
-      }
+    function mostrarConPerfil(perfil) {
       perfilActual = perfil;
       // El script clásico de más abajo (agregarAlternativa, abrirPanelConfig)
       // no es un módulo — no puede ver el `perfilActual` de este scope, así
@@ -784,7 +792,35 @@
       window.perfilActual = perfil;
       overlay.classList.add('oculto');
       // La pestaña FLETE es un simulador privado, solo para el owner.
-      document.getElementById('tabFlete').classList.toggle('oculto-panel', perfilActual.rol !== 'owner');
+      document.getElementById('tabFlete').classList.toggle('oculto-panel', perfil.rol !== 'owner');
+    }
+
+    async function verificarAcceso() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        mostrarFormulario();
+        return;
+      }
+
+      const cache = leerPerfilCache(session.user.id);
+      if (cache && (cache.rol === 'owner' || cache.acceso_granos)) mostrarConPerfil(cache);
+
+      const { data: perfil } = await supabase
+        .from('perfiles')
+        .select('user_id, nombre_completo, rol, activo, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica')
+        .eq('user_id', session.user.id)
+        .single();
+
+      // Un owner siempre tiene acceso total; para el resto hace falta el
+      // tilde explícito de "Acceso a Granos" (Configuración > Administrar
+      // usuarios).
+      if (!perfil || (perfil.rol !== 'owner' && !perfil.acceso_granos)) {
+        guardarPerfilCache(null);
+        window.location.replace('/stock/');
+        return;
+      }
+      guardarPerfilCache(perfil);
+      mostrarConPerfil(perfil);
     }
 
     form.addEventListener('submit', async (evento) => {
