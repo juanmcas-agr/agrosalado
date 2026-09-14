@@ -617,14 +617,16 @@
     </div>
 
     <div class="panel-menu">
-      <button type="button" class="panel-menu-item" data-seccion="crear">
-        <span>CREAR USUARIO</span><span class="panel-menu-flecha">›</span>
+      <button type="button" class="panel-menu-item" data-seccion="usuarios">
+        <span>USUARIOS</span><span class="panel-menu-flecha">›</span>
       </button>
-      <div id="seccionCrear" class="panel-seccion">
+      <div id="seccionUsuarios" class="panel-seccion">
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Elegí "— Nuevo usuario —" para crear uno, o un usuario existente para editar su rol, accesos y avisos.</p>
+        <select id="cfgListaUsuarios"></select>
         <input type="text" id="cfgUsuarioNombre" placeholder="Nombre completo">
         <input type="email" id="cfgUsuarioEmail" placeholder="Email">
         <input type="tel" id="cfgUsuarioTelefono" placeholder="Teléfono WhatsApp (ej: +5493571234567)">
-        <div class="campo-password">
+        <div class="campo-password" id="cfgUsuarioPasswordWrap">
           <input type="password" id="cfgUsuarioPassword" placeholder="Contraseña" autocomplete="new-password">
           <button type="button" id="cfgUsuarioMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
         </div>
@@ -634,48 +636,34 @@
           <option value="administrativo">Administrativo</option>
           <option value="owner">Owner</option>
         </select>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoHacienda" checked> Acceso a Hacienda</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoGranos"> Acceso a Granos</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoRel"> Acceso a $Rel</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoLogistica"> Acceso a Logística</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeHacienda"> Recibe resumen diario de Hacienda</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeAlertasPrecios"> Recibe alertas de $Rel</label>
-        <button type="button" id="botonCrearUsuario">Crear usuario</button>
-        <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
-      </div>
-
-      <button type="button" class="panel-menu-item" data-seccion="administrar">
-        <span>ADMINISTRAR USUARIOS</span><span class="panel-menu-flecha">›</span>
-      </button>
-      <div id="seccionAdministrar" class="panel-seccion">
-        <p style="font-size:0.85em;color:#666;margin-top:0;">Elegí un usuario para editar su rol, accesos y avisos, o cambiarle la contraseña.</p>
-        <select id="cfgListaUsuarios"></select>
-        <input type="text" id="cfgUsuarioEditNombre" placeholder="Nombre completo">
-        <input type="email" id="cfgUsuarioEditEmail" placeholder="Email">
-        <input type="tel" id="cfgUsuarioEditTelefono" placeholder="Teléfono WhatsApp (ej: +5493571234567)">
-        <select id="cfgUsuarioEditRol">
-          <option value="encargado">Encargado</option>
-          <option value="puestero">Puestero</option>
-          <option value="administrativo">Administrativo</option>
-          <option value="owner">Owner</option>
-        </select>
-        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoHacienda"> Acceso a Hacienda</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoHacienda" checked> Acceso a Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoGranos"> Acceso a Granos</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoRel"> Acceso a $Rel</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoLogistica"> Acceso a Logística</label>
-        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq"> Recibe liquidaciones / anulaciones</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeHacienda"> Recibe resumen diario de Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeAlertasPrecios"> Recibe alertas de $Rel</label>
-        <button type="button" id="botonGuardarUsuario">Guardar cambios</button>
-        <div class="campo-password">
-          <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva (usuario elegido arriba)" autocomplete="new-password">
-          <button type="button" id="cfgClaveMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
+        <button type="button" id="botonGuardarUsuario">Crear usuario</button>
+        <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
+
+        <div id="cfgCambiarClaveBloque" class="oculto">
+          <h4 style="margin:14px 0 8px;">Cambiar contraseña</h4>
+          <div class="campo-password">
+            <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva" autocomplete="new-password">
+            <button type="button" id="cfgClaveMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
+          </div>
+          <button type="button" id="botonCambiarClave">Cambiar contraseña</button>
         </div>
-        <button type="button" id="botonCambiarClave">Cambiar contraseña</button>
-        <div id="cfgUsuarioEditMensaje" class="mensaje-panel"></div>
+      </div>
+
+      <button type="button" class="panel-menu-item" data-seccion="destinatarios">
+        <span>DESTINATARIOS DE AVISOS</span><span class="panel-menu-flecha">›</span>
+      </button>
+      <div id="seccionDestinatarios" class="panel-seccion">
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Reciben avisos de negocio (liquidación/anulación en Granos, resumen diario de Hacienda, WhatsApp, alertas de $Rel) — pueden no tener una cuenta activa en el sistema.</p>
+        <div id="cfgDestinatariosLista"></div>
+        <div id="cfgDestinatariosMensaje" class="mensaje-panel"></div>
       </div>
 
       <button type="button" class="panel-menu-item" data-seccion="rodeos">

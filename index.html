@@ -1415,14 +1415,16 @@
     </div>
 
     <div class="panel-menu">
-      <button type="button" class="panel-menu-item" data-seccion="crear" onclick="toggleSeccionConfig('crear')">
-        <span>CREAR USUARIO</span><span class="panel-menu-flecha">›</span>
+      <button type="button" class="panel-menu-item" data-seccion="usuarios" onclick="toggleSeccionConfig('usuarios')">
+        <span>USUARIOS</span><span class="panel-menu-flecha">›</span>
       </button>
-      <div id="seccionCrear" class="panel-seccion">
+      <div id="seccionUsuarios" class="panel-seccion">
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Elegí "— Nuevo usuario —" para crear uno, o un usuario existente para editar su rol, accesos y avisos.</p>
+        <select id="cfgListaUsuarios" onchange="onSeleccionUsuarioLista()"></select>
         <input type="text" id="cfgUsuarioNombre" placeholder="Nombre completo">
         <input type="email" id="cfgUsuarioEmail" placeholder="Email">
         <input type="tel" id="cfgUsuarioTelefono" placeholder="Teléfono WhatsApp (ej: +5493571234567)">
-        <div class="campo-password">
+        <div class="campo-password" id="cfgUsuarioPasswordWrap">
           <input type="password" id="cfgUsuarioPassword" placeholder="Contraseña" autocomplete="new-password">
           <button type="button" id="cfgUsuarioMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
         </div>
@@ -1432,48 +1434,34 @@
           <option value="administrativo">Administrativo</option>
           <option value="owner">Owner</option>
         </select>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoHacienda" checked> Acceso a Hacienda</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoGranos"> Acceso a Granos</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoRel"> Acceso a $Rel</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoAccesoLogistica"> Acceso a Logística</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeHacienda"> Recibe resumen diario de Hacienda</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
-        <label class="check-inline"><input type="checkbox" id="cfgNuevoRecibeAlertasPrecios"> Recibe alertas de $Rel</label>
-        <button type="button" onclick="crearUsuario()">Crear usuario</button>
-        <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
-      </div>
-
-      <button type="button" class="panel-menu-item" data-seccion="administrar" onclick="toggleSeccionConfig('administrar')">
-        <span>ADMINISTRAR USUARIOS</span><span class="panel-menu-flecha">›</span>
-      </button>
-      <div id="seccionAdministrar" class="panel-seccion">
-        <p style="font-size:0.85em;color:#666;margin-top:0;">Elegí un usuario para editar su rol, accesos y avisos, o cambiarle la contraseña.</p>
-        <select id="cfgListaUsuarios" onchange="onSeleccionUsuarioLista()"></select>
-        <input type="text" id="cfgUsuarioEditNombre" placeholder="Nombre completo">
-        <input type="email" id="cfgUsuarioEditEmail" placeholder="Email">
-        <input type="tel" id="cfgUsuarioEditTelefono" placeholder="Teléfono WhatsApp (ej: +5493571234567)">
-        <select id="cfgUsuarioEditRol">
-          <option value="encargado">Encargado</option>
-          <option value="puestero">Puestero</option>
-          <option value="administrativo">Administrativo</option>
-          <option value="owner">Owner</option>
-        </select>
-        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoHacienda"> Acceso a Hacienda</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoHacienda" checked> Acceso a Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoGranos"> Acceso a Granos</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoRel"> Acceso a $Rel</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioAccesoLogistica"> Acceso a Logística</label>
-        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq"> Recibe liquidaciones / anulaciones</label>
+        <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeLiq" checked> Recibe liquidaciones / anulaciones</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeHacienda"> Recibe resumen diario de Hacienda</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeWhatsapp"> Recibe WhatsApp de negocio cerrado</label>
         <label class="check-inline"><input type="checkbox" id="cfgUsuarioRecibeAlertasPrecios"> Recibe alertas de $Rel</label>
-        <button type="button" onclick="guardarCambiosUsuario()">Guardar cambios</button>
-        <div class="campo-password">
-          <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva (usuario elegido arriba)" autocomplete="new-password">
-          <button type="button" id="cfgClaveMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
+        <button type="button" id="botonGuardarUsuario" onclick="guardarUsuario()">Crear usuario</button>
+        <div id="cfgUsuarioMensaje" class="mensaje-panel"></div>
+
+        <div id="cfgCambiarClaveBloque" class="oculto">
+          <h4 style="margin:14px 0 8px;">Cambiar contraseña</h4>
+          <div class="campo-password">
+            <input type="password" id="cfgClaveNueva" placeholder="Contraseña nueva" autocomplete="new-password">
+            <button type="button" id="cfgClaveMostrarClave" class="boton-mostrar-clave" aria-label="Mostrar contraseña"></button>
+          </div>
+          <button type="button" onclick="cambiarClaveUsuario()">Cambiar contraseña</button>
         </div>
-        <button type="button" onclick="cambiarClaveUsuario()">Cambiar contraseña</button>
-        <div id="cfgUsuarioEditMensaje" class="mensaje-panel"></div>
+      </div>
+
+      <button type="button" class="panel-menu-item" data-seccion="destinatarios" onclick="toggleSeccionConfig('destinatarios')">
+        <span>DESTINATARIOS DE AVISOS</span><span class="panel-menu-flecha">›</span>
+      </button>
+      <div id="seccionDestinatarios" class="panel-seccion">
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Reciben avisos de negocio (liquidación/anulación en Granos, resumen diario de Hacienda, WhatsApp, alertas de $Rel) — pueden no tener una cuenta activa en el sistema.</p>
+        <div id="cfgDestinatariosLista"></div>
+        <div id="cfgDestinatariosMensaje" class="mensaje-panel"></div>
       </div>
 
       <button type="button" class="panel-menu-item" data-seccion="clientes" onclick="toggleSeccionConfig('clientes')">
@@ -2053,10 +2041,11 @@
       // funciones admin-*.js) — acá además se ocultan esas secciones para
       // el resto, que ni siquiera debería verlas.
       const esOwnerActual = window.perfilActual && window.perfilActual.rol === 'owner';
-      document.querySelector('.panel-menu-item[data-seccion="crear"]').classList.toggle('oculto-panel', !esOwnerActual);
-      document.querySelector('.panel-menu-item[data-seccion="administrar"]').classList.toggle('oculto-panel', !esOwnerActual);
-      document.getElementById('seccionCrear').classList.toggle('oculto-panel', !esOwnerActual);
-      document.getElementById('seccionAdministrar').classList.toggle('oculto-panel', !esOwnerActual);
+      for (const seccion of ['usuarios', 'destinatarios']) {
+        document.querySelector(`.panel-menu-item[data-seccion="${seccion}"]`).classList.toggle('oculto-panel', !esOwnerActual);
+      }
+      document.getElementById('seccionUsuarios').classList.toggle('oculto-panel', !esOwnerActual);
+      document.getElementById('seccionDestinatarios').classList.toggle('oculto-panel', !esOwnerActual);
       renderListaClientesPanel();
     }
 
@@ -2068,7 +2057,7 @@
     // Menú de opciones tipo acordeón: un click abre esa sección y cierra
     // las demás; un segundo click sobre la misma la cierra.
     function toggleSeccionConfig(nombre) {
-      const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', clientes: 'seccionClientes' };
+      const secciones = { usuarios: 'seccionUsuarios', destinatarios: 'seccionDestinatarios', clientes: 'seccionClientes' };
       const yaAbierta = document.getElementById(secciones[nombre]).classList.contains('abierta');
       for (const [clave, id] of Object.entries(secciones)) {
         document.getElementById(id).classList.remove('abierta');
@@ -2077,7 +2066,8 @@
       if (!yaAbierta) {
         document.getElementById(secciones[nombre]).classList.add('abierta');
         document.querySelector(`.panel-menu-item[data-seccion="${nombre}"]`).classList.add('activo');
-        if (nombre === 'administrar') cargarUsuariosPanel();
+        if (nombre === 'usuarios') cargarUsuariosPanel();
+        if (nombre === 'destinatarios') cargarPantallaDestinatarios();
       }
     }
 
@@ -2099,7 +2089,7 @@
     function renderListaUsuariosPanel() {
       const select = document.getElementById('cfgListaUsuarios');
       const seleccionPrevia = select.value;
-      select.innerHTML = '<option value="">— Elegir usuario para editar —</option>';
+      select.innerHTML = '<option value="">— Nuevo usuario —</option>';
       for (const u of usuariosCache) {
         const opt = document.createElement('option');
         opt.value = u.user_id;
@@ -2109,31 +2099,51 @@
       select.value = seleccionPrevia;
     }
 
+    function limpiarFormularioUsuario() {
+      document.getElementById('cfgUsuarioNombre').value = '';
+      document.getElementById('cfgUsuarioEmail').value = '';
+      document.getElementById('cfgUsuarioTelefono').value = '';
+      document.getElementById('cfgUsuarioPassword').value = '';
+      document.getElementById('cfgUsuarioRol').value = 'encargado';
+      document.getElementById('cfgUsuarioAccesoHacienda').checked = true;
+      document.getElementById('cfgUsuarioAccesoHacienda').disabled = false;
+      document.getElementById('cfgUsuarioAccesoGranos').checked = false;
+      document.getElementById('cfgUsuarioAccesoGranos').disabled = false;
+      document.getElementById('cfgUsuarioAccesoRel').checked = false;
+      document.getElementById('cfgUsuarioAccesoRel').disabled = false;
+      document.getElementById('cfgUsuarioAccesoLogistica').checked = false;
+      document.getElementById('cfgUsuarioAccesoLogistica').disabled = false;
+      document.getElementById('cfgUsuarioRecibeLiq').checked = true;
+      document.getElementById('cfgUsuarioRecibeHacienda').checked = false;
+      document.getElementById('cfgUsuarioRecibeWhatsapp').checked = false;
+      document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked = false;
+    }
+
+    // Un mismo formulario sirve para crear y editar — "— Nuevo usuario —"
+    // (value vacío) lo deja en blanco, listo para completar; elegir uno
+    // existente lo precarga. guardarUsuario() decide sola a qué endpoint
+    // pegarle según haya o no un user_id seleccionado.
     function onSeleccionUsuarioLista() {
       const userId = document.getElementById('cfgListaUsuarios').value;
-      const msj = document.getElementById('cfgUsuarioEditMensaje');
-      msj.textContent = '';
-      if (!userId) {
-        document.getElementById('cfgUsuarioEditNombre').value = '';
-        document.getElementById('cfgUsuarioEditEmail').value = '';
-        document.getElementById('cfgUsuarioEditTelefono').value = '';
-        document.getElementById('cfgUsuarioAccesoHacienda').checked = false;
-        document.getElementById('cfgUsuarioAccesoGranos').checked = false;
-        document.getElementById('cfgUsuarioAccesoRel').checked = false;
-        document.getElementById('cfgUsuarioAccesoLogistica').checked = false;
-        document.getElementById('cfgUsuarioRecibeLiq').checked = false;
-        document.getElementById('cfgUsuarioRecibeHacienda').checked = false;
-        document.getElementById('cfgUsuarioRecibeWhatsapp').checked = false;
-        document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked = false;
+      const esNuevo = !userId;
+      document.getElementById('cfgUsuarioMensaje').textContent = '';
+      document.getElementById('cfgUsuarioPasswordWrap').classList.toggle('oculto', !esNuevo);
+      document.getElementById('cfgCambiarClaveBloque').classList.toggle('oculto', esNuevo);
+      document.getElementById('cfgClaveNueva').value = '';
+      document.getElementById('botonGuardarUsuario').textContent = esNuevo ? 'Crear usuario' : 'Guardar cambios';
+
+      if (esNuevo) {
+        limpiarFormularioUsuario();
         return;
       }
       const usuario = usuariosCache.find((u) => u.user_id === userId);
       if (!usuario) return;
       const destinatario = buscarDestinatarioPorEmail(usuario.email);
 
-      document.getElementById('cfgUsuarioEditNombre').value = usuario.nombre_completo || '';
-      document.getElementById('cfgUsuarioEditEmail').value = usuario.email || '';
-      document.getElementById('cfgUsuarioEditRol').value = usuario.rol;
+      document.getElementById('cfgUsuarioNombre').value = usuario.nombre_completo || '';
+      document.getElementById('cfgUsuarioEmail').value = usuario.email || '';
+      document.getElementById('cfgUsuarioTelefono').value = (destinatario && destinatario.telefono) || '';
+      document.getElementById('cfgUsuarioRol').value = usuario.rol;
       // Un owner siempre tiene acceso total, más allá de lo que digan las
       // casillas — se muestran tildadas y bloqueadas para reflejar eso.
       const esOwner = usuario.rol === 'owner';
@@ -2147,21 +2157,21 @@
       document.getElementById('cfgUsuarioAccesoLogistica').disabled = esOwner;
       document.getElementById('cfgUsuarioRecibeLiq').checked = !!(destinatario && destinatario.recibe_liquidaciones);
       document.getElementById('cfgUsuarioRecibeHacienda').checked = !!(destinatario && destinatario.recibe_hacienda);
-      document.getElementById('cfgUsuarioEditTelefono').value = (destinatario && destinatario.telefono) || '';
       document.getElementById('cfgUsuarioRecibeWhatsapp').checked = !!(destinatario && destinatario.recibe_whatsapp);
       document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked = !!(destinatario && destinatario.recibe_alertas_precios);
     }
 
-    async function guardarCambiosUsuario() {
-      const user_id = document.getElementById('cfgListaUsuarios').value;
-      const msj = document.getElementById('cfgUsuarioEditMensaje');
+    async function guardarUsuario() {
+      const userId = document.getElementById('cfgListaUsuarios').value;
+      const esNuevo = !userId;
+      const msj = document.getElementById('cfgUsuarioMensaje');
       msj.textContent = '';
-      if (!user_id) { msj.textContent = 'Elegí un usuario de la lista primero.'; msj.className = 'mensaje-panel error'; return; }
 
-      const nombre_completo = document.getElementById('cfgUsuarioEditNombre').value.trim();
-      const email = document.getElementById('cfgUsuarioEditEmail').value.trim();
-      const telefono = document.getElementById('cfgUsuarioEditTelefono').value.trim();
-      const rol = document.getElementById('cfgUsuarioEditRol').value;
+      const nombre_completo = document.getElementById('cfgUsuarioNombre').value.trim();
+      const email = document.getElementById('cfgUsuarioEmail').value.trim();
+      const telefono = document.getElementById('cfgUsuarioTelefono').value.trim();
+      const password = document.getElementById('cfgUsuarioPassword').value;
+      const rol = document.getElementById('cfgUsuarioRol').value;
       const acceso_hacienda = document.getElementById('cfgUsuarioAccesoHacienda').checked;
       const acceso_granos = document.getElementById('cfgUsuarioAccesoGranos').checked;
       const acceso_precios_relativos = document.getElementById('cfgUsuarioAccesoRel').checked;
@@ -2170,17 +2180,27 @@
       const recibe_hacienda = document.getElementById('cfgUsuarioRecibeHacienda').checked;
       const recibe_whatsapp = document.getElementById('cfgUsuarioRecibeWhatsapp').checked;
       const recibe_alertas_precios = document.getElementById('cfgUsuarioRecibeAlertasPrecios').checked;
-      if (!nombre_completo || !email) { msj.textContent = 'Faltan nombre y email.'; msj.className = 'mensaje-panel error'; return; }
+
+      if (!nombre_completo || !email || (esNuevo && !password)) {
+        msj.textContent = esNuevo ? 'Completá nombre, email y contraseña.' : 'Faltan nombre y email.';
+        msj.className = 'mensaje-panel error';
+        return;
+      }
       if (recibe_whatsapp && !telefono) { msj.textContent = 'Para recibir WhatsApp hace falta cargar el teléfono.'; msj.className = 'mensaje-panel error'; return; }
 
       const { data: { session } } = await window.supabaseClient.auth.getSession();
       if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
 
+      const endpoint = esNuevo ? 'admin-crear-usuario' : 'admin-actualizar-usuario';
+      const payload = esNuevo
+        ? { email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }
+        : { user_id: userId, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios };
+
       try {
-        const res = await fetch('/.netlify/functions/admin-actualizar-usuario', {
+        const res = await fetch(`/.netlify/functions/${endpoint}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
+          body: JSON.stringify(payload),
         });
         const datos = await res.json();
         if (!res.ok) {
@@ -2188,14 +2208,73 @@
           msj.className = 'mensaje-panel error';
           return;
         }
-        msj.textContent = 'Usuario actualizado.';
-        msj.className = 'mensaje-panel ok';
         await cargarUsuariosPanel();
-        document.getElementById('cfgListaUsuarios').value = user_id;
+        if (esNuevo) {
+          document.getElementById('cfgListaUsuarios').value = datos.user_id || '';
+          onSeleccionUsuarioLista();
+          msj.textContent = `Usuario "${nombre_completo}" creado.`;
+        } else {
+          document.getElementById('cfgListaUsuarios').value = userId;
+          msj.textContent = 'Usuario actualizado.';
+        }
+        msj.className = 'mensaje-panel ok';
       } catch (error) {
         msj.textContent = 'Error de red: ' + error.message;
         msj.className = 'mensaje-panel error';
       }
+    }
+
+    function renderDestinatarios() {
+      const cont = document.getElementById('cfgDestinatariosLista');
+      if (!destinatariosNegocioCache.length) {
+        cont.innerHTML = '<p style="font-size:0.85em;color:#666;">Sin destinatarios cargados.</p>';
+        return;
+      }
+      cont.innerHTML = '';
+      for (const d of destinatariosNegocioCache) {
+        const avisos = [
+          d.recibe_liquidaciones && 'Liq/Anul',
+          d.recibe_hacienda && 'Resumen Hacienda',
+          d.recibe_whatsapp && 'WhatsApp',
+          d.recibe_alertas_precios && '$Rel',
+        ].filter(Boolean).join(', ') || 'Ninguno';
+        const fila = document.createElement('div');
+        fila.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee;';
+        fila.innerHTML = `
+          <div style="font-size:0.85em;">
+            <strong>${d.nombre || d.email}</strong><br>
+            <span style="color:#666;">${d.email} — ${avisos}</span>
+          </div>
+        `;
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.textContent = 'Quitar';
+        boton.style.cssText = 'background:#ad1e19;flex-shrink:0;width:auto;margin:0;padding:8px 12px;';
+        boton.addEventListener('click', () => quitarDestinatario(d));
+        fila.appendChild(boton);
+        cont.appendChild(fila);
+      }
+    }
+
+    async function cargarPantallaDestinatarios() {
+      await cargarDestinatariosNegocio();
+      renderDestinatarios();
+    }
+
+    async function quitarDestinatario(d) {
+      const msj = document.getElementById('cfgDestinatariosMensaje');
+      msj.textContent = '';
+      if (!confirm(`¿Quitar a "${d.nombre || d.email}" (${d.email}) de los destinatarios de avisos? Deja de recibir cualquier aviso — esto no borra ninguna cuenta de usuario, son cosas separadas.`)) return;
+      const { error } = await window.supabaseClient.from('destinatarios_negocio').delete().eq('id', d.id);
+      if (error) {
+        msj.textContent = 'No se pudo quitar: ' + error.message;
+        msj.className = 'mensaje-panel error';
+        return;
+      }
+      await cargarDestinatariosNegocio();
+      renderDestinatarios();
+      msj.textContent = `"${d.nombre || d.email}" quitado.`;
+      msj.className = 'mensaje-panel ok';
     }
 
     let clienteEditandoId = null;
@@ -2314,75 +2393,10 @@
       return destinatariosNegocioCache.find((d) => d.email.trim().toLowerCase() === buscado) || null;
     }
 
-    // ── Crear usuario / administrar usuarios (vía funciones admin con service role) ──
-    async function crearUsuario() {
-      const nombre_completo = document.getElementById('cfgUsuarioNombre').value.trim();
-      const email = document.getElementById('cfgUsuarioEmail').value.trim();
-      const telefono = document.getElementById('cfgUsuarioTelefono').value.trim();
-      const password = document.getElementById('cfgUsuarioPassword').value;
-      const rol = document.getElementById('cfgUsuarioRol').value;
-      const acceso_hacienda = document.getElementById('cfgNuevoAccesoHacienda').checked;
-      const acceso_granos = document.getElementById('cfgNuevoAccesoGranos').checked;
-      const acceso_precios_relativos = document.getElementById('cfgNuevoAccesoRel').checked;
-      const acceso_logistica = document.getElementById('cfgNuevoAccesoLogistica').checked;
-      const recibe_liquidaciones = document.getElementById('cfgNuevoRecibeLiq').checked;
-      const recibe_hacienda = document.getElementById('cfgNuevoRecibeHacienda').checked;
-      const recibe_whatsapp = document.getElementById('cfgNuevoRecibeWhatsapp').checked;
-      const recibe_alertas_precios = document.getElementById('cfgNuevoRecibeAlertasPrecios').checked;
-      const msj = document.getElementById('cfgUsuarioMensaje');
-      msj.textContent = '';
-
-      if (!nombre_completo || !email || !password) {
-        msj.textContent = 'Completá nombre, email y contraseña.';
-        msj.className = 'mensaje-panel error';
-        return;
-      }
-      if (recibe_whatsapp && !telefono) {
-        msj.textContent = 'Para recibir WhatsApp hace falta cargar el teléfono.';
-        msj.className = 'mensaje-panel error';
-        return;
-      }
-
-      const { data: { session } } = await window.supabaseClient.auth.getSession();
-      if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
-
-      try {
-        const res = await fetch('/.netlify/functions/admin-crear-usuario', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-          body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
-        });
-        const datos = await res.json();
-        if (!res.ok) {
-          msj.textContent = datos.error || 'No se pudo crear el usuario.';
-          msj.className = 'mensaje-panel error';
-          return;
-        }
-        msj.textContent = `Usuario "${nombre_completo}" creado.`;
-        msj.className = 'mensaje-panel ok';
-        document.getElementById('cfgUsuarioNombre').value = '';
-        document.getElementById('cfgUsuarioEmail').value = '';
-        document.getElementById('cfgUsuarioTelefono').value = '';
-        document.getElementById('cfgUsuarioPassword').value = '';
-        document.getElementById('cfgNuevoAccesoHacienda').checked = true;
-        document.getElementById('cfgNuevoAccesoGranos').checked = false;
-        document.getElementById('cfgNuevoAccesoRel').checked = false;
-        document.getElementById('cfgNuevoAccesoLogistica').checked = false;
-        document.getElementById('cfgNuevoRecibeLiq').checked = true;
-        document.getElementById('cfgNuevoRecibeHacienda').checked = false;
-        document.getElementById('cfgNuevoRecibeWhatsapp').checked = false;
-        document.getElementById('cfgNuevoRecibeAlertasPrecios').checked = false;
-        cargarUsuariosPanel();
-      } catch (error) {
-        msj.textContent = 'Error de red: ' + error.message;
-        msj.className = 'mensaje-panel error';
-      }
-    }
-
     async function cambiarClaveUsuario() {
       const user_id = document.getElementById('cfgListaUsuarios').value;
       const password = document.getElementById('cfgClaveNueva').value;
-      const msj = document.getElementById('cfgUsuarioEditMensaje');
+      const msj = document.getElementById('cfgUsuarioMensaje');
       msj.textContent = '';
 
       if (!user_id || !password) {

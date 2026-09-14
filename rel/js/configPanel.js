@@ -37,10 +37,11 @@ function abrirPanelConfig() {
   // solo puede hacer un owner (ya validado server-side en admin-*.js) —
   // acá además se ocultan esas secciones para el resto.
   const esOwnerActual = getEstado().perfil?.rol === 'owner';
-  document.querySelector('.panel-menu-item[data-seccion="crear"]').classList.toggle('oculto-panel', !esOwnerActual);
-  document.querySelector('.panel-menu-item[data-seccion="administrar"]').classList.toggle('oculto-panel', !esOwnerActual);
-  el('seccionCrear').classList.toggle('oculto-panel', !esOwnerActual);
-  el('seccionAdministrar').classList.toggle('oculto-panel', !esOwnerActual);
+  for (const seccion of ['usuarios', 'destinatarios']) {
+    document.querySelector(`.panel-menu-item[data-seccion="${seccion}"]`).classList.toggle('oculto-panel', !esOwnerActual);
+  }
+  el('seccionUsuarios').classList.toggle('oculto-panel', !esOwnerActual);
+  el('seccionDestinatarios').classList.toggle('oculto-panel', !esOwnerActual);
 }
 
 function cerrarPanelConfig() {
@@ -51,7 +52,7 @@ function cerrarPanelConfig() {
 // Menú tipo acordeón: un click abre esa sección y cierra las demás; un
 // segundo click sobre la misma la cierra.
 function toggleSeccionConfig(nombre) {
-  const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar' };
+  const secciones = { usuarios: 'seccionUsuarios', destinatarios: 'seccionDestinatarios' };
   const yaAbierta = el(secciones[nombre]).classList.contains('abierta');
   for (const [clave, id] of Object.entries(secciones)) {
     el(id).classList.remove('abierta');
@@ -60,7 +61,8 @@ function toggleSeccionConfig(nombre) {
   if (!yaAbierta) {
     el(secciones[nombre]).classList.add('abierta');
     document.querySelector(`.panel-menu-item[data-seccion="${nombre}"]`).classList.add('activo');
-    if (nombre === 'administrar') cargarUsuariosPanel();
+    if (nombre === 'usuarios') cargarUsuariosPanel();
+    if (nombre === 'destinatarios') cargarPantallaDestinatarios();
   }
 }
 
@@ -95,7 +97,7 @@ async function cargarUsuariosPanel() {
 function renderListaUsuariosPanel() {
   const select = el('cfgListaUsuarios');
   const seleccionPrevia = select.value;
-  select.innerHTML = '<option value="">— Elegir usuario para editar —</option>';
+  select.innerHTML = '<option value="">— Nuevo usuario —</option>';
   for (const u of usuariosCache) {
     const opt = document.createElement('option');
     opt.value = u.user_id;
@@ -105,31 +107,51 @@ function renderListaUsuariosPanel() {
   select.value = seleccionPrevia;
 }
 
+function limpiarFormularioUsuario() {
+  el('cfgUsuarioNombre').value = '';
+  el('cfgUsuarioEmail').value = '';
+  el('cfgUsuarioTelefono').value = '';
+  el('cfgUsuarioPassword').value = '';
+  el('cfgUsuarioRol').value = 'encargado';
+  el('cfgUsuarioAccesoHacienda').checked = true;
+  el('cfgUsuarioAccesoHacienda').disabled = false;
+  el('cfgUsuarioAccesoGranos').checked = false;
+  el('cfgUsuarioAccesoGranos').disabled = false;
+  el('cfgUsuarioAccesoRel').checked = false;
+  el('cfgUsuarioAccesoRel').disabled = false;
+  el('cfgUsuarioAccesoLogistica').checked = false;
+  el('cfgUsuarioAccesoLogistica').disabled = false;
+  el('cfgUsuarioRecibeLiq').checked = true;
+  el('cfgUsuarioRecibeHacienda').checked = false;
+  el('cfgUsuarioRecibeWhatsapp').checked = false;
+  el('cfgUsuarioRecibeAlertasPrecios').checked = false;
+}
+
+// Un mismo formulario sirve para crear y editar — "— Nuevo usuario —"
+// (value vacío) lo deja en blanco, listo para completar; elegir uno
+// existente lo precarga. guardarUsuario() decide sola a qué endpoint
+// pegarle según haya o no un user_id seleccionado.
 function onSeleccionUsuarioLista() {
   const userId = el('cfgListaUsuarios').value;
-  const msj = el('cfgUsuarioEditMensaje');
-  msj.textContent = '';
-  if (!userId) {
-    el('cfgUsuarioEditNombre').value = '';
-    el('cfgUsuarioEditEmail').value = '';
-    el('cfgUsuarioEditTelefono').value = '';
-    el('cfgUsuarioAccesoHacienda').checked = false;
-    el('cfgUsuarioAccesoGranos').checked = false;
-    el('cfgUsuarioAccesoRel').checked = false;
-    el('cfgUsuarioAccesoLogistica').checked = false;
-    el('cfgUsuarioRecibeLiq').checked = false;
-    el('cfgUsuarioRecibeHacienda').checked = false;
-    el('cfgUsuarioRecibeWhatsapp').checked = false;
-    el('cfgUsuarioRecibeAlertasPrecios').checked = false;
+  const esNuevo = !userId;
+  el('cfgUsuarioMensaje').textContent = '';
+  el('cfgUsuarioPasswordWrap').classList.toggle('oculto', !esNuevo);
+  el('cfgCambiarClaveBloque').classList.toggle('oculto', esNuevo);
+  el('cfgClaveNueva').value = '';
+  el('botonGuardarUsuario').textContent = esNuevo ? 'Crear usuario' : 'Guardar cambios';
+
+  if (esNuevo) {
+    limpiarFormularioUsuario();
     return;
   }
   const usuario = usuariosCache.find((u) => u.user_id === userId);
   if (!usuario) return;
   const destinatario = buscarDestinatarioPorEmail(usuario.email);
 
-  el('cfgUsuarioEditNombre').value = usuario.nombre_completo || '';
-  el('cfgUsuarioEditEmail').value = usuario.email || '';
-  el('cfgUsuarioEditRol').value = usuario.rol;
+  el('cfgUsuarioNombre').value = usuario.nombre_completo || '';
+  el('cfgUsuarioEmail').value = usuario.email || '';
+  el('cfgUsuarioTelefono').value = (destinatario && destinatario.telefono) || '';
+  el('cfgUsuarioRol').value = usuario.rol;
   // Un owner siempre tiene acceso total, más allá de lo que digan las
   // casillas — se muestran tildadas y bloqueadas para reflejar eso.
   const esOwner = usuario.rol === 'owner';
@@ -143,21 +165,21 @@ function onSeleccionUsuarioLista() {
   el('cfgUsuarioAccesoLogistica').disabled = esOwner;
   el('cfgUsuarioRecibeLiq').checked = !!(destinatario && destinatario.recibe_liquidaciones);
   el('cfgUsuarioRecibeHacienda').checked = !!(destinatario && destinatario.recibe_hacienda);
-  el('cfgUsuarioEditTelefono').value = (destinatario && destinatario.telefono) || '';
   el('cfgUsuarioRecibeWhatsapp').checked = !!(destinatario && destinatario.recibe_whatsapp);
   el('cfgUsuarioRecibeAlertasPrecios').checked = !!(destinatario && destinatario.recibe_alertas_precios);
 }
 
-async function guardarCambiosUsuario() {
-  const user_id = el('cfgListaUsuarios').value;
-  const msj = el('cfgUsuarioEditMensaje');
+async function guardarUsuario() {
+  const userId = el('cfgListaUsuarios').value;
+  const esNuevo = !userId;
+  const msj = el('cfgUsuarioMensaje');
   msj.textContent = '';
-  if (!user_id) { msj.textContent = 'Elegí un usuario de la lista primero.'; msj.className = 'mensaje-panel error'; return; }
 
-  const nombre_completo = el('cfgUsuarioEditNombre').value.trim();
-  const email = el('cfgUsuarioEditEmail').value.trim();
-  const telefono = el('cfgUsuarioEditTelefono').value.trim();
-  const rol = el('cfgUsuarioEditRol').value;
+  const nombre_completo = el('cfgUsuarioNombre').value.trim();
+  const email = el('cfgUsuarioEmail').value.trim();
+  const telefono = el('cfgUsuarioTelefono').value.trim();
+  const password = el('cfgUsuarioPassword').value;
+  const rol = el('cfgUsuarioRol').value;
   const acceso_hacienda = el('cfgUsuarioAccesoHacienda').checked;
   const acceso_granos = el('cfgUsuarioAccesoGranos').checked;
   const acceso_precios_relativos = el('cfgUsuarioAccesoRel').checked;
@@ -166,53 +188,9 @@ async function guardarCambiosUsuario() {
   const recibe_hacienda = el('cfgUsuarioRecibeHacienda').checked;
   const recibe_whatsapp = el('cfgUsuarioRecibeWhatsapp').checked;
   const recibe_alertas_precios = el('cfgUsuarioRecibeAlertasPrecios').checked;
-  if (!nombre_completo || !email) { msj.textContent = 'Faltan nombre y email.'; msj.className = 'mensaje-panel error'; return; }
-  if (recibe_whatsapp && !telefono) { msj.textContent = 'Para recibir WhatsApp hace falta cargar el teléfono.'; msj.className = 'mensaje-panel error'; return; }
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
-
-  try {
-    const res = await fetch('/.netlify/functions/admin-actualizar-usuario', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ user_id, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
-    });
-    const datos = await res.json();
-    if (!res.ok) {
-      msj.textContent = datos.error || 'No se pudo guardar.';
-      msj.className = 'mensaje-panel error';
-      return;
-    }
-    msj.textContent = 'Usuario actualizado.';
-    msj.className = 'mensaje-panel ok';
-    await cargarUsuariosPanel();
-    el('cfgListaUsuarios').value = user_id;
-  } catch (error) {
-    msj.textContent = 'Error de red: ' + error.message;
-    msj.className = 'mensaje-panel error';
-  }
-}
-
-async function crearUsuario() {
-  const nombre_completo = el('cfgUsuarioNombre').value.trim();
-  const email = el('cfgUsuarioEmail').value.trim();
-  const telefono = el('cfgUsuarioTelefono').value.trim();
-  const password = el('cfgUsuarioPassword').value;
-  const rol = el('cfgUsuarioRol').value;
-  const acceso_hacienda = el('cfgNuevoAccesoHacienda').checked;
-  const acceso_granos = el('cfgNuevoAccesoGranos').checked;
-  const acceso_precios_relativos = el('cfgNuevoAccesoRel').checked;
-  const acceso_logistica = el('cfgNuevoAccesoLogistica').checked;
-  const recibe_liquidaciones = el('cfgNuevoRecibeLiq').checked;
-  const recibe_hacienda = el('cfgNuevoRecibeHacienda').checked;
-  const recibe_whatsapp = el('cfgNuevoRecibeWhatsapp').checked;
-  const recibe_alertas_precios = el('cfgNuevoRecibeAlertasPrecios').checked;
-  const msj = el('cfgUsuarioMensaje');
-  msj.textContent = '';
-
-  if (!nombre_completo || !email || !password) {
-    msj.textContent = 'Completá nombre, email y contraseña.';
+  if (!nombre_completo || !email || (esNuevo && !password)) {
+    msj.textContent = esNuevo ? 'Completá nombre, email y contraseña.' : 'Faltan nombre y email.';
     msj.className = 'mensaje-panel error';
     return;
   }
@@ -225,43 +203,96 @@ async function crearUsuario() {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { msj.textContent = 'No hay sesión activa.'; msj.className = 'mensaje-panel error'; return; }
 
+  const endpoint = esNuevo ? 'admin-crear-usuario' : 'admin-actualizar-usuario';
+  const payload = esNuevo
+    ? { email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }
+    : { user_id: userId, nombre_completo, email, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios };
+
   try {
-    const res = await fetch('/.netlify/functions/admin-crear-usuario', {
+    const res = await fetch(`/.netlify/functions/${endpoint}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
-      body: JSON.stringify({ email, password, nombre_completo, telefono, rol, acceso_hacienda, acceso_granos, acceso_precios_relativos, acceso_logistica, recibe_liquidaciones, recibe_hacienda, recibe_whatsapp, recibe_alertas_precios }),
+      body: JSON.stringify(payload),
     });
     const datos = await res.json();
     if (!res.ok) {
-      msj.textContent = datos.error || 'No se pudo crear el usuario.';
+      msj.textContent = datos.error || 'No se pudo guardar.';
       msj.className = 'mensaje-panel error';
       return;
     }
-    msj.textContent = `Usuario "${nombre_completo}" creado.`;
+    await cargarUsuariosPanel();
+    if (esNuevo) {
+      el('cfgListaUsuarios').value = datos.user_id || '';
+      onSeleccionUsuarioLista();
+      msj.textContent = `Usuario "${nombre_completo}" creado.`;
+    } else {
+      el('cfgListaUsuarios').value = userId;
+      msj.textContent = 'Usuario actualizado.';
+    }
     msj.className = 'mensaje-panel ok';
-    el('cfgUsuarioNombre').value = '';
-    el('cfgUsuarioEmail').value = '';
-    el('cfgUsuarioTelefono').value = '';
-    el('cfgUsuarioPassword').value = '';
-    el('cfgNuevoAccesoHacienda').checked = true;
-    el('cfgNuevoAccesoGranos').checked = false;
-    el('cfgNuevoAccesoRel').checked = false;
-    el('cfgNuevoAccesoLogistica').checked = false;
-    el('cfgNuevoRecibeLiq').checked = true;
-    el('cfgNuevoRecibeHacienda').checked = false;
-    el('cfgNuevoRecibeWhatsapp').checked = false;
-    el('cfgNuevoRecibeAlertasPrecios').checked = false;
-    cargarUsuariosPanel();
   } catch (error) {
     msj.textContent = 'Error de red: ' + error.message;
     msj.className = 'mensaje-panel error';
   }
 }
 
+function renderDestinatarios() {
+  const cont = el('cfgDestinatariosLista');
+  if (!destinatariosNegocioCache.length) {
+    cont.innerHTML = '<p style="font-size:0.85em;color:#666;">Sin destinatarios cargados.</p>';
+    return;
+  }
+  cont.innerHTML = '';
+  for (const d of destinatariosNegocioCache) {
+    const avisos = [
+      d.recibe_liquidaciones && 'Liq/Anul',
+      d.recibe_hacienda && 'Resumen Hacienda',
+      d.recibe_whatsapp && 'WhatsApp',
+      d.recibe_alertas_precios && '$Rel',
+    ].filter(Boolean).join(', ') || 'Ninguno';
+    const fila = document.createElement('div');
+    fila.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #eee;';
+    fila.innerHTML = `
+      <div style="font-size:0.85em;">
+        <strong>${d.nombre || d.email}</strong><br>
+        <span style="color:#666;">${d.email} — ${avisos}</span>
+      </div>
+    `;
+    const boton = document.createElement('button');
+    boton.type = 'button';
+    boton.textContent = 'Quitar';
+    boton.style.cssText = 'background:#ad1e19;flex-shrink:0;width:auto;margin:0;padding:8px 12px;';
+    boton.addEventListener('click', () => quitarDestinatario(d));
+    fila.appendChild(boton);
+    cont.appendChild(fila);
+  }
+}
+
+async function cargarPantallaDestinatarios() {
+  await cargarDestinatariosNegocio();
+  renderDestinatarios();
+}
+
+async function quitarDestinatario(d) {
+  const msj = el('cfgDestinatariosMensaje');
+  msj.textContent = '';
+  if (!confirm(`¿Quitar a "${d.nombre || d.email}" (${d.email}) de los destinatarios de avisos? Deja de recibir cualquier aviso — esto no borra ninguna cuenta de usuario, son cosas separadas.`)) return;
+  const { error } = await supabase.from('destinatarios_negocio').delete().eq('id', d.id);
+  if (error) {
+    msj.textContent = 'No se pudo quitar: ' + error.message;
+    msj.className = 'mensaje-panel error';
+    return;
+  }
+  await cargarDestinatariosNegocio();
+  renderDestinatarios();
+  msj.textContent = `"${d.nombre || d.email}" quitado.`;
+  msj.className = 'mensaje-panel ok';
+}
+
 async function cambiarClaveUsuario() {
   const user_id = el('cfgListaUsuarios').value;
   const password = el('cfgClaveNueva').value;
-  const msj = el('cfgUsuarioEditMensaje');
+  const msj = el('cfgUsuarioMensaje');
   msj.textContent = '';
 
   if (!user_id || !password) {
@@ -303,9 +334,8 @@ export function initConfigPanel() {
   document.querySelectorAll('.panel-menu-item[data-seccion]').forEach((btn) => {
     btn.addEventListener('click', () => toggleSeccionConfig(btn.dataset.seccion));
   });
-  el('botonCrearUsuario').addEventListener('click', crearUsuario);
   el('cfgListaUsuarios').addEventListener('change', onSeleccionUsuarioLista);
-  el('botonGuardarUsuario').addEventListener('click', guardarCambiosUsuario);
+  el('botonGuardarUsuario').addEventListener('click', guardarUsuario);
   el('botonCambiarClave').addEventListener('click', cambiarClaveUsuario);
   el('botonCerrarSesionPanel').addEventListener('click', cerrarSesionDesdePanel);
   wireMostrarClave('cfgUsuarioPassword', 'cfgUsuarioMostrarClave');
