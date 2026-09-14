@@ -716,6 +716,31 @@ create trigger trg_actualizar_rodeo_tras_movimiento
   after insert on movimientos
   for each row execute function actualizar_rodeo_tras_movimiento();
 
+-- Resetea TODA la información de Hacienda (Panel de Configuración > Zona
+-- de peligro, owner-only). Irreversible. RPC (security definer) en vez
+-- de RLS de delete por tabla: atómica, y el único gate real es el chequeo
+-- de rol_actual() = 'owner' de acá adentro (la clave fija que pide el
+-- botón del lado cliente es solo un freno contra un click accidental).
+-- Orden de borrado — respeta las foreign keys sin "on delete cascade"
+-- (los hijos de trabajos_manga sí la tienen, se limpian solos).
+create or replace function resetear_hacienda() returns void
+language plpgsql security definer as $$
+begin
+  if rol_actual() <> 'owner' then
+    raise exception 'Solo un owner puede resetear Hacienda';
+  end if;
+
+  delete from rodeo_pesadas_historial;
+  delete from rectificaciones_pendientes;
+  delete from trabajos_manga;
+  delete from movimientos;
+  delete from feed_lot_ciclos;
+  delete from rodeos;
+end;
+$$;
+
+grant execute on function resetear_hacienda() to authenticated;
+
 -- ─── Vistas de stock ────────────────────────────────────────────────────
 
 -- coalesce(rodeo_destino_id, rodeo_id) en la rama de destino: para la

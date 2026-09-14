@@ -42,6 +42,8 @@ function abrirPanelConfig() {
   document.querySelector('.panel-menu-item[data-seccion="administrar"]').classList.toggle('oculto-panel', !esOwnerActual);
   el('seccionCrear').classList.toggle('oculto-panel', !esOwnerActual);
   el('seccionAdministrar').classList.toggle('oculto-panel', !esOwnerActual);
+  el('menuPeligro').classList.toggle('oculto-panel', !esOwnerActual);
+  el('seccionPeligro').classList.toggle('oculto-panel', !esOwnerActual);
 }
 
 function cerrarPanelConfig() {
@@ -52,7 +54,7 @@ function cerrarPanelConfig() {
 // Menú tipo acordeón: un click abre esa sección y cierra las demás; un
 // segundo click sobre la misma la cierra.
 function toggleSeccionConfig(nombre) {
-  const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', rodeos: 'seccionRodeos' };
+  const secciones = { crear: 'seccionCrear', administrar: 'seccionAdministrar', rodeos: 'seccionRodeos', peligro: 'seccionPeligro' };
   const yaAbierta = el(secciones[nombre]).classList.contains('abierta');
   for (const [clave, id] of Object.entries(secciones)) {
     el(id).classList.remove('abierta');
@@ -365,6 +367,39 @@ async function darDeBajaRodeoDesdePanel() {
   }
 }
 
+const CLAVE_RESET_HACIENDA = '789058';
+
+// Irreversible: borra TODOS los movimientos, Trabajo de Manga y rodeos
+// (ver resetear_hacienda() en schema.sql). La clave fija es solo un freno
+// contra un click accidental — la protección real es que la función RPC
+// rechaza a cualquiera que no sea owner, sin importar qué clave se mande.
+async function resetearHacienda() {
+  const msj = el('cfgResetMensaje');
+  msj.textContent = '';
+  const clave = prompt(
+    'Esto borra TODOS los movimientos, Trabajo de Manga y rodeos de Hacienda — no se puede deshacer.\n\nEscribí la clave para confirmar:'
+  );
+  if (clave === null) return;
+  if (clave !== CLAVE_RESET_HACIENDA) {
+    msj.textContent = 'Clave incorrecta — no se hizo nada.';
+    msj.className = 'mensaje-panel error';
+    return;
+  }
+  if (!confirm('Última confirmación: se borra TODO. ¿Seguís?')) return;
+
+  msj.textContent = 'Reseteando...';
+  msj.className = 'mensaje-panel';
+  const { error } = await supabase.rpc('resetear_hacienda');
+  if (error) {
+    msj.textContent = 'No se pudo resetear: ' + error.message;
+    msj.className = 'mensaje-panel error';
+    return;
+  }
+  msj.textContent = 'Hacienda reseteada. Recargando...';
+  msj.className = 'mensaje-panel ok';
+  setTimeout(() => location.reload(), 1200);
+}
+
 export function initConfigPanel() {
   el('botonConfig').innerHTML = ICONO_ENGRANAJE;
   el('botonConfig').addEventListener('click', abrirPanelConfig);
@@ -384,4 +419,5 @@ export function initConfigPanel() {
   el('cfgListaRodeos').addEventListener('change', onSeleccionRodeoLista);
   el('botonRenombrarRodeo').addEventListener('click', guardarNombreRodeo);
   el('botonDarDeBajaRodeo').addEventListener('click', darDeBajaRodeoDesdePanel);
+  el('botonResetearHacienda').addEventListener('click', resetearHacienda);
 }
