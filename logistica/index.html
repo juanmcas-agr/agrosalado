@@ -10,6 +10,7 @@
   <link rel="apple-touch-icon" href="/assets/icon-512.png">
   <link rel="icon" href="/assets/icon-64.png">
   <link rel="stylesheet" href="css/estilo.css">
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
 </head>
 <body>
 
@@ -122,6 +123,7 @@
           <button type="button" id="av-filtrar" class="boton-secundario">Filtrar</button>
         </div>
         <div id="av-mensaje" class="mensaje"></div>
+        <button type="button" id="av-exportar" class="boton-secundario">Exportar a Excel</button>
         <div class="tabla-scroll">
           <table id="av-tabla" class="tabla">
             <thead>
@@ -210,6 +212,7 @@
               <tbody></tbody>
             </table>
           </div>
+          <button type="button" id="rp-sueldo-exportar" class="boton-secundario">Exportar a Excel</button>
         </div>
 
         <h2>Pendientes de facturar (externos)</h2>
@@ -222,6 +225,7 @@
             <tbody></tbody>
           </table>
         </div>
+        <button type="button" id="rp-facturar-exportar" class="boton-secundario">Exportar a Excel</button>
       </section>
     </div>
 
@@ -267,6 +271,7 @@
         <div id="mv-liquidar-bloque" class="oculto" style="margin-bottom:10px;">
           <button type="button" id="mv-enviar-liquidar" class="boton-secundario">Enviar a liquidar los seleccionados</button>
         </div>
+        <button type="button" id="mv-exportar" class="boton-secundario">Exportar a Excel</button>
         <div class="tabla-scroll">
           <table id="mv-tabla" class="tabla">
             <thead>

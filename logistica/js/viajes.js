@@ -20,6 +20,7 @@ import { getEstado } from './auth.js';
 import { subirDocumento } from './storage.js';
 import { rangoMes, celdaDocs, textoEstadoLiquidacion, mostrarLinkActual } from './viajesComun.js';
 import { cargarMisCierres, initCierreMensual } from './cierreMensual.js';
+import { exportarViajes } from './export.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -333,12 +334,18 @@ export async function cargarPantallaMisViajes() {
   else await cargarMisCierres();
 }
 
+function exportarMisViajes() {
+  if (!viajesCache.length) return;
+  exportarViajes(viajesCache, 'mis_viajes');
+}
+
 export function initMisViajes() {
   resetFormulario();
   el('viaje-form').addEventListener('submit', guardarViaje);
   el('viaje-cancelar-edicion').addEventListener('click', resetFormulario);
   el('mv-filtrar').addEventListener('click', cargarMisViajes);
   el('mv-enviar-liquidar').addEventListener('click', enviarALiquidar);
+  el('mv-exportar').addEventListener('click', exportarMisViajes);
   initCierreMensual();
   // Solo externos agrupan viajes en liquidaciones (para propios no hay
   // nada que facturar); solo propios cierran meses (para externos ese

@@ -9,10 +9,14 @@
 import { supabase } from './supabaseClient.js';
 import { getEstado } from './auth.js';
 import { rangoMes } from './viajesComun.js';
+import { exportarSueldoPropios, exportarPendientesFacturar } from './export.js';
 
 function el(id) {
   return document.getElementById(id);
 }
+
+let sueldoCache = [];
+let facturarCache = [];
 
 function hoyMesStr() {
   const hoy = new Date();
@@ -73,7 +77,8 @@ export async function cargarSueldoPropios() {
     fila.tn += Number(v.tn) || 0;
     fila.km += Number(v.km) || 0;
   }
-  renderSueldoPropios(Object.values(porTransportista));
+  sueldoCache = Object.values(porTransportista);
+  renderSueldoPropios(sueldoCache);
 }
 
 function renderPendientesFacturar(liquidaciones) {
@@ -107,7 +112,8 @@ export async function cargarPendientesFacturar() {
     mensaje.className = 'error';
     return;
   }
-  renderPendientesFacturar(data);
+  facturarCache = data;
+  renderPendientesFacturar(facturarCache);
 }
 
 export async function cargarPantallaReportes() {
@@ -119,5 +125,11 @@ export function initReportes() {
   el('rp-sueldo-bloque').classList.toggle('oculto', !puedeVerSueldos());
   if (!el('rp-sueldo-mes').value) el('rp-sueldo-mes').value = hoyMesStr();
   el('rp-sueldo-buscar').addEventListener('click', cargarSueldoPropios);
+  el('rp-sueldo-exportar').addEventListener('click', () => {
+    if (sueldoCache.length) exportarSueldoPropios(sueldoCache);
+  });
   el('rp-facturar-actualizar').addEventListener('click', cargarPendientesFacturar);
+  el('rp-facturar-exportar').addEventListener('click', () => {
+    if (facturarCache.length) exportarPendientesFacturar(facturarCache);
+  });
 }

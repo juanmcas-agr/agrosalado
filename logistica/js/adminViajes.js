@@ -9,6 +9,7 @@
 import { supabase } from './supabaseClient.js';
 import { subirDocumento } from './storage.js';
 import { rangoMes, celdaDocs, textoEstadoLiquidacion, mostrarLinkActual } from './viajesComun.js';
+import { exportarViajes } from './export.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -200,8 +201,14 @@ export async function cargarPantallaViajesStaff() {
   await cargarViajesStaff();
 }
 
+function exportarViajesStaff() {
+  if (!viajesCache.length) return;
+  exportarViajes(viajesCache, 'viajes');
+}
+
 export function initViajesStaff() {
   el('av-filtrar').addEventListener('click', cargarViajesStaff);
   el('av-form').addEventListener('submit', guardarViaje);
   el('av-cancelar').addEventListener('click', resetFormulario);
+  el('av-exportar').addEventListener('click', exportarViajesStaff);
 }
