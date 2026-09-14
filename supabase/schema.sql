@@ -722,7 +722,9 @@ create trigger trg_actualizar_rodeo_tras_movimiento
 -- de rol_actual() = 'owner' de acá adentro (la clave fija que pide el
 -- botón del lado cliente es solo un freno contra un click accidental).
 -- Orden de borrado — respeta las foreign keys sin "on delete cascade"
--- (los hijos de trabajos_manga sí la tienen, se limpian solos).
+-- (los hijos de trabajos_manga sí la tienen, se limpian solos). Cada
+-- delete lleva "where true" porque pg-safeupdate (extensión que corre
+-- por default en Supabase) rechaza cualquier delete sin WHERE.
 create or replace function resetear_hacienda() returns void
 language plpgsql security definer as $$
 begin
@@ -730,12 +732,17 @@ begin
     raise exception 'Solo un owner puede resetear Hacienda';
   end if;
 
-  delete from rodeo_pesadas_historial;
-  delete from rectificaciones_pendientes;
-  delete from trabajos_manga;
-  delete from movimientos;
-  delete from feed_lot_ciclos;
-  delete from rodeos;
+  -- "where true": Supabase corre con la extensión pg-safeupdate, que
+  -- rechaza cualquier delete/update sin WHERE (incluso adentro de una
+  -- función) con el error "DELETE requires a WHERE clause" — esto es
+  -- justamente un delete de TODO, así que el WHERE es un no-op a
+  -- propósito, no una condición real.
+  delete from rodeo_pesadas_historial where true;
+  delete from rectificaciones_pendientes where true;
+  delete from trabajos_manga where true;
+  delete from movimientos where true;
+  delete from feed_lot_ciclos where true;
+  delete from rodeos where true;
 end;
 $$;
 
