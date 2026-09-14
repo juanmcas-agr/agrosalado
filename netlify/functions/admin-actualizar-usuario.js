@@ -13,7 +13,7 @@
 // otras funciones admin-*.js).
 
 const SUPABASE_URL = 'https://uiummeoayxwayxntjjsv.supabase.co';
-const ROLES_VALIDOS = ['encargado', 'administrativo', 'owner'];
+const ROLES_VALIDOS = ['encargado', 'administrativo', 'owner', 'puestero'];
 
 function headersJson() {
   return { 'Access-Control-Allow-Origin': '*', 'Content-Type': 'application/json' };

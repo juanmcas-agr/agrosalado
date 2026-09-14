@@ -23,7 +23,9 @@ function iniciarPantallasDeLaApp(rol) {
   initDashboard();
   initHistorial();
   initReportes();
-  initIndicesRecordatorio();
+  // El cartel de índices pendientes manda a Reportes > Índices, pantalla
+  // que un puestero no tiene — no tiene sentido mostrárselo.
+  if (rol !== 'puestero') initIndicesRecordatorio();
   initRouter(rol);
 }
 

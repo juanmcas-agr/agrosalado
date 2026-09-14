@@ -3,10 +3,17 @@ import { cargarHistorial, cargarHistorialManga } from './historial.js';
 import { refrescarDiferenciasPendientes, refrescarRectificacionesPendientes } from './trabajoManga.js';
 import { refrescarReportes } from './reportes.js';
 
-const PANTALLAS = ['cargar', 'manga', 'dashboard', 'historial', 'reportes'];
+const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'reportes'];
+// Un puestero carga datos pero no ve Stock/Historial/Reportes (esas
+// pantallas quedan para encargado/administrativo/owner).
+const PANTALLAS_PUESTERO = ['cargar', 'manga'];
 
 function el(id) {
   return document.getElementById(id);
+}
+
+function pantallasDelRol(rol) {
+  return rol === 'puestero' ? PANTALLAS_PUESTERO : PANTALLAS_TODAS;
 }
 
 function pantallaPorDefecto(rol) {
@@ -14,14 +21,15 @@ function pantallaPorDefecto(rol) {
 }
 
 function renderRoute(rol) {
+  const pantallas = pantallasDelRol(rol);
   let pantalla = location.hash.slice(1);
-  if (!PANTALLAS.includes(pantalla)) {
+  if (!pantallas.includes(pantalla)) {
     pantalla = pantallaPorDefecto(rol);
     location.hash = pantalla;
     return; // el cambio de hash vuelve a disparar renderRoute
   }
 
-  for (const nombre of PANTALLAS) {
+  for (const nombre of PANTALLAS_TODAS) {
     el(`pantalla-${nombre}`).classList.toggle('oculto', nombre !== pantalla);
   }
   document.querySelectorAll('[data-ir]').forEach((btn) => {
@@ -36,8 +44,10 @@ function renderRoute(rol) {
 }
 
 export function initRouter(rol) {
+  const pantallas = pantallasDelRol(rol);
   document.querySelectorAll('[data-ir]').forEach((btn) => {
     btn.addEventListener('click', () => { location.hash = btn.dataset.ir; });
+    btn.classList.toggle('oculto', !pantallas.includes(btn.dataset.ir));
   });
   window.addEventListener('hashchange', () => renderRoute(rol));
   renderRoute(rol);

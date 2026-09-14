@@ -128,9 +128,9 @@ alter table rodeos enable row level security;
 
 create policy rodeos_select on rodeos for select to authenticated using (rol_actual() is not null);
 create policy rodeos_insert on rodeos for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner') and creado_por = auth.uid());
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero') and creado_por = auth.uid());
 create policy rodeos_update on rodeos for update to authenticated
-  using (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  using (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 -- ─── Feed lot ───────────────────────────────────────────────────────────
 -- Ciclo de feed lot de un rodeo: se abre cuando el rodeo entra a feed_lot
@@ -159,9 +159,9 @@ alter table feed_lot_ciclos enable row level security;
 
 create policy feed_lot_ciclos_select on feed_lot_ciclos for select to authenticated using (rol_actual() is not null);
 create policy feed_lot_ciclos_insert on feed_lot_ciclos for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 create policy feed_lot_ciclos_update on feed_lot_ciclos for update to authenticated
-  using (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  using (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 -- ─── Códigos rastreables (movimientos y trabajos_manga) ─────────────────
 -- Contador atómico GLOBAL por tipo (no por año como rodeo_secuencias: acá
@@ -240,13 +240,13 @@ alter table trabajo_manga_propietarios enable row level security;
 
 create policy trabajos_manga_select on trabajos_manga for select to authenticated using (rol_actual() is not null);
 create policy trabajos_manga_insert on trabajos_manga for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner') and usuario_id = auth.uid());
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero') and usuario_id = auth.uid());
 create policy trabajos_manga_update on trabajos_manga for update to authenticated
-  using (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  using (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy trabajo_manga_propietarios_select on trabajo_manga_propietarios for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_propietarios_insert on trabajo_manga_propietarios for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 -- Rectificar la cantidad trabajada de una diferencia pendiente requiere
 -- aprobación del owner cuando lo propone otro rol (encargado/
@@ -273,7 +273,7 @@ alter table rectificaciones_pendientes enable row level security;
 
 create policy rectificaciones_pendientes_select on rectificaciones_pendientes for select to authenticated using (rol_actual() is not null);
 create policy rectificaciones_pendientes_insert on rectificaciones_pendientes for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner') and propuesto_por = auth.uid());
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero') and propuesto_por = auth.uid());
 create policy rectificaciones_pendientes_update on rectificaciones_pendientes for update to authenticated
   using (rol_actual() = 'owner');
 
@@ -365,27 +365,27 @@ alter table trabajo_manga_otras_sanidades enable row level security;
 
 create policy catalogo_drogas_select on catalogo_drogas for select to authenticated using (rol_actual() is not null);
 create policy catalogo_drogas_insert on catalogo_drogas for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy catalogo_vacunas_reproductivas_select on catalogo_vacunas_reproductivas for select to authenticated using (rol_actual() is not null);
 create policy catalogo_vacunas_reproductivas_insert on catalogo_vacunas_reproductivas for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy catalogo_otras_sanidades_select on catalogo_otras_sanidades for select to authenticated using (rol_actual() is not null);
 create policy catalogo_otras_sanidades_insert on catalogo_otras_sanidades for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy trabajo_manga_sanidad_select on trabajo_manga_sanidad for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_sanidad_insert on trabajo_manga_sanidad for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy trabajo_manga_vacunas_select on trabajo_manga_vacunas for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_vacunas_insert on trabajo_manga_vacunas for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy trabajo_manga_otras_sanidades_select on trabajo_manga_otras_sanidades for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_otras_sanidades_insert on trabajo_manga_otras_sanidades for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 -- ─── Trabajo de Manga: Reproducción ─────────────────────────────────────
 create table catalogo_toros (id text primary key, nombre text not null, activo boolean not null default true);
@@ -414,15 +414,15 @@ alter table trabajo_manga_inseminacion_toros enable row level security;
 
 create policy catalogo_toros_select on catalogo_toros for select to authenticated using (rol_actual() is not null);
 create policy catalogo_toros_insert on catalogo_toros for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy trabajo_manga_reproduccion_select on trabajo_manga_reproduccion for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_reproduccion_insert on trabajo_manga_reproduccion for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy trabajo_manga_inseminacion_toros_select on trabajo_manga_inseminacion_toros for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_inseminacion_toros_insert on trabajo_manga_inseminacion_toros for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 -- ─── Trabajo de Manga: Manejo de rodeo ──────────────────────────────────
 -- 1-a-1 con trabajos_manga: solo existe si el checkbox "Manejo de rodeo"
@@ -459,11 +459,11 @@ alter table rodeo_pesadas_historial enable row level security;
 
 create policy trabajo_manga_manejo_select on trabajo_manga_manejo for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_manejo_insert on trabajo_manga_manejo for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy rodeo_pesadas_historial_select on rodeo_pesadas_historial for select to authenticated using (rol_actual() is not null);
 create policy rodeo_pesadas_historial_insert on rodeo_pesadas_historial for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
@@ -471,7 +471,7 @@ create table perfiles (
   user_id uuid primary key references auth.users(id) on delete cascade,
   nombre_completo text not null,
   email text,
-  rol text not null check (rol in ('encargado', 'administrativo', 'owner')),
+  rol text not null check (rol in ('encargado', 'administrativo', 'owner', 'puestero')),
   -- Un owner siempre tiene acceso total (ver el gate de cada app); estas
   -- casillas solo importan para encargado/administrativo.
   acceso_hacienda boolean not null default true,
@@ -824,14 +824,14 @@ create policy lookup_select_tipos_movimiento on tipos_movimiento for select to a
 
 create policy titulares_select on titulares for select to authenticated using (rol_actual() is not null);
 create policy titulares_insert on titulares for insert to authenticated
-  with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy movimientos_select on movimientos for select to authenticated using (rol_actual() is not null);
 
 create policy movimientos_insert on movimientos for insert to authenticated
   with check (
     usuario_id = auth.uid()
-    and rol_actual() in ('encargado', 'administrativo', 'owner')
+    and rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero')
   );
 
 create policy movimientos_anular on movimientos for update to authenticated
