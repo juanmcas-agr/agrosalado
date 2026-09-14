@@ -6,7 +6,7 @@
 // porque este archivo es un módulo ES.
 import { supabase } from './supabaseClient.js';
 import { getEstado, cerrarSesion } from './auth.js';
-import { cargarRodeos, obtenerRodeosCache, renombrarRodeo } from './rodeos.js';
+import { cargarRodeos, obtenerRodeosCache, renombrarRodeo, darDeBajaRodeo, stockDelRodeo } from './rodeos.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -310,11 +310,20 @@ function renderListaRodeosPanel() {
   select.value = seleccionPrevia;
 }
 
-function onSeleccionRodeoLista() {
+async function onSeleccionRodeoLista() {
   const rodeoId = el('cfgListaRodeos').value;
   el('cfgRodeoMensaje').textContent = '';
   const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
   el('cfgRodeoNombreNuevo').value = rodeo ? rodeo.nombre : '';
+  const stockEl = el('cfgRodeoStock');
+  if (!rodeo) { stockEl.textContent = ''; return; }
+  stockEl.textContent = 'Consultando stock...';
+  try {
+    const cabezas = await stockDelRodeo(rodeoId);
+    stockEl.textContent = cabezas > 0 ? `Stock actual: ${cabezas} cabeza(s).` : 'Sin stock — se puede dar de baja.';
+  } catch (error) {
+    stockEl.textContent = 'No se pudo consultar el stock.';
+  }
 }
 
 async function guardarNombreRodeo() {
@@ -332,6 +341,26 @@ async function guardarNombreRodeo() {
     el('cfgListaRodeos').value = rodeoId;
   } catch (error) {
     msj.textContent = 'No se pudo renombrar: ' + error.message;
+    msj.className = 'mensaje-panel error';
+  }
+}
+
+async function darDeBajaRodeoDesdePanel() {
+  const rodeoId = el('cfgListaRodeos').value;
+  const msj = el('cfgRodeoMensaje');
+  msj.textContent = '';
+  if (!rodeoId) { msj.textContent = 'Elegí un rodeo de la lista primero.'; msj.className = 'mensaje-panel error'; return; }
+  const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
+  if (!confirm(`¿Dar de baja "${rodeo?.codigo || rodeoId}"? Deja de aparecer en las listas de la app — su historial de movimientos no se borra.`)) return;
+  try {
+    await darDeBajaRodeo(rodeoId);
+    msj.textContent = `"${rodeo?.codigo || ''}" dado de baja.`;
+    msj.className = 'mensaje-panel ok';
+    el('cfgRodeoNombreNuevo').value = '';
+    el('cfgRodeoStock').textContent = '';
+    renderListaRodeosPanel();
+  } catch (error) {
+    msj.textContent = 'No se pudo dar de baja: ' + error.message;
     msj.className = 'mensaje-panel error';
   }
 }
@@ -354,4 +383,5 @@ export function initConfigPanel() {
   wireMostrarClave('cfgClaveNueva', 'cfgClaveMostrarClave');
   el('cfgListaRodeos').addEventListener('change', onSeleccionRodeoLista);
   el('botonRenombrarRodeo').addEventListener('click', guardarNombreRodeo);
+  el('botonDarDeBajaRodeo').addEventListener('click', darDeBajaRodeoDesdePanel);
 }

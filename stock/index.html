@@ -677,13 +677,15 @@
       </div>
 
       <button type="button" class="panel-menu-item" data-seccion="rodeos">
-        <span>RENOMBRAR RODEO</span><span class="panel-menu-flecha">›</span>
+        <span>RODEOS</span><span class="panel-menu-flecha">›</span>
       </button>
       <div id="seccionRodeos" class="panel-seccion">
-        <p style="font-size:0.85em;color:#666;margin-top:0;">El código (año y secuencia) no cambia — solo el nombre.</p>
+        <p style="font-size:0.85em;color:#666;margin-top:0;">Renombrar (el año y la secuencia del código no cambian) o dar de baja un rodeo sin stock — un rodeo dado de baja deja de aparecer en las listas, pero su historial de movimientos no se toca.</p>
         <select id="cfgListaRodeos"></select>
+        <div id="cfgRodeoStock" style="font-size:0.85em;color:#666;"></div>
         <input type="text" id="cfgRodeoNombreNuevo" placeholder="Nombre nuevo">
         <button type="button" id="botonRenombrarRodeo">Guardar nombre</button>
+        <button type="button" id="botonDarDeBajaRodeo" class="boton-anular">Dar de baja este rodeo</button>
         <div id="cfgRodeoMensaje" class="mensaje-panel"></div>
       </div>
     </div>

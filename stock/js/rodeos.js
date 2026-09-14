@@ -76,6 +76,23 @@ export async function renombrarRodeo(id, nuevoNombre) {
   return data;
 }
 
+// "Dar de baja" un rodeo sin stock: no se borra (rompería la trazabilidad
+// de los movimientos que ya lo referencian, y no hay policy de delete a
+// propósito), se marca activo=false — cargarRodeos() ya filtra por
+// activo=true, así que a partir de acá deja de aparecer en "Cargar
+// movimiento", Trabajo de Manga y este mismo panel, sin perder su
+// historial.
+export async function darDeBajaRodeo(id) {
+  const cabezas = await stockDelRodeo(id);
+  if (cabezas > 0) {
+    throw new Error(`Este rodeo todavía tiene ${cabezas} cabeza(s) de stock — no se puede dar de baja.`);
+  }
+  const { data, error } = await supabase.from('rodeos').update({ activo: false }).eq('id', id).select().single();
+  if (error) throw error;
+  cache = cache.filter((r) => r.id !== id);
+  return data;
+}
+
 // Cabezas actuales de un rodeo (sumando todos los titulares) — se pide en
 // vivo al validar un movimiento de salida/interna, no se cachea, para no
 // dar luz verde con un stock desactualizado.
