@@ -395,16 +395,39 @@ function actualizarRequeridoRodeoDestino() {
   el('mov-rodeo-destino').required = aplica;
 }
 
+const CATEGORIAS_AL_PIE = ['ternero_al_pie', 'ternera_al_pie'];
+
 // Qué categorías puede tener mov-categoria-origen para el tipo actual:
 // - Cambio de categoría: solo las que tienen un paso siguiente definido en
 //   SIGUIENTE_CATEGORIA — novillo/toro/vaca son categorías terminales, no
 //   tiene sentido elegirlas como origen de un cambio si no hay adónde ir.
 // - Cualquier otro tipo (venta, mortandad, traslado, etc.): todas — ahí
 //   categoria_origen es la categoría real del animal en el rodeo, no un
-//   paso de la cadena.
+//   paso de la cadena. Traslado con destino Feed Lot tiene una restricción
+//   aparte (ver actualizarCategoriasOrigenDisponibles) que nubla en vez de
+//   reconstruir, para no perder la selección por tocar el establecimiento.
 function opcionesCategoriaOrigen(tipo) {
   if (tipo === 'cambio_categoria') return CATEGORIAS.filter((c) => SIGUIENTE_CATEGORIA[c.id]);
   return CATEGORIAS;
+}
+
+// Traslado con destino Feed Lot: "al pie" no tiene sentido ahí (todavía
+// están con la madre) — se nublan (deshabilitan) esas 2 opciones en vez de
+// reconstruir el grupo entero, mismo criterio que
+// actualizarEstablecimientosDestinoDisponibles/actualizarTitularesOrigenDisponibles,
+// para no perder una selección válida solo por tocar el establecimiento.
+function actualizarCategoriasOrigenDisponibles() {
+  const bloquear = trasladoAFeedLot();
+  const grupo = el('mov-categoria-origen');
+  grupo.querySelectorAll('.boton-opcion').forEach((boton) => {
+    const deshabilitar = bloquear && CATEGORIAS_AL_PIE.includes(boton.dataset.value);
+    boton.disabled = deshabilitar;
+    boton.classList.toggle('deshabilitado', deshabilitar);
+    if (deshabilitar && boton.classList.contains('seleccionado')) {
+      boton.classList.remove('seleccionado');
+      grupo.dispatchEvent(new Event('cambio'));
+    }
+  });
 }
 
 // Qué categorías puede tener mov-categoria-destino para el tipo actual:
@@ -454,6 +477,7 @@ function actualizarCamposVisibles() {
   // (evita arrastrar una categoría elegida que ya no corresponde).
   crearGrupoBotones('mov-categoria-origen', opcionesCategoriaOrigen(tipo));
   crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(tipo));
+  actualizarCategoriasOrigenDisponibles();
   actualizarSelectsRodeo();
   actualizarBloqueFeedLot();
   actualizarEstablecimientosDestinoDisponibles();
@@ -796,6 +820,9 @@ export async function initMovimientos() {
     el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); actualizarRequeridoRodeoDestino(); });
   }
   el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
+  // Solo importa para Traslado con destino Feed Lot — nubla "al pie" apenas
+  // se elige Feed Lot como establecimiento de destino.
+  el('mov-establecimiento-destino').addEventListener('cambio', actualizarCategoriasOrigenDisponibles);
   // Solo importa para Cambio de categoría (el único tipo donde origen y
   // destino de categoría son independientes) — reconstruye las opciones
   // de destino según la cadena SIGUIENTE_CATEGORIA del origen elegido.

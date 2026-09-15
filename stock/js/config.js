@@ -47,17 +47,11 @@ export const SIGUIENTE_CATEGORIA = {
 
 // Espejo de tipos_movimiento: qué campos pedir por cada tipo.
 // clase: 'entrada' (alta), 'salida' (baja), 'interna' (mueve sin cambiar el total).
-// Apertura de stock va al final (solo la carga un owner, ver movimientos.js).
+// El orden de las claves acá ES el orden de los botones "Tipo de
+// movimiento" en pantalla (crearGrupoBotones recorre Object.entries en
+// orden de inserción) — Apertura de stock va al final a propósito (uso
+// excepcional, solo owner).
 export const TIPOS_MOVIMIENTO = {
-  compra_invernada: {
-    nombre: 'Compra de invernada', clase: 'entrada',
-    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
-  },
-  paricion: {
-    nombre: 'Parición', clase: 'entrada',
-    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
-    categoriasPermitidas: ['ternero_al_pie', 'ternera_al_pie'],
-  },
   venta: {
     nombre: 'Venta', clase: 'salida',
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
@@ -86,9 +80,9 @@ export const TIPOS_MOVIMIENTO = {
     nombre: 'Vaca faena / conserva', clase: 'salida', oculto: true,
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
-  mortandad: {
-    nombre: 'Mortandad', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
+  compra_invernada: {
+    nombre: 'Compra de invernada', clase: 'entrada',
+    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
   },
   traslado: {
     nombre: 'Traslado entre establecimientos', clase: 'interna',
@@ -107,12 +101,6 @@ export const TIPOS_MOVIMIENTO = {
     duplicarEstablecimientoEnDestino: true,
     duplicarTitularEnDestino: true,
   },
-  cambio_titular: {
-    nombre: 'Cambio de titularidad', clase: 'interna',
-    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen', 'titular_destino'],
-    duplicarEstablecimientoEnDestino: true,
-    duplicarCategoriaEnDestino: true,
-  },
   cambio_rodeo: {
     nombre: 'Cambio de rodeo', clase: 'interna',
     // El establecimiento de destino es un campo real (no se duplica del
@@ -120,6 +108,21 @@ export const TIPOS_MOVIMIENTO = {
     campos: ['establecimiento_origen', 'establecimiento_destino', 'categoria_origen', 'titular_origen', 'rodeo_destino'],
     duplicarCategoriaEnDestino: true,
     duplicarTitularEnDestino: true,
+  },
+  paricion: {
+    nombre: 'Parición', clase: 'entrada',
+    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
+    categoriasPermitidas: ['ternero_al_pie', 'ternera_al_pie'],
+  },
+  mortandad: {
+    nombre: 'Mortandad', clase: 'salida',
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
+  },
+  cambio_titular: {
+    nombre: 'Cambio de titularidad', clase: 'interna',
+    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen', 'titular_destino'],
+    duplicarEstablecimientoEnDestino: true,
+    duplicarCategoriaEnDestino: true,
   },
   // Al final del grupo de botones a propósito (uso excepcional, solo owner).
   apertura_stock: {
