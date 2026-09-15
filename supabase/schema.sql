@@ -52,18 +52,22 @@ insert into titulares (id, nombre, tipo, orden) values
   ('sgro', 'SGRO', 'capitalizador', 3),
   ('cym', 'CYM', 'capitalizador', 4);
 
--- Comprador de una Venta (trazabilidad — no afecta stock/titularidad,
--- solo registra a quién se le vendió). Lista editable, ver
--- crearComprador() en compradores.js (mismo patrón "+ Agregar nuevo..."
--- que titulares).
-create table compradores (
+-- Comprador de una Venta de Hacienda (trazabilidad — no afecta stock/
+-- titularidad, solo registra a quién se le vendió). Lista editable, ver
+-- crearComprador() en stock/js/compradores.js (mismo patrón "+ Agregar
+-- nuevo..." que titulares). Se llama "compradores_hacienda" y no
+-- "compradores" a secas porque Granos ya tiene su propia tabla
+-- "compradores" (compradores de GRANOS, ver más abajo) en este mismo
+-- proyecto de Supabase compartido por las 4 apps — mismo namespace de
+-- nombres de tabla.
+create table compradores_hacienda (
   id text primary key,
   nombre text not null,
   orden int not null default 0,
   activo boolean not null default true
 );
 
-insert into compradores (id, nombre, orden) values
+insert into compradores_hacienda (id, nombre, orden) values
   ('brosa', 'Brosa', 1),
   ('hiriart', 'Hiriart', 2),
   ('coto', 'Coto', 3),
@@ -546,7 +550,7 @@ create table movimientos (
   -- criterio que "Observaciones obligatorio para Mortandad"): a qué se
   -- destinó la venta y quién la compró.
   destino_venta text check (destino_venta in ('faena', 'invernada', 'conserva')),
-  comprador_id text references compradores(id),
+  comprador_id text references compradores_hacienda(id),
   created_at timestamptz not null default now(),
   anulado boolean not null default false,
   anulado_por uuid references auth.users(id),
@@ -861,7 +865,7 @@ create view historial_movimientos with (security_invoker = true) as
   left join titulares tid on tid.id = m.titular_destino
   left join rodeos r on r.id = m.rodeo_id
   left join rodeos rd on rd.id = m.rodeo_destino_id
-  left join compradores cp on cp.id = m.comprador_id
+  left join compradores_hacienda cp on cp.id = m.comprador_id
   left join perfiles p on p.user_id = m.usuario_id
   left join movimientos mr on mr.id = m.reemplazado_por
   left join movimientos me on me.id = m.editado_de
@@ -924,9 +928,9 @@ create policy titulares_select on titulares for select to authenticated using (r
 create policy titulares_insert on titulares for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
-alter table compradores enable row level security;
-create policy compradores_select on compradores for select to authenticated using (rol_actual() is not null);
-create policy compradores_insert on compradores for insert to authenticated
+alter table compradores_hacienda enable row level security;
+create policy compradores_hacienda_select on compradores_hacienda for select to authenticated using (rol_actual() is not null);
+create policy compradores_hacienda_insert on compradores_hacienda for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy movimientos_select on movimientos for select to authenticated using (rol_actual() is not null);

@@ -1,12 +1,16 @@
 // Comprador de una Venta: trazabilidad pura (a quién se le vendió), no
 // afecta stock ni titularidad — tabla propia, separada de titulares.
 // Mismo patrón que titulares.js (cache local + alta on-the-fly).
+// Se llama "compradores_hacienda" (no "compradores" a secas) porque Granos
+// ya tiene su propia tabla "compradores" (compradores de GRANOS) en el
+// mismo proyecto de Supabase compartido — nombres de tabla comparten
+// namespace entre las 4 apps.
 import { supabase } from './supabaseClient.js';
 
 let cache = [];
 
 export async function cargarCompradores() {
-  const { data, error } = await supabase.from('compradores').select('*').eq('activo', true).order('orden');
+  const { data, error } = await supabase.from('compradores_hacienda').select('*').eq('activo', true).order('orden');
   if (!error) cache = data;
   return cache;
 }
@@ -32,7 +36,7 @@ export async function crearComprador(nombre) {
 
   const orden = cache.length ? Math.max(...cache.map((c) => c.orden)) + 1 : 1;
   const { data, error } = await supabase
-    .from('compradores')
+    .from('compradores_hacienda')
     .insert({ id, nombre, orden })
     .select()
     .single();

@@ -3,28 +3,36 @@
 -- tipo 'venta' unificado, no tipos de movimiento nuevos. Se validan solo
 -- del lado cliente (mismo criterio que "Observaciones obligatorio para
 -- Mortandad"), no hace falta tocar validar_movimiento().
+--
+-- La tabla se llama "compradores_hacienda" y NO "compradores" a secas
+-- porque Granos ya tiene su propia tabla "compradores" (compradores de
+-- GRANOS: ZENI, MOLCA, AMAGGI, CARGILL, etc.) en este mismo proyecto de
+-- Supabase, compartido por las 4 apps — mismo namespace de nombres de
+-- tabla. (Esta migración reemplaza un primer intento fallido que sí
+-- colisionó con esa tabla — si llegaste a correr esa versión, no pasó
+-- nada: el CREATE TABLE fallaba de entrada por el nombre repetido.)
 
-create table compradores (
+create table compradores_hacienda (
   id text primary key,
   nombre text not null,
   orden int not null default 0,
   activo boolean not null default true
 );
 
-insert into compradores (id, nombre, orden) values
+insert into compradores_hacienda (id, nombre, orden) values
   ('brosa', 'Brosa', 1),
   ('hiriart', 'Hiriart', 2),
   ('coto', 'Coto', 3),
   ('mag', 'MAG', 4),
   ('feigelstock', 'Feigelstock', 5);
 
-alter table compradores enable row level security;
-create policy compradores_select on compradores for select to authenticated using (rol_actual() is not null);
-create policy compradores_insert on compradores for insert to authenticated
+alter table compradores_hacienda enable row level security;
+create policy compradores_hacienda_select on compradores_hacienda for select to authenticated using (rol_actual() is not null);
+create policy compradores_hacienda_insert on compradores_hacienda for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 alter table movimientos add column destino_venta text check (destino_venta in ('faena', 'invernada', 'conserva'));
-alter table movimientos add column comprador_id text references compradores(id);
+alter table movimientos add column comprador_id text references compradores_hacienda(id);
 
 -- historial_movimientos: agrega destino_venta/comprador para que se vean
 -- en el Historial. CREATE OR REPLACE VIEW no permite insertar columnas
@@ -60,7 +68,7 @@ create or replace view historial_movimientos with (security_invoker = true) as
   left join titulares tid on tid.id = m.titular_destino
   left join rodeos r on r.id = m.rodeo_id
   left join rodeos rd on rd.id = m.rodeo_destino_id
-  left join compradores cp on cp.id = m.comprador_id
+  left join compradores_hacienda cp on cp.id = m.comprador_id
   left join perfiles p on p.user_id = m.usuario_id
   left join movimientos mr on mr.id = m.reemplazado_por
   left join movimientos me on me.id = m.editado_de
