@@ -1,9 +1,9 @@
 // Crea un transportista nuevo (Auth + fila en transportistas) desde el
 // panel de Logística. Mismo esquema de seguridad que admin-crear-
-// usuario.js: quien llama tiene que ser owner, verificado server-side con
-// su token de sesión — transportistas no tiene policy de insert para
-// clientes normales, a propósito (mismo criterio que perfiles: el alta
-// siempre es una operación manual).
+// usuario.js: quien llama tiene que ser owner o administrativo, verificado
+// server-side con su token de sesión — transportistas no tiene policy de
+// insert para clientes normales, a propósito (mismo criterio que
+// perfiles: el alta siempre es una operación manual).
 //
 // El usuario para iniciar sesión sigue siendo el email real (ambas
 // categorías) — el CUIT es un dato guardado aparte, no reemplaza al email.
@@ -35,13 +35,13 @@ async function usuarioDelToken(token) {
   return res.json();
 }
 
-async function esOwner(userId) {
+async function puedeGestionarTransportistas(userId) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/perfiles?user_id=eq.${userId}&select=rol`, {
     headers: headersSupabase(),
   });
   if (!res.ok) return false;
   const filas = await res.json();
-  return filas[0]?.rol === 'owner';
+  return ['owner', 'administrativo'].includes(filas[0]?.rol);
 }
 
 exports.handler = async function (event) {
@@ -62,12 +62,12 @@ exports.handler = async function (event) {
   if (!usuario || !usuario.id) {
     return { statusCode: 401, headers: headersJson(), body: JSON.stringify({ error: 'Sesión inválida o vencida.' }) };
   }
-  if (!(await esOwner(usuario.id))) {
-    return { statusCode: 403, headers: headersJson(), body: JSON.stringify({ error: 'Solo un owner puede crear transportistas.' }) };
+  if (!(await puedeGestionarTransportistas(usuario.id))) {
+    return { statusCode: 403, headers: headersJson(), body: JSON.stringify({ error: 'Solo un owner o administrativo puede crear transportistas.' }) };
   }
 
   try {
-    const { email, password, nombre_completo, empresa, cuit, categoria } = JSON.parse(event.body);
+    const { email, password, nombre_completo, empresa, cuit, camion_default_id, categoria } = JSON.parse(event.body);
     if (!email || !password || !nombre_completo || !cuit || !categoria) {
       return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: email, contraseña, nombre, CUIT y categoría son obligatorios.' }) };
     }
@@ -98,6 +98,7 @@ exports.handler = async function (event) {
         email,
         empresa: empresa || null,
         cuit: cuit.replace(/[^a-zA-Z0-9]/g, ''),
+        camion_default_id: categoria === 'propio' ? (camion_default_id || null) : null,
         categoria,
       }),
     });

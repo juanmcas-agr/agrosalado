@@ -61,16 +61,28 @@
       </nav>
 
       <section id="pantalla-catalogo" data-screen="catalogo" class="oculto">
-        <h2>Transportistas</h2>
         <div id="cat-transportistas-mensaje" class="mensaje"></div>
+
+        <h2>Choferes</h2>
         <div class="tabla-scroll">
-          <table id="cat-transportistas-tabla" class="tabla">
+          <table id="cat-choferes-tabla" class="tabla">
             <thead>
-              <tr><th>Nombre</th><th>Email</th><th>Categoría</th><th>Empresa</th><th>CUIT</th><th>Estado</th><th></th></tr>
+              <tr><th>Nombre</th><th>Email</th><th>CUIT</th><th>Camión por defecto</th><th>Estado</th><th></th></tr>
             </thead>
             <tbody></tbody>
           </table>
         </div>
+
+        <h2>Transportistas</h2>
+        <div class="tabla-scroll">
+          <table id="cat-externos-tabla" class="tabla">
+            <thead>
+              <tr><th>Empresa</th><th>Email</th><th>CUIT</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
         <button type="button" id="cat-transportista-nuevo" class="boton-secundario">+ Nuevo Usuario</button>
 
         <div id="cat-transportista-form-bloque" class="oculto">
@@ -85,6 +97,7 @@
             <label class="full" id="cat-transportista-empresa-wrap">Empresa <input id="cat-transportista-empresa" type="text"></label>
             <label class="full">Email <input id="cat-transportista-email" type="email" required></label>
             <label class="full">CUIT <input id="cat-transportista-cuit" type="text" required></label>
+            <label class="full" id="cat-transportista-camion-wrap">Camión por defecto <select id="cat-transportista-camion"></select></label>
             <label class="full" id="cat-transportista-password-wrap">Contraseña <input id="cat-transportista-password" type="password" autocomplete="new-password"></label>
             <label class="check-inline full"><input type="checkbox" id="cat-transportista-activo" checked> Activo</label>
             <button type="submit" class="full">Guardar</button>
@@ -234,6 +247,13 @@
          acá se suben a Storage. -->
     <div id="modo-transportista" class="oculto">
       <section id="pantalla-mis-viajes" data-screen="mis-viajes" class="oculto">
+        <div id="mi-camion-bloque" class="campo-grupo full oculto" style="margin-bottom:16px;">
+          <div class="etiqueta-grupo">Mi camión habitual</div>
+          <select id="mi-camion-select"></select>
+          <button type="button" id="mi-camion-guardar" class="boton-secundario" style="margin-top:6px;">Guardar como mi camión por defecto</button>
+          <div id="mi-camion-mensaje" class="mensaje"></div>
+        </div>
+
         <h2 id="viaje-form-titulo">Cargar viaje</h2>
         <form id="viaje-form" class="formulario">
           <input type="hidden" id="viaje-id">

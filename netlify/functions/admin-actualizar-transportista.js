@@ -1,8 +1,9 @@
 // Actualiza nombre/contacto/categoría/activo de un transportista ya
 // existente, desde el panel de Logística. Mismo esquema de seguridad que
-// admin-actualizar-usuario.js: quien llama tiene que ser owner, verificado
-// server-side — transportistas no tiene policy de update para clientes
-// normales, así que editar a otro requiere el service role.
+// admin-actualizar-usuario.js: quien llama tiene que ser owner o
+// administrativo, verificado server-side — transportistas no tiene policy
+// de update para clientes normales, así que editar a otro requiere el
+// service role.
 //
 // Requiere en Netlify: SUPABASE_SERVICE_ROLE_KEY (la misma que las otras
 // funciones admin-*.js).
@@ -31,13 +32,13 @@ async function usuarioDelToken(token) {
   return res.json();
 }
 
-async function esOwner(userId) {
+async function puedeGestionarTransportistas(userId) {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/perfiles?user_id=eq.${userId}&select=rol`, {
     headers: headersSupabase(),
   });
   if (!res.ok) return false;
   const filas = await res.json();
-  return filas[0]?.rol === 'owner';
+  return ['owner', 'administrativo'].includes(filas[0]?.rol);
 }
 
 exports.handler = async function (event) {
@@ -58,12 +59,12 @@ exports.handler = async function (event) {
   if (!usuario || !usuario.id) {
     return { statusCode: 401, headers: headersJson(), body: JSON.stringify({ error: 'Sesión inválida o vencida.' }) };
   }
-  if (!(await esOwner(usuario.id))) {
-    return { statusCode: 403, headers: headersJson(), body: JSON.stringify({ error: 'Solo un owner puede editar transportistas.' }) };
+  if (!(await puedeGestionarTransportistas(usuario.id))) {
+    return { statusCode: 403, headers: headersJson(), body: JSON.stringify({ error: 'Solo un owner o administrativo puede editar transportistas.' }) };
   }
 
   try {
-    const { user_id, nombre_completo, email, empresa, cuit, categoria, activo } = JSON.parse(event.body);
+    const { user_id, nombre_completo, email, empresa, cuit, camion_default_id, categoria, activo } = JSON.parse(event.body);
 
     if (!user_id || !nombre_completo || !email || !cuit || !categoria) {
       return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: usuario, nombre, email, CUIT y categoría son obligatorios.' }) };
@@ -83,6 +84,7 @@ exports.handler = async function (event) {
         email,
         empresa: empresa || null,
         cuit: cuit.replace(/[^a-zA-Z0-9]/g, ''),
+        camion_default_id: categoria === 'propio' ? (camion_default_id || null) : null,
         categoria,
         activo: activo !== false,
       }),

@@ -41,10 +41,65 @@ async function cargarCamionesSelect() {
     return;
   }
   camionesCache = data;
-  el('viaje-camion').innerHTML = '<option value="">Elegir...</option>'
-    + camionesCache.map((c) => `<option value="${c.id}">${c.patente}${c.descripcion ? ' — ' + c.descripcion : ''}</option>`).join('');
+  const opciones = camionesCache.map((c) => `<option value="${c.id}">${c.patente}${c.descripcion ? ' — ' + c.descripcion : ''}</option>`).join('');
+  // Un chofer (propio) puede cargar un camión nuevo si el suyo no está en
+  // la lista (la RLS ya lo permite, ver camiones_insert_chofer); un
+  // externo no, usa su propia flota, no la de Agro Salado.
+  const opcionNueva = esExterno() ? '' : '<option value="__nuevo__">+ Agregar camión nuevo...</option>';
+  el('viaje-camion').innerHTML = '<option value="">Elegir...</option>' + opciones + opcionNueva;
+  // reconstruir el <select> de arriba pisa cualquier valor que
+  // resetFormulario() ya le haya puesto (options nuevas, ninguna con
+  // "selected") — se vuelve a precargar el camión habitual acá, mientras
+  // no se esté editando un viaje ya cargado (editarViaje ya elige el
+  // camión real de ESE viaje, no debería pisarse con el default).
+  if (!editandoId) el('viaje-camion').value = getEstado().transportista?.camion_default_id || '';
   el('mv-filtro-camion').innerHTML = '<option value="">Todos</option>'
     + camionesCache.map((c) => `<option value="${c.id}">${c.patente}</option>`).join('');
+  if (!esExterno()) poblarMiCamionSelect();
+}
+
+// ─── Mi camión habitual (solo choferes/propios) ─────────────────────────
+
+function poblarMiCamionSelect() {
+  const select = el('mi-camion-select');
+  select.innerHTML = '<option value="">Sin definir</option>'
+    + camionesCache.map((c) => `<option value="${c.id}">${c.patente}${c.descripcion ? ' — ' + c.descripcion : ''}</option>`).join('');
+  select.value = getEstado().transportista?.camion_default_id || '';
+}
+
+async function guardarMiCamionDefault() {
+  const mensaje = el('mi-camion-mensaje');
+  mensaje.textContent = '';
+  const camionId = el('mi-camion-select').value || null;
+  const { error } = await supabase.rpc('actualizar_mi_camion_default', { p_camion_id: camionId });
+  if (error) {
+    mensaje.textContent = `No se pudo guardar: ${error.message}`;
+    mensaje.className = 'error';
+    return;
+  }
+  getEstado().transportista.camion_default_id = camionId;
+  mensaje.textContent = 'Guardado — se va a precargar solo la próxima vez que cargues un viaje.';
+  mensaje.className = 'ok';
+}
+
+// Si el camión elegido es "+ Agregar camión nuevo...", pide patente/
+// descripción y lo crea en el catálogo compartido (mismo que usa el
+// personal), en vez de dejar al chofer sin poder cargar el viaje porque
+// su camión no está.
+async function agregarCamionDesdeChofer() {
+  const select = el('viaje-camion');
+  const patente = (prompt('Patente del camión nuevo:') || '').trim().toUpperCase();
+  if (!patente) { select.value = ''; return; }
+  const descripcion = (prompt('Descripción (opcional, ej. marca/modelo):') || '').trim() || null;
+  try {
+    const { data, error } = await supabase.from('camiones').insert({ patente, descripcion }).select().single();
+    if (error) throw error;
+    await cargarCamionesSelect();
+    select.value = data.id;
+  } catch (error) {
+    alert('No se pudo crear el camión: ' + error.message);
+    select.value = '';
+  }
 }
 
 function actualizarRequeridosAdjuntos() {
@@ -58,6 +113,9 @@ function resetFormulario() {
   el('viaje-form').reset();
   el('viaje-id').value = '';
   el('viaje-fecha').value = new Date().toISOString().slice(0, 10);
+  // Precarga el camión habitual del chofer (si tiene uno guardado) — sigue
+  // pudiendo elegir otro para este viaje puntual si hace falta.
+  el('viaje-camion').value = getEstado().transportista?.camion_default_id || '';
   el('viaje-form-titulo').textContent = 'Cargar viaje';
   el('viaje-guardar-btn').textContent = 'Guardar viaje';
   el('viaje-cancelar-edicion').classList.add('oculto');
@@ -343,6 +401,10 @@ export function initMisViajes() {
   resetFormulario();
   el('viaje-form').addEventListener('submit', guardarViaje);
   el('viaje-cancelar-edicion').addEventListener('click', resetFormulario);
+  el('viaje-camion').addEventListener('change', () => {
+    if (el('viaje-camion').value === '__nuevo__') agregarCamionDesdeChofer();
+  });
+  el('mi-camion-guardar').addEventListener('click', guardarMiCamionDefault);
   el('mv-filtrar').addEventListener('click', cargarMisViajes);
   el('mv-enviar-liquidar').addEventListener('click', enviarALiquidar);
   el('mv-exportar').addEventListener('click', exportarMisViajes);
@@ -350,7 +412,9 @@ export function initMisViajes() {
   // Solo externos agrupan viajes en liquidaciones (para propios no hay
   // nada que facturar); solo propios cierran meses (para externos ese
   // candado lo pone la liquidación aceptada, no un cierre de calendario).
+  // "Mi camión habitual" tampoco aplica a externos (usan su propia flota).
   el('mv-liquidar-bloque').classList.toggle('oculto', !esExterno());
   el('mv-liquidaciones-bloque').classList.toggle('oculto', !esExterno());
   el('cm-propio-bloque').classList.toggle('oculto', esExterno());
+  el('mi-camion-bloque').classList.toggle('oculto', esExterno());
 }

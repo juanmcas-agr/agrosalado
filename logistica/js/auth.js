@@ -56,7 +56,7 @@ const estado = {
   session: null,
   modo: null, // 'staff' | 'transportista' | null
   perfil: null, // { user_id, nombre_completo, rol, acceso_logistica, acceso_logistica_sueldos } — solo si modo === 'staff'
-  transportista: null, // { user_id, nombre_completo, email, categoria } — solo si modo === 'transportista'
+  transportista: null, // { user_id, nombre_completo, email, categoria, activo, camion_default_id } — solo si modo === 'transportista'
   listo: false,
 };
 
@@ -88,7 +88,7 @@ async function cargarPerfil(userId) {
 async function cargarTransportista(userId) {
   const { data, error } = await supabase
     .from('transportistas')
-    .select('user_id, nombre_completo, email, categoria, activo')
+    .select('user_id, nombre_completo, email, categoria, activo, camion_default_id')
     .eq('user_id', userId)
     .maybeSingle();
   if (error) {

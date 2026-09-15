@@ -15,35 +15,73 @@ function el(id) {
 
 let transportistasCache = [];
 
-function renderTransportistas() {
-  const tbody = el('cat-transportistas-tabla').querySelector('tbody');
-  if (!transportistasCache.length) {
-    tbody.innerHTML = '<tr><td colspan="7">Sin transportistas cargados.</td></tr>';
-    return;
-  }
-  const esOwner = getEstado().perfil?.rol === 'owner';
-  tbody.innerHTML = '';
-  for (const t of transportistasCache) {
-    const tr = document.createElement('tr');
-    if (!t.activo) tr.classList.add('anulado');
+// El alta/edición de transportistas la puede hacer owner o administrativo
+// (antes era owner-only) — mismo criterio para mostrar el botón "Editar"
+// y "+ Nuevo Usuario" que el que valida el servidor (admin-*-
+// transportista.js).
+function puedeGestionarTransportistas() {
+  const rol = getEstado().perfil?.rol;
+  return rol === 'owner' || rol === 'administrativo';
+}
+
+function nombreCamion(camionId) {
+  const c = camionesCache.find((x) => x.id === camionId);
+  return c ? `${c.patente}${c.descripcion ? ' — ' + c.descripcion : ''}` : '';
+}
+
+function filaTransportista(t, permitido) {
+  const tr = document.createElement('tr');
+  if (!t.activo) tr.classList.add('anulado');
+  if (t.categoria === 'propio') {
     tr.innerHTML = `
       <td>${t.nombre_completo}</td>
       <td>${t.email}</td>
-      <td>${t.categoria === 'propio' ? 'Chofer' : 'Transportista'}</td>
-      <td>${t.empresa || ''}</td>
+      <td>${t.cuit || ''}</td>
+      <td>${nombreCamion(t.camion_default_id)}</td>
+      <td>${t.activo ? 'Activo' : 'Inactivo'}</td>
+      <td></td>
+    `;
+  } else {
+    tr.innerHTML = `
+      <td>${t.nombre_completo}</td>
+      <td>${t.email}</td>
       <td>${t.cuit || ''}</td>
       <td>${t.activo ? 'Activo' : 'Inactivo'}</td>
       <td></td>
     `;
-    if (esOwner) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'boton-secundario';
-      btn.textContent = 'Editar';
-      btn.addEventListener('click', () => mostrarFormTransportista('editar', t));
-      tr.lastElementChild.appendChild(btn);
-    }
-    tbody.appendChild(tr);
+  }
+  if (permitido) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'boton-secundario';
+    btn.textContent = 'Editar';
+    btn.addEventListener('click', () => mostrarFormTransportista('editar', t));
+    tr.lastElementChild.appendChild(btn);
+  }
+  return tr;
+}
+
+// Choferes y Transportistas van en dos cuadros separados — mismo listado
+// (transportistasCache), solo se divide por categoria al renderizar.
+function renderTransportistas() {
+  const permitido = puedeGestionarTransportistas();
+  const choferes = transportistasCache.filter((t) => t.categoria === 'propio');
+  const externos = transportistasCache.filter((t) => t.categoria === 'externo');
+
+  const tbodyChoferes = el('cat-choferes-tabla').querySelector('tbody');
+  if (!choferes.length) {
+    tbodyChoferes.innerHTML = '<tr><td colspan="6">Sin choferes cargados.</td></tr>';
+  } else {
+    tbodyChoferes.innerHTML = '';
+    for (const t of choferes) tbodyChoferes.appendChild(filaTransportista(t, permitido));
+  }
+
+  const tbodyExternos = el('cat-externos-tabla').querySelector('tbody');
+  if (!externos.length) {
+    tbodyExternos.innerHTML = '<tr><td colspan="5">Sin transportistas cargados.</td></tr>';
+  } else {
+    tbodyExternos.innerHTML = '';
+    for (const t of externos) tbodyExternos.appendChild(filaTransportista(t, permitido));
   }
 }
 
@@ -66,6 +104,7 @@ function limpiarFormTransportista() {
   el('cat-transportista-empresa').value = '';
   el('cat-transportista-email').value = '';
   el('cat-transportista-cuit').value = '';
+  el('cat-transportista-camion').value = '';
   el('cat-transportista-password').value = '';
   el('cat-transportista-activo').checked = true;
   document.querySelectorAll('input[name="cat-transportista-categoria"]').forEach((r) => { r.checked = false; });
@@ -84,6 +123,9 @@ function actualizarCamposSegunCategoria() {
   const esTransportista = categoria === 'externo';
   el('cat-transportista-nombre-wrap').classList.toggle('oculto', !esChofer);
   el('cat-transportista-nombre').required = esChofer;
+  // Camión por defecto: solo tiene sentido para un chofer (usa la flota de
+  // Agro Salado); un transportista externo trae la suya propia.
+  el('cat-transportista-camion-wrap').classList.toggle('oculto', !esChofer);
   el('cat-transportista-empresa-wrap').classList.toggle('oculto', !esTransportista);
   el('cat-transportista-empresa').required = esTransportista;
 }
@@ -99,6 +141,7 @@ function mostrarFormTransportista(modo, transportista) {
     el('cat-transportista-empresa').value = transportista.empresa || '';
     el('cat-transportista-email').value = transportista.email;
     el('cat-transportista-cuit').value = transportista.cuit || '';
+    el('cat-transportista-camion').value = transportista.camion_default_id || '';
     el('cat-transportista-activo').checked = transportista.activo;
     document.querySelectorAll('input[name="cat-transportista-categoria"]').forEach((r) => { r.checked = r.value === transportista.categoria; });
     actualizarCamposSegunCategoria();
@@ -148,9 +191,11 @@ async function guardarTransportista(evento) {
   // tiene un campo de nombre aparte — la razón social ES su nombre.
   let nombre_completo;
   let empresa = null;
+  let camion_default_id = null;
   if (categoria === 'propio') {
     nombre_completo = el('cat-transportista-nombre').value.trim();
     if (!nombre_completo) { mensaje.textContent = 'Falta el nombre del chofer.'; mensaje.className = 'error'; return; }
+    camion_default_id = el('cat-transportista-camion').value || null;
   } else {
     empresa = el('cat-transportista-empresa').value.trim();
     if (!empresa) { mensaje.textContent = 'Falta la empresa.'; mensaje.className = 'error'; return; }
@@ -168,8 +213,8 @@ async function guardarTransportista(evento) {
 
   const endpoint = userId ? 'admin-actualizar-transportista' : 'admin-crear-transportista';
   const body = userId
-    ? { user_id: userId, nombre_completo, email, empresa, cuit, categoria, activo }
-    : { email, password, nombre_completo, empresa, cuit, categoria };
+    ? { user_id: userId, nombre_completo, email, empresa, cuit, camion_default_id, categoria, activo }
+    : { email, password, nombre_completo, empresa, cuit, camion_default_id, categoria };
 
   try {
     const res = await fetch(`/.netlify/functions/${endpoint}`, {
@@ -225,6 +270,15 @@ export async function cargarCamiones() {
   }
   camionesCache = data;
   renderCamiones();
+  poblarSelectCamionDefault();
+}
+
+// Solo camiones activos, para no dejar asignar como "por defecto" uno ya
+// dado de baja.
+function poblarSelectCamionDefault() {
+  const select = el('cat-transportista-camion');
+  select.innerHTML = '<option value="">Sin definir</option>'
+    + camionesCache.filter((c) => c.activo).map((c) => `<option value="${c.id}">${c.patente}${c.descripcion ? ' — ' + c.descripcion : ''}</option>`).join('');
 }
 
 async function agregarCamion(evento) {
@@ -247,12 +301,16 @@ async function agregarCamion(evento) {
 }
 
 export async function cargarCatalogo() {
-  await Promise.all([cargarTransportistas(), cargarCamiones()]);
+  // Secuencial (no Promise.all): renderTransportistas() necesita
+  // camionesCache ya cargado para mostrar el "Camión por defecto" de cada
+  // chofer.
+  await cargarCamiones();
+  await cargarTransportistas();
 }
 
 export function initCatalogo() {
-  const esOwner = getEstado().perfil?.rol === 'owner';
-  el('cat-transportista-nuevo').classList.toggle('oculto', !esOwner);
+  const permitido = puedeGestionarTransportistas();
+  el('cat-transportista-nuevo').classList.toggle('oculto', !permitido);
   el('cat-transportista-nuevo').addEventListener('click', () => mostrarFormTransportista('nuevo', null));
   el('cat-transportista-form').addEventListener('submit', guardarTransportista);
   el('cat-transportista-cancelar').addEventListener('click', ocultarFormTransportista);

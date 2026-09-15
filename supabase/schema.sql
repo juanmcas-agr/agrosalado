@@ -1531,6 +1531,11 @@ create table transportistas (
   cuit text,              -- dato guardado, no reemplaza al email para loguearse
   categoria text not null check (categoria in ('propio', 'externo')),
   activo boolean not null default true,
+  -- Camión "por defecto" de un chofer (propio) — se precarga solo al
+  -- cargar un viaje, se puede cambiar por viaje si hace falta. Sin FK
+  -- inline porque "camiones" se define más abajo en este archivo; la
+  -- referencia se agrega ahí (alter table transportistas add constraint).
+  camion_default_id uuid,
   created_at timestamptz not null default now()
 );
 
@@ -1582,8 +1587,33 @@ create policy camiones_select on camiones for select to authenticated using (
 );
 create policy camiones_insert on camiones for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner'));
+-- Un chofer (propio) también puede cargar un camión nuevo si el suyo no
+-- está en el catálogo — policy aparte para no tocar el criterio de arriba
+-- (personal). Un externo no: usa su propia flota, no la de Agro Salado.
+create policy camiones_insert_chofer on camiones for insert to authenticated
+  with check (
+    exists (select 1 from transportistas t where t.user_id = auth.uid() and t.categoria = 'propio')
+  );
 create policy camiones_update on camiones for update to authenticated
   using (rol_actual() in ('encargado', 'administrativo', 'owner'));
+
+alter table transportistas add constraint transportistas_camion_default_id_fkey
+  foreign key (camion_default_id) references camiones(id);
+
+-- Deja que un chofer actualice SU PROPIO camión por defecto sin darle una
+-- política de update genérica sobre transportistas (que seguiría
+-- exponiendo el resto de sus propios datos a edición directa desde el
+-- cliente). security definer + chequeo de categoria adentro.
+create or replace function actualizar_mi_camion_default(p_camion_id uuid) returns void
+language plpgsql security definer as $$
+begin
+  update transportistas
+  set camion_default_id = p_camion_id
+  where user_id = auth.uid() and categoria = 'propio';
+end;
+$$;
+
+grant execute on function actualizar_mi_camion_default(uuid) to authenticated;
 
 -- Liquidaciones de transportistas externos. El código se asigna recién al
 -- ACEPTAR (no es default de columna) — antes de eso no hay nada que
