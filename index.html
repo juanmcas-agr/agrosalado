@@ -1211,6 +1211,19 @@
       </span>
     </div>
     <div id="posListaAsignaciones" style="display:flex;flex-direction:column;gap:4px;"></div>
+
+    <div class="pos-seccion-header">
+      <span>Posiciones absorbidas</span>
+      <span class="pos-orden">
+        Ordenar por
+        <select id="posOrdenAbsorcionesCampo" onchange="renderPosicionFiltrada()">
+          <option value="fecha">Fecha</option>
+          <option value="toneladas">Toneladas</option>
+        </select>
+        <button type="button" id="posOrdenAbsorcionesDir" onclick="toggleOrdenPosicion('Absorciones')">↓</button>
+      </span>
+    </div>
+    <div id="posListaAbsorciones" style="display:flex;flex-direction:column;gap:4px;"></div>
   </div>
   <!-- fin #modoPosicion -->
 
@@ -4499,12 +4512,13 @@
     let datosParaAsignar = null;
 
     async function calcularLibres() {
-      const [{ data: compras, error: e1 }, { data: ventas, error: e2 }, { data: asignaciones, error: e3 }] = await Promise.all([
+      const [{ data: compras, error: e1 }, { data: ventas, error: e2 }, { data: asignaciones, error: e3 }, { data: absorciones, error: e4 }] = await Promise.all([
         window.supabaseClient.from('negocios_historial').select('*').order('fecha_cierre', { ascending: false }),
         window.supabaseClient.from('negocios_venta_historial').select('*').order('fecha_cierre', { ascending: false }),
         window.supabaseClient.from('asignaciones_compra_venta').select('*'),
+        window.supabaseClient.from('absorciones_posicion').select('*'),
       ]);
-      if (e1 || e2 || e3) return null;
+      if (e1 || e2 || e3 || e4) return null;
 
       const asignadoCompra = {};
       const asignadoVenta = {};
@@ -4512,19 +4526,24 @@
         asignadoCompra[a.compra_id] = (asignadoCompra[a.compra_id] || 0) + Number(a.toneladas);
         asignadoVenta[a.venta_id] = (asignadoVenta[a.venta_id] || 0) + Number(a.toneladas);
       }
+      const absorbidoCompra = {};
+      for (const ab of absorciones) {
+        absorbidoCompra[ab.compra_id] = (absorbidoCompra[ab.compra_id] || 0) + Number(ab.toneladas);
+      }
 
       const comprasConLibre = compras.map((c) => {
         const alt = c.datos && c.datos.alternativas && c.datos.alternativas[0];
         const esLiquidaSaldo = !!(alt && alt.liquidaSaldo);
         const toneladas = (alt && !esLiquidaSaldo) ? (parseFloat(alt.toneladas) || 0) : 0;
         const asignado = +(asignadoCompra[c.id] || 0).toFixed(2);
+        const absorbido = +(absorbidoCompra[c.id] || 0).toFixed(2);
         // "Liquida saldo" en compra significa que ahí no se sabía cuántas
         // tn tenía el negocio — pero eso se va sabiendo justamente al
         // asignarlo a ventas. Por eso acá no hay un tope real ("libre"
         // queda indeterminado) y el botón de Asignar no debe bloquearse
         // por falta de libre, solo para este caso puntual.
-        const libre = esLiquidaSaldo ? null : +(toneladas - asignado).toFixed(2);
-        return { registro: c, producto: alt && alt.producto, toneladas, asignado, libre, esLiquidaSaldo };
+        const libre = esLiquidaSaldo ? null : +(toneladas - asignado - absorbido).toFixed(2);
+        return { registro: c, producto: alt && alt.producto, toneladas, asignado, absorbido, libre, esLiquidaSaldo };
       });
 
       const ventasConLibre = ventas.map((v) => {
@@ -4534,7 +4553,7 @@
         return { registro: v, b: b || {}, producto: b && b.producto, toneladas, asignado, libre: +(toneladas - asignado).toFixed(2) };
       });
 
-      return { comprasConLibre, ventasConLibre, asignaciones };
+      return { comprasConLibre, ventasConLibre, asignaciones, absorciones };
     }
 
     async function cargarPosicion() {
@@ -4588,6 +4607,7 @@
       Compras: { campo: 'fecha', dir: 'desc' },
       Ventas: { campo: 'fecha', dir: 'desc' },
       Asignaciones: { campo: 'fecha', dir: 'desc' },
+      Absorciones: { campo: 'fecha', dir: 'desc' },
     };
 
     function toggleOrdenPosicion(tabla) {
@@ -4644,6 +4664,23 @@
           return 0;
         });
       renderListaAsignaciones({ ...datosParaAsignar, asignaciones });
+
+      const absorciones = datosParaAsignar.absorciones
+        .filter((ab) => {
+          if (!productoFiltro) return true;
+          const compra = datosParaAsignar.comprasConLibre.find((c) => c.registro.id === ab.compra_id);
+          return compra && compra.producto === productoFiltro;
+        })
+        .sort((x, y) => {
+          const campo = posOrden.Absorciones.campo;
+          const dir = posOrden.Absorciones.dir;
+          const vx = campo === 'toneladas' ? Number(x.toneladas) : (x.creado_at || '');
+          const vy = campo === 'toneladas' ? Number(y.toneladas) : (y.creado_at || '');
+          if (vx < vy) return dir === 'asc' ? -1 : 1;
+          if (vx > vy) return dir === 'asc' ? 1 : -1;
+          return 0;
+        });
+      renderListaAbsorciones({ ...datosParaAsignar, absorciones });
     }
 
     function renderTablaPosCompras(lista) {
@@ -4658,7 +4695,7 @@
           <td>${c.registro.numero_orden || '-'}</td>
           <td></td>
           <td>${c.asignado.toLocaleString('es-AR')}</td>
-          <td class="pos-libre">${c.esLiquidaSaldo ? 'A confirmar' : c.libre.toLocaleString('es-AR')}</td>
+          <td class="pos-libre">${c.esLiquidaSaldo ? 'A confirmar' : c.libre.toLocaleString('es-AR')}${c.absorbido > 0 ? `<div style="font-size:0.8em;color:#8a5a34;">(${c.absorbido.toLocaleString('es-AR')} absorbidas)</div>` : ''}</td>
           <td></td>
         `;
         // La columna Toneladas se puede editar directamente para
@@ -4678,12 +4715,74 @@
 
         const btn = document.createElement('button');
         btn.textContent = '🔗 Asignar';
-        btn.style.cssText = 'width:auto;padding:4px 8px;font-size:0.8em;';
+        btn.style.cssText = 'width:auto;padding:4px 8px;font-size:0.8em;margin-right:4px;';
         btn.disabled = !c.esLiquidaSaldo && c.libre <= 0;
         btn.onclick = () => abrirModalAsignar({ compraId: c.registro.id });
         tr.lastElementChild.appendChild(btn);
+
+        // "Absorber": la empresa se queda con el saldo libre de esta
+        // compra sin asignarlo a una venta real — no aplica a "liquida
+        // saldo" (todavía no se sabe cuántas tn tiene el negocio).
+        const btnAbsorber = document.createElement('button');
+        btnAbsorber.textContent = '🏦 Absorber';
+        btnAbsorber.style.cssText = 'width:auto;padding:4px 8px;font-size:0.8em;background:#8a5a34;';
+        btnAbsorber.disabled = c.esLiquidaSaldo || c.libre <= 0;
+        btnAbsorber.onclick = () => absorberPosicion(c.registro.id, c.libre, c.registro.cliente || '(sin nombre)');
+        tr.lastElementChild.appendChild(btnAbsorber);
         tbody.appendChild(tr);
       }
+    }
+
+    // La empresa absorbe (parte de) el saldo libre de una compra, sin
+    // asignarlo a una venta real — no toca asignaciones_compra_venta ni
+    // el lado de ventas, así que el total "comprado" del resumen por
+    // cereal (y por lo tanto la posición a favor de la empresa) no
+    // cambia; solo deja de contar como libre/pendiente.
+    async function absorberPosicion(compraId, libreActual, nombreCliente) {
+      const texto = prompt(`¿Cuántas toneladas de la posición de "${nombreCliente}" absorbe la empresa? (libre: ${libreActual.toLocaleString('es-AR')} tn)`, String(libreActual));
+      if (texto == null) return;
+      const toneladas = parseFloat(texto);
+      if (!toneladas || toneladas <= 0) { alert('Ingresá un número de toneladas válido.'); return; }
+      if (toneladas > libreActual + 0.001) { alert(`No podés absorber más de lo libre (${libreActual.toLocaleString('es-AR')} tn).`); return; }
+
+      const { data: { session } } = await window.supabaseClient.auth.getSession();
+      if (!session) { alert('No hay sesión activa.'); return; }
+
+      const { error } = await window.supabaseClient.from('absorciones_posicion').insert({
+        compra_id: compraId, toneladas, usuario_id: session.user.id,
+      });
+      if (error) { alert('No se pudo absorber: ' + error.message); return; }
+      cargarPosicion();
+    }
+
+    function renderListaAbsorciones(datos) {
+      const cont = document.getElementById('posListaAbsorciones');
+      if (!datos.absorciones.length) {
+        cont.innerHTML = '<div style="color:#888;">No hay posiciones absorbidas todavía.</div>';
+        return;
+      }
+      cont.innerHTML = '';
+      for (const ab of datos.absorciones) {
+        const compra = datos.comprasConLibre.find((c) => c.registro.id === ab.compra_id);
+        const nombreCompra = compra ? `${compra.registro.cliente} (N° ${compra.registro.numero_orden || '-'})` : '(compra anulada)';
+
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:6px 8px;border:1px solid #eee;border-radius:6px;font-size:0.85em;';
+        div.innerHTML = `<div>${nombreCompra} · <strong>${Number(ab.toneladas).toLocaleString('es-AR')} tn</strong></div>`;
+        const btn = document.createElement('button');
+        btn.textContent = '🗑️';
+        btn.style.cssText = 'width:auto;padding:4px 8px;background:#ad1e19;';
+        btn.onclick = () => eliminarAbsorcion(ab.id);
+        div.appendChild(btn);
+        cont.appendChild(div);
+      }
+    }
+
+    async function eliminarAbsorcion(id) {
+      if (!confirm('¿Deshacer esta absorción? El saldo vuelve a quedar libre/pendiente.')) return;
+      const { error } = await window.supabaseClient.from('absorciones_posicion').delete().eq('id', id);
+      if (error) { alert('No se pudo deshacer: ' + error.message); return; }
+      cargarPosicion();
     }
 
     // Edita las toneladas de cualquier negocio de compra cerrado
