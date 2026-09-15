@@ -6,10 +6,10 @@
 // bloquea: se resuelve sola cuando el stock vuelve a coincidir tras un
 // movimiento real, vía trigger resolver_diferencia_manga en la base).
 import { supabase } from './supabaseClient.js';
-import { CATEGORIAS } from './config.js';
+import { CATEGORIAS, ESTABLECIMIENTOS } from './config.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
-import { cargarRodeos, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
+import { cargarRodeos, rodeosDe, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
 import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
 
 function el(id) {
@@ -132,13 +132,17 @@ function limpiarSeleccionMultipleCatalogo(clave, idLista) {
   renderChips(idLista, clave);
 }
 
+// Establecimiento primero: si hay rodeos de la misma categoría en más de
+// un establecimiento (ej. "Novillito" en San Miguel Y en San Juan), antes
+// se mezclaban todos en un mismo desplegable sin forma de distinguirlos.
 function poblarSelectRodeoManga() {
+  const establecimientoId = obtenerSeleccion('manga-establecimiento');
   const categoriaId = obtenerSeleccion('manga-categoria');
   const select = el('manga-rodeo');
   const valorPrevio = select.value;
   select.innerHTML = '<option value="">Elegir...</option>';
-  if (categoriaId) {
-    for (const r of rodeosDeCategoria(categoriaId)) {
+  if (establecimientoId && categoriaId) {
+    for (const r of rodeosDe(establecimientoId, categoriaId)) {
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = r.codigo;
@@ -726,6 +730,7 @@ function mostrarMensaje(texto, tipo) {
 
 function resetFormulario() {
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
+  limpiarSeleccion('manga-establecimiento');
   limpiarSeleccion('manga-categoria');
   el('manga-rodeo').innerHTML = '<option value="">Elegir...</option>';
   limpiarSeleccion('manga-propietarios');
@@ -739,6 +744,7 @@ function resetFormulario() {
 async function onSubmit(evento) {
   evento.preventDefault();
   const fecha = el('manga-fecha').value;
+  const establecimientoId = obtenerSeleccion('manga-establecimiento');
   const categoriaId = obtenerSeleccion('manga-categoria');
   const rodeoId = el('manga-rodeo').value;
   const propietarios = obtenerSeleccionMultiple('manga-propietarios');
@@ -747,6 +753,7 @@ async function onSubmit(evento) {
 
   if (!fecha) { mostrarMensaje('Falta la fecha.', 'error'); return; }
   if (fecha > new Date().toISOString().slice(0, 10)) { mostrarMensaje('La fecha no puede ser futura.', 'error'); return; }
+  if (!establecimientoId) { mostrarMensaje('Elegí un establecimiento.', 'error'); return; }
   if (!categoriaId) { mostrarMensaje('Elegí una categoría.', 'error'); return; }
   if (!rodeoId) { mostrarMensaje('Elegí un rodeo.', 'error'); return; }
   if (!propietarios.length) { mostrarMensaje('Elegí al menos un propietario.', 'error'); return; }
@@ -873,8 +880,10 @@ async function onSubmit(evento) {
 
 export async function initTrabajoManga() {
   await Promise.all([cargarTitulares(), cargarRodeos(), cargarCatalogo('drogas'), cargarCatalogo('vacunas'), cargarCatalogo('otras'), cargarCatalogo('toros')]);
+  crearGrupoBotones('manga-establecimiento', ESTABLECIMIENTOS);
   crearGrupoBotones('manga-categoria', CATEGORIAS);
   crearGrupoBotonesMultiple('manga-propietarios', obtenerTitularesCache());
+  el('manga-establecimiento').addEventListener('cambio', poblarSelectRodeoManga);
   el('manga-categoria').addEventListener('cambio', poblarSelectRodeoManga);
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   activarBloquesSanidad();
