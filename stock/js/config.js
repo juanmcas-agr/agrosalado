@@ -31,9 +31,10 @@ export const CATEGORIAS = [
 
 // Cambio de categoría: a qué categoría única puede pasar cada una (para
 // minimizar error de carga, no se puede "saltar" un paso ni elegir
-// cualquier categoría al voleo). Las que no están acá (torito/toro) no
-// tienen una cadena definida todavía — Cambio de categoría las deja
-// elegir cualquier destino, como antes.
+// cualquier categoría al voleo). Las que no están acá (novillo/toro/vaca)
+// son categorías terminales — no tienen un siguiente paso, así que
+// tampoco se pueden elegir como ORIGEN de un cambio de categoría (ver
+// opcionesCategoriaOrigen() en movimientos.js).
 export const SIGUIENTE_CATEGORIA = {
   ternera_al_pie: 'ternera',
   ternera: 'vaquillona',
@@ -41,6 +42,7 @@ export const SIGUIENTE_CATEGORIA = {
   ternero_al_pie: 'ternero',
   ternero: 'novillito',
   novillito: 'novillo',
+  torito: 'toro',
 };
 
 // Espejo de tipos_movimiento: qué campos pedir por cada tipo.
@@ -76,8 +78,12 @@ export const TIPOS_MOVIMIENTO = {
     nombre: 'Venta de invernada', clase: 'salida', oculto: true,
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
+  // Redundante con "Venta" de arriba (la categoría elegida ya cubre vaca
+  // de faena/conserva) — mismo criterio que venta_gordo/venta_vaca_prenada/
+  // venta_invernada: oculto:true solo para que editar un movimiento viejo
+  // cargado con este tipo siga funcionando.
   faena_conserva: {
-    nombre: 'Vaca faena / conserva', clase: 'salida',
+    nombre: 'Vaca faena / conserva', clase: 'salida', oculto: true,
     campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
   },
   mortandad: {

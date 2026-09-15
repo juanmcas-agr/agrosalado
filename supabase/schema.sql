@@ -76,8 +76,9 @@ insert into tipos_movimiento
   ('cambio_titular',      'Cambio de titularidad',              'interna', true,  true,  true,  true,  true,  true,  10),
   ('apertura_stock',      'Apertura de stock',                  'entrada', false, true,  false, true,  false, true,  11),
   ('cambio_rodeo',        'Cambio de rodeo',                    'interna', true,  true,  true,  true,  true,  true,  12),
-  -- Unifica venta_gordo/venta_vaca_prenada/venta_invernada (quedan en la
-  -- tabla por trazabilidad histórica, pero el cliente ya no las ofrece).
+  -- Unifica venta_gordo/venta_vaca_prenada/venta_invernada/faena_conserva
+  -- (quedan en la tabla por trazabilidad histórica, pero el cliente ya no
+  -- las ofrece).
   ('venta',               'Venta',                              'salida',  true,  false, true,  false, true,  false, 13);
 
 -- ─── Rodeos ─────────────────────────────────────────────────────────────

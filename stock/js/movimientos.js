@@ -395,13 +395,25 @@ function actualizarRequeridoRodeoDestino() {
   el('mov-rodeo-destino').required = aplica;
 }
 
+// Qué categorías puede tener mov-categoria-origen para el tipo actual:
+// - Cambio de categoría: solo las que tienen un paso siguiente definido en
+//   SIGUIENTE_CATEGORIA — novillo/toro/vaca son categorías terminales, no
+//   tiene sentido elegirlas como origen de un cambio si no hay adónde ir.
+// - Cualquier otro tipo (venta, mortandad, traslado, etc.): todas — ahí
+//   categoria_origen es la categoría real del animal en el rodeo, no un
+//   paso de la cadena.
+function opcionesCategoriaOrigen(tipo) {
+  if (tipo === 'cambio_categoria') return CATEGORIAS.filter((c) => SIGUIENTE_CATEGORIA[c.id]);
+  return CATEGORIAS;
+}
+
 // Qué categorías puede tener mov-categoria-destino para el tipo actual:
 // - Si el tipo tiene categoriasPermitidas (Parición), solo esas.
-// - Si es Cambio de categoría y el origen elegido tiene una "siguiente"
-//   definida (SIGUIENTE_CATEGORIA), SOLO esa — no se puede saltar un
+// - Si es Cambio de categoría, la única "siguiente" definida en
+//   SIGUIENTE_CATEGORIA para el origen elegido — no se puede saltar un
 //   paso ni elegir cualquier categoría al voleo, para minimizar error de
-//   carga. Si el origen no tiene cadena definida (torito/toro, todavía
-//   sin una), se deja elegir cualquier categoría, como antes.
+//   carga (el origen ya está limitado a categorías con cadena definida,
+//   ver opcionesCategoriaOrigen()).
 // - Cualquier otro tipo: todas.
 function opcionesCategoriaDestino(tipo) {
   const cfg = TIPOS_MOVIMIENTO[tipo];
@@ -440,6 +452,7 @@ function actualizarCamposVisibles() {
 
   // Siempre se reconstruye para que quede sin selección al cambiar de tipo
   // (evita arrastrar una categoría elegida que ya no corresponde).
+  crearGrupoBotones('mov-categoria-origen', opcionesCategoriaOrigen(tipo));
   crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(tipo));
   actualizarSelectsRodeo();
   actualizarBloqueFeedLot();
