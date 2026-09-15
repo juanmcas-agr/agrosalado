@@ -1403,16 +1403,16 @@
     <button type="button" class="activo">
       <span class="tab-icono">🌾</span> Granos
     </button>
-    <button type="button" onclick="window.location.href = '/stock/'">
+    <button type="button" onclick="if (window.perfilActual && window.perfilActual.rol !== 'owner' && !window.perfilActual.acceso_hacienda) { alert('No tenés permisos para acceder a Hacienda.'); } else { window.location.href = '/stock/'; }">
       <span class="tab-icono">🐄</span> Hacienda
     </button>
     <button type="button" onclick="alert('Pos. Granaria: próximamente 🚧')">
       <span class="tab-icono">📈</span> Pos. Granaria
     </button>
-    <button type="button" onclick="window.location.href = '/rel/'">
+    <button type="button" onclick="if (window.perfilActual && window.perfilActual.rol !== 'owner' && !window.perfilActual.acceso_precios_relativos) { alert('No tenés permisos para acceder a $Rel.'); } else { window.location.href = '/rel/'; }">
       <span class="tab-icono">💹</span> $Rel
     </button>
-    <button type="button" onclick="window.location.href = '/logistica/'">
+    <button type="button" onclick="if (window.perfilActual && window.perfilActual.rol !== 'owner' && !window.perfilActual.acceso_logistica) { alert('No tenés permisos para acceder a Logística.'); } else { window.location.href = '/logistica/'; }">
       <span class="tab-icono">🚚</span> Logística
     </button>
   </nav>
