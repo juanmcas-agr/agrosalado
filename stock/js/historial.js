@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient.js';
-import { ESTABLECIMIENTOS, TIPOS_MOVIMIENTO } from './config.js';
+import { ESTABLECIMIENTOS, TIPOS_MOVIMIENTO, DESTINO_VENTA } from './config.js';
 import { getEstado } from './auth.js';
 import { exportarHistorial, exportarTrabajosManga } from './export.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
@@ -75,6 +75,17 @@ function describirTitular(fila) {
   return fila.titular_origen_nombre || fila.titular_destino_nombre || '—';
 }
 
+// Destino de venta + comprador no tienen columna propia en la tabla — se
+// muestran junto a Observaciones, solo para movimientos tipo 'venta'.
+function describirVenta(fila) {
+  const partes = [];
+  if (fila.destino_venta) {
+    partes.push(DESTINO_VENTA.find((d) => d.id === fila.destino_venta)?.nombre || fila.destino_venta);
+  }
+  if (fila.comprador_nombre) partes.push(`Comprador: ${fila.comprador_nombre}`);
+  return partes.join(' · ');
+}
+
 async function anularMovimiento(id) {
   if (!navigator.onLine) {
     alert('Necesitás conexión a internet para anular un movimiento.');
@@ -139,7 +150,7 @@ function renderFilas(filas) {
       <td>${fila.kilos_promedio}</td>
       <td>${fila.rodeo || ''}</td>
       <td>${fila.usuario_nombre || '—'}</td>
-      <td>${fila.observaciones || ''}</td>
+      <td>${[describirVenta(fila), fila.observaciones].filter(Boolean).join(' — ')}</td>
       <td>${estado}</td>
       <td></td>
     `;

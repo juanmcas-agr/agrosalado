@@ -15,14 +15,25 @@ export function obtenerRodeosCache() {
   return cache;
 }
 
-export function rodeosDe(establecimientoId, categoriaId) {
-  return cache.filter((r) => r.establecimiento_id === establecimientoId && r.categoria_id === categoriaId);
+// soloHoteleria: false (default) trae los rodeos "propios" (de Agro
+// Salado/capitalizadores) — los de Hotelería (rodeos.es_hoteleria) quedan
+// afuera de TODOS los tipos de movimiento normales para no mezclar el
+// stock de un cliente externo con el propio. true invierte el filtro,
+// usado solo por "Salida de hotelería" para mostrar los lotes del cliente.
+export function rodeosDe(establecimientoId, categoriaId, { soloHoteleria = false } = {}) {
+  return cache.filter((r) =>
+    r.establecimiento_id === establecimientoId &&
+    r.categoria_id === categoriaId &&
+    Boolean(r.es_hoteleria) === soloHoteleria
+  );
 }
 
 // Para Trabajo de Manga: no se elige establecimiento por separado (el
 // rodeo ya sabe dónde está), así que alcanza con filtrar por categoría.
+// Nunca incluye lotes de Hotelería (Trabajo de Manga es solo para stock
+// propio).
 export function rodeosDeCategoria(categoriaId) {
-  return cache.filter((r) => r.categoria_id === categoriaId);
+  return cache.filter((r) => r.categoria_id === categoriaId && !r.es_hoteleria);
 }
 
 // El código (ej. "Vaquillona San Miguel 202601") se arma acá, no en la
@@ -32,7 +43,7 @@ export function rodeosDeCategoria(categoriaId) {
 // (año, nombre) — no un contador global compartido por todos los
 // rodeos del año — así "San Miguel" cuenta 01, 02, 03... indepen-
 // dientemente de "San Juan" 01, 02, 03...
-export async function crearRodeo({ nombre, categoriaId, establecimientoId, fechaCreacion, usuarioId }) {
+export async function crearRodeo({ nombre, categoriaId, establecimientoId, fechaCreacion, usuarioId, esHoteleria }) {
   const fecha = fechaCreacion || new Date().toISOString().slice(0, 10);
   const anio = Number(fecha.slice(0, 4));
   const { data: secuencia, error: errorSecuencia } = await supabase.rpc('siguiente_secuencia_rodeo', { p_anio: anio, p_nombre: nombre });
@@ -50,6 +61,7 @@ export async function crearRodeo({ nombre, categoriaId, establecimientoId, fecha
       establecimiento_id: establecimientoId,
       fecha_creacion: fecha,
       creado_por: usuarioId,
+      es_hoteleria: Boolean(esHoteleria),
     })
     .select()
     .single();

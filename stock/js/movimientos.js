@@ -1,10 +1,11 @@
 import {
-  TIPOS_MOVIMIENTO, ESTABLECIMIENTOS, CATEGORIAS, SIGUIENTE_CATEGORIA,
+  TIPOS_MOVIMIENTO, ESTABLECIMIENTOS, CATEGORIAS, SIGUIENTE_CATEGORIA, DESTINO_VENTA,
   KILOS_MIN_SANIDAD, KILOS_MAX_SANIDAD,
 } from './config.js';
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
-import { cargarTitulares, obtenerTitularesCache, crearCapitalizador } from './titulares.js';
+import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
+import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
 import { cargarRodeos, rodeosDe, crearRodeo, stockDelRodeo, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
 import { marcarComoReemplazado } from './historial.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
@@ -15,11 +16,17 @@ import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSelecc
 // armar un import circular entre los dos módulos).
 let editandoId = null;
 
+// Para editar un movimiento 'hoteleria' (sinRodeo): no hay selector de
+// Rodeo para volver a elegir, así que se guarda acá el rodeo_id del
+// lote original y onSubmit() lo reusa en vez de crear un rodeo nuevo.
+let rodeoIdEditandoSinRodeo = null;
+
 const CAMPOS = [
   'establecimiento_origen', 'establecimiento_destino',
   'categoria_origen', 'categoria_destino',
   'titular_origen', 'titular_destino',
-  'rodeo_destino',
+  'rodeo_destino', 'cliente',
+  'destino_venta', 'comprador',
 ];
 
 function el(id) {
@@ -124,6 +131,109 @@ function precargarTitular(prefijo, titularId) {
   }
 }
 
+// ─── Cliente (Hotelería): lista aparte de titulares.tipo='cliente', no se
+// mezcla con Agro Salado/Doña Julia/Capitalizador de arriba ───
+
+function poblarSelectCliente() {
+  const select = el('mov-cliente');
+  const valorPrevio = select.value;
+  select.innerHTML = '';
+  const opcionVacia = document.createElement('option');
+  opcionVacia.value = '';
+  opcionVacia.textContent = 'Elegir...';
+  select.appendChild(opcionVacia);
+  for (const c of obtenerTitularesCache().filter((t) => t.tipo === 'cliente')) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nombre;
+    select.appendChild(opt);
+  }
+  const opcionNueva = document.createElement('option');
+  opcionNueva.value = '__nuevo__';
+  opcionNueva.textContent = '+ Agregar nuevo...';
+  select.appendChild(opcionNueva);
+  if (valorPrevio) select.value = valorPrevio;
+}
+
+function inicializarCliente() {
+  poblarSelectCliente();
+  el('mov-cliente').addEventListener('change', async () => {
+    const select = el('mov-cliente');
+    if (select.value !== '__nuevo__') return;
+    const nombre = prompt('Nombre del cliente:');
+    if (!nombre || !nombre.trim()) {
+      select.value = '';
+      return;
+    }
+    try {
+      const nuevo = await crearCliente(nombre.trim());
+      poblarSelectCliente();
+      select.value = nuevo.id;
+    } catch (error) {
+      alert('No se pudo crear el cliente: ' + error.message);
+      select.value = '';
+    }
+  });
+}
+
+// Valor limpio del select de Cliente (nunca '__nuevo__', que es solo el
+// disparador del alta on-the-fly).
+function obtenerCliente() {
+  const valor = el('mov-cliente').value;
+  return valor && valor !== '__nuevo__' ? valor : '';
+}
+
+// ─── Comprador (Venta): trazabilidad de a quién se le vendió, no afecta
+// stock ni titularidad — lista propia (compradores.js), mismo patrón
+// "+ Agregar nuevo..." que Cliente/Capitalizador ───
+
+function poblarSelectComprador() {
+  const select = el('mov-comprador');
+  const valorPrevio = select.value;
+  select.innerHTML = '';
+  const opcionVacia = document.createElement('option');
+  opcionVacia.value = '';
+  opcionVacia.textContent = 'Elegir...';
+  select.appendChild(opcionVacia);
+  for (const c of obtenerCompradoresCache()) {
+    const opt = document.createElement('option');
+    opt.value = c.id;
+    opt.textContent = c.nombre;
+    select.appendChild(opt);
+  }
+  const opcionNueva = document.createElement('option');
+  opcionNueva.value = '__nuevo__';
+  opcionNueva.textContent = '+ Agregar nuevo...';
+  select.appendChild(opcionNueva);
+  if (valorPrevio) select.value = valorPrevio;
+}
+
+function inicializarComprador() {
+  poblarSelectComprador();
+  el('mov-comprador').addEventListener('change', async () => {
+    const select = el('mov-comprador');
+    if (select.value !== '__nuevo__') return;
+    const nombre = prompt('Nombre del comprador:');
+    if (!nombre || !nombre.trim()) {
+      select.value = '';
+      return;
+    }
+    try {
+      const nuevo = await crearComprador(nombre.trim());
+      poblarSelectComprador();
+      select.value = nuevo.id;
+    } catch (error) {
+      alert('No se pudo crear el comprador: ' + error.message);
+      select.value = '';
+    }
+  });
+}
+
+function obtenerComprador() {
+  const valor = el('mov-comprador').value;
+  return valor && valor !== '__nuevo__' ? valor : '';
+}
+
 // El rodeo de origen ya tiene cabezas de titulares puntuales — no tiene
 // sentido dejar elegir una titularidad de origen que ese rodeo ni
 // siquiera tiene (ej. rodeo con AS + DJ, no debería poder elegirse un
@@ -200,8 +310,12 @@ const RODEO_DESTINO_IDS = {
 // Para el rodeo destino, si el tipo tiene un establecimiento_destino
 // REAL (no duplicado del origen — hoy solo cambio_rodeo), el rodeo se
 // filtra por ESE establecimiento, no por el de origen: el rodeo destino
-// puede estar en otro establecimiento.
+// puede estar en otro establecimiento. Hotelería/Salida de hotelería
+// tienen el establecimiento FIJO (siempre feed_lot, sin selector).
 function establecimientoParaRodeo(cfg, ids) {
+  if (cfg.establecimientoOrigenFijo || cfg.establecimientoDestinoFijo) {
+    return cfg.establecimientoOrigenFijo || cfg.establecimientoDestinoFijo;
+  }
   if (ids === RODEO_DESTINO_IDS && cfg.campos.includes('establecimiento_destino')) {
     return obtenerSeleccion('mov-establecimiento-destino');
   }
@@ -209,7 +323,8 @@ function establecimientoParaRodeo(cfg, ids) {
 }
 
 function poblarSelectRodeo(ids, excluirId) {
-  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  const tipo = obtenerSeleccion('mov-tipo');
+  const cfg = TIPOS_MOVIMIENTO[tipo];
   if (!cfg) return;
   const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
   const establecimientoId = establecimientoParaRodeo(cfg, ids);
@@ -223,7 +338,7 @@ function poblarSelectRodeo(ids, excluirId) {
   select.appendChild(opcionVacia);
 
   if (categoriaId && establecimientoId) {
-    for (const r of rodeosDe(establecimientoId, categoriaId)) {
+    for (const r of rodeosDe(establecimientoId, categoriaId, { soloHoteleria: Boolean(cfg.soloRodeosHoteleria) })) {
       if (excluirId && r.id === excluirId) continue;
       const opt = document.createElement('option');
       opt.value = r.id;
@@ -231,9 +346,10 @@ function poblarSelectRodeo(ids, excluirId) {
       select.appendChild(opt);
     }
   }
-  // Un puestero no da de alta rodeos — solo puede elegir entre los que
-  // ya existen.
-  if (getEstado().perfil?.rol !== 'puestero') {
+  // Un puestero no da de alta rodeos — solo puede elegir entre los que ya
+  // existen. Salida de hotelería tampoco ofrece crear uno: solo se puede
+  // cerrar un lote de hotelería que ya existe.
+  if (getEstado().perfil?.rol !== 'puestero' && !cfg.soloRodeosHoteleria) {
     const opcionNueva = document.createElement('option');
     opcionNueva.value = '__nuevo__';
     opcionNueva.textContent = '+ Crear rodeo nuevo...';
@@ -246,8 +362,11 @@ function poblarSelectRodeo(ids, excluirId) {
 // El rodeo destino nunca puede ser el mismo que el de origen — se re-arma
 // cada vez que cambia cualquiera de los dos, para excluir siempre el actual.
 function actualizarSelectsRodeo() {
-  poblarSelectRodeo(RODEO_ORIGEN_IDS, null);
   const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  // Hotelería no tiene selector de rodeo — se crea uno solo al guardar
+  // (ver onSubmit), no hace falta poblar nada.
+  if (cfg && cfg.sinRodeo) return;
+  poblarSelectRodeo(RODEO_ORIGEN_IDS, null);
   if (cfg && cfg.campos.includes('rodeo_destino')) {
     poblarSelectRodeo(RODEO_DESTINO_IDS, el(RODEO_ORIGEN_IDS.select).value);
   }
@@ -344,8 +463,11 @@ function poblarGrupos() {
   crearGrupoBotones('mov-establecimiento-destino', ESTABLECIMIENTOS);
   crearGrupoBotones('mov-categoria-origen', CATEGORIAS);
   crearGrupoBotones('mov-categoria-destino', CATEGORIAS);
+  crearGrupoBotones('mov-destino-venta', DESTINO_VENTA);
   inicializarTitular('origen');
   inicializarTitular('destino');
+  inicializarCliente();
+  inicializarComprador();
   crearGrupoBotones('mov-feedlot-corral', [
     { id: '1', nombre: 'Corral 1' }, { id: '2', nombre: 'Corral 2' },
     { id: '3', nombre: 'Corral 3' }, { id: '4', nombre: 'Corral 4' },
@@ -358,7 +480,9 @@ function poblarGrupos() {
 // origen es feed_lot. Para 'traslado' el establecimiento_destino es un
 // campo elegido directo (no duplicado), así que se puede leer en vivo acá
 // sin esperar a armarFila().
-const TIPOS_SALIDA_STOCK = ['venta_gordo', 'venta_vaca_prenada', 'venta_invernada', 'faena_conserva', 'mortandad'];
+// 'venta' (el tipo unificado, ver config.js) faltaba acá — sin esto, una
+// venta con origen feed_lot nunca liberaba el corral/cerraba el ciclo.
+const TIPOS_SALIDA_STOCK = ['venta', 'venta_gordo', 'venta_vaca_prenada', 'venta_invernada', 'faena_conserva', 'mortandad'];
 
 function calcularEstadoFeedLot() {
   const tipo = obtenerSeleccion('mov-tipo');
@@ -366,10 +490,13 @@ function calcularEstadoFeedLot() {
   if (!cfg) return { entrada: false, salida: false };
   const origen = cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null;
   const destino = cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null;
-  const entrada = tipo === 'traslado' && destino === 'feed_lot' && origen !== 'feed_lot';
+  // Hotelería/Salida de hotelería tienen el establecimiento fijo en
+  // feed_lot (sin selector), así que entran/salen de corral siempre.
+  const entrada = (tipo === 'traslado' && destino === 'feed_lot' && origen !== 'feed_lot') || tipo === 'hoteleria';
   const salida =
     (tipo === 'traslado' && origen === 'feed_lot' && destino !== 'feed_lot') ||
-    (TIPOS_SALIDA_STOCK.includes(tipo) && origen === 'feed_lot');
+    (TIPOS_SALIDA_STOCK.includes(tipo) && origen === 'feed_lot') ||
+    tipo === 'salida_hoteleria';
   return { entrada, salida };
 }
 
@@ -393,6 +520,15 @@ function actualizarRequeridoRodeoDestino() {
   const aplica = cfg.campos.includes('rodeo_destino') && !trasladoAFeedLot();
   document.querySelector('[data-campo="rodeo_destino"]').classList.toggle('oculto', !aplica);
   el('mov-rodeo-destino').required = aplica;
+}
+
+// Hotelería no tiene selector de Rodeo (se crea uno solo al guardar) — se
+// esconde el bloque entero, mismo criterio que mov-rodeo-destino de arriba.
+function actualizarRequeridoRodeo() {
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (!cfg) return;
+  document.querySelector('[data-campo="rodeo"]').classList.toggle('oculto', Boolean(cfg.sinRodeo));
+  el('mov-rodeo').required = !cfg.sinRodeo;
 }
 
 const CATEGORIAS_AL_PIE = ['ternero_al_pie', 'ternera_al_pie'];
@@ -462,8 +598,12 @@ function actualizarCamposVisibles() {
   // los tipos que lo usan (y no a feed lot, ver trasladoAFeedLot) — si
   // queda required mientras su contenedor está oculto, el navegador
   // bloquea el submit en SILENCIO (sin mensaje visible) para cualquier
-  // otro caso.
+  // otro caso. Mismo motivo para mov-cliente/mov-comprador: son <select>
+  // required en el HTML, pero solo corresponden a algunos tipos.
   actualizarRequeridoRodeoDestino();
+  actualizarRequeridoRodeo();
+  el('mov-cliente').required = cfg.campos.includes('cliente');
+  el('mov-comprador').required = cfg.campos.includes('comprador');
 
   // Para Mortandad, las Observaciones dejan de ser opcionales: hay que
   // contar qué pasó (causa de la muerte) para que quede registrado.
@@ -494,19 +634,27 @@ function activarAccesoRapidoFeedLot() {
 function leerFormulario() {
   const tipo = obtenerSeleccion('mov-tipo');
   const cfg = TIPOS_MOVIMIENTO[tipo];
+  // Cliente (Hotelería): reemplaza a Titularidad de origen/destino para
+  // 'hoteleria'/'salida_hoteleria' — ver campos en config.js.
+  const cliente = cfg.campos.includes('cliente') ? obtenerCliente() : null;
   return {
     tipo,
     cfg,
     fecha: el('mov-fecha').value,
-    establecimiento_origen: cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null,
-    establecimiento_destino: cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null,
+    establecimiento_origen: cfg.establecimientoOrigenFijo
+      || (cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null),
+    establecimiento_destino: cfg.establecimientoDestinoFijo
+      || (cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null),
     categoria_origen: cfg.campos.includes('categoria_origen') ? obtenerSeleccion('mov-categoria-origen') : null,
     categoria_destino: cfg.campos.includes('categoria_destino') ? obtenerSeleccion('mov-categoria-destino') : null,
-    titular_origen: cfg.campos.includes('titular_origen') ? obtenerTitular('origen') : null,
-    titular_destino: cfg.campos.includes('titular_destino') ? obtenerTitular('destino') : null,
+    titular_origen: cfg.campos.includes('titular_origen') ? obtenerTitular('origen') : (tipo === 'salida_hoteleria' ? cliente : null),
+    titular_destino: cfg.campos.includes('titular_destino') ? obtenerTitular('destino') : (tipo === 'hoteleria' ? cliente : null),
+    cliente,
+    destino_venta: cfg.campos.includes('destino_venta') ? obtenerSeleccion('mov-destino-venta') : null,
+    comprador: cfg.campos.includes('comprador') ? obtenerComprador() : null,
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
-    rodeo_id: el('mov-rodeo').value,
+    rodeo_id: cfg.sinRodeo ? null : el('mov-rodeo').value,
     rodeo_destino: (cfg.campos.includes('rodeo_destino') && !trasladoAFeedLot()) ? el('mov-rodeo-destino').value : null,
     observaciones: el('mov-observaciones').value.trim() || null,
     feedlotEntrada: calcularEstadoFeedLot().entrada,
@@ -535,7 +683,8 @@ function validar(datos) {
     if (!datos[campo]) errores.push('Falta completar un campo obligatorio.');
   }
 
-  if (!datos.rodeo_id || datos.rodeo_id === '__nuevo__') {
+  // Hotelería no elige rodeo — se crea uno solo al guardar (ver onSubmit).
+  if (!datos.cfg.sinRodeo && (!datos.rodeo_id || datos.rodeo_id === '__nuevo__')) {
     errores.push('Elegí un rodeo (o creá uno nuevo con "+ Crear rodeo nuevo...").');
   }
   const esTrasladoAFeedLot = datos.tipo === 'traslado' && datos.establecimiento_destino === 'feed_lot';
@@ -606,6 +755,8 @@ function armarFila(datos) {
     rodeo_id: datos.rodeo_id,
     rodeo_destino_id: datos.rodeo_destino || null,
     observaciones: datos.observaciones,
+    destino_venta: datos.destino_venta || null,
+    comprador_id: datos.comprador || null,
     editado_de: datos.editandoId || null,
   };
 }
@@ -631,6 +782,7 @@ function mostrarToast(texto, duracionMs) {
 }
 
 function resetFormulario() {
+  rodeoIdEditandoSinRodeo = null;
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
   el('mov-observaciones').value = '';
@@ -638,8 +790,11 @@ function resetFormulario() {
   limpiarSeleccion('mov-establecimiento-origen');
   limpiarSeleccion('mov-establecimiento-destino');
   limpiarSeleccion('mov-categoria-origen');
+  limpiarSeleccion('mov-destino-venta');
   limpiarTitular('origen');
   limpiarTitular('destino');
+  el('mov-cliente').value = '';
+  el('mov-comprador').value = '';
   el('mov-rodeo-nuevo-wrap').classList.add('oculto');
   el('mov-rodeo-nuevo-nombre').value = '';
   el('mov-rodeo-destino-nuevo-wrap').classList.add('oculto');
@@ -669,12 +824,18 @@ function cancelarEdicion() {
 function precargarParaEditar(fila) {
   editandoId = fila.id;
   establecerSeleccion('mov-tipo', fila.tipo_movimiento);
+  const cfgTipo = TIPOS_MOVIMIENTO[fila.tipo_movimiento];
+  rodeoIdEditandoSinRodeo = cfgTipo?.sinRodeo ? fila.rodeo_id : null;
   if (fila.establecimiento_origen) establecerSeleccion('mov-establecimiento-origen', fila.establecimiento_origen);
   if (fila.establecimiento_destino) establecerSeleccion('mov-establecimiento-destino', fila.establecimiento_destino);
   if (fila.categoria_origen) establecerSeleccion('mov-categoria-origen', fila.categoria_origen);
   if (fila.categoria_destino) establecerSeleccion('mov-categoria-destino', fila.categoria_destino);
   precargarTitular('origen', fila.titular_origen);
   precargarTitular('destino', fila.titular_destino);
+  if (fila.tipo_movimiento === 'hoteleria') el('mov-cliente').value = fila.titular_destino || '';
+  if (fila.tipo_movimiento === 'salida_hoteleria') el('mov-cliente').value = fila.titular_origen || '';
+  if (fila.destino_venta) establecerSeleccion('mov-destino-venta', fila.destino_venta);
+  el('mov-comprador').value = fila.comprador_id || '';
   el('mov-cabezas').value = fila.cantidad_cabezas;
   el('mov-kilos').value = fila.kilos_promedio;
   el('mov-fecha').value = fila.fecha;
@@ -748,6 +909,37 @@ async function onSubmit(evento) {
     return;
   }
 
+  // Hotelería no elige un rodeo — se crea uno nuevo acá mismo, dedicado a
+  // este lote (categoria_destino/'feed_lot'/es_hoteleria=true), igual que
+  // "+ Crear rodeo nuevo..." en los demás tipos: exige conexión, no es
+  // offline-first como el resto del movimiento.
+  if (datos.cfg.sinRodeo) {
+    if (datos.editandoId && rodeoIdEditandoSinRodeo) {
+      // Corrección de un movimiento 'hoteleria' ya cargado: reusa el mismo
+      // rodeo del lote original, no crea uno nuevo.
+      datos.rodeo_id = rodeoIdEditandoSinRodeo;
+    } else if (!navigator.onLine) {
+      mostrarMensaje('Necesitás conexión a internet para cargar Hotelería (crea un rodeo nuevo para el lote).', 'error');
+      return;
+    } else {
+      try {
+        const cliente = obtenerTitularesCache().find((t) => t.id === datos.cliente);
+        const nuevoRodeo = await crearRodeo({
+          nombre: `Hotelería ${cliente?.nombre || datos.cliente}`,
+          categoriaId: datos.categoria_destino,
+          establecimientoId: datos.establecimiento_destino,
+          fechaCreacion: datos.fecha,
+          usuarioId: getEstado().session.user.id,
+          esHoteleria: true,
+        });
+        datos.rodeo_id = nuevoRodeo.id;
+      } catch (error) {
+        mostrarMensaje('No se pudo crear el rodeo de Hotelería: ' + error.message, 'error');
+        return;
+      }
+    }
+  }
+
   const errorStock = await validarStockDisponible(datos);
   if (errorStock) {
     mostrarMensaje(errorStock, 'error');
@@ -810,7 +1002,7 @@ async function onSubmit(evento) {
 }
 
 export async function initMovimientos() {
-  await Promise.all([cargarTitulares(), cargarRodeos()]);
+  await Promise.all([cargarTitulares(), cargarRodeos(), cargarCompradores()]);
   poblarGrupos();
   inicializarSelectorRodeo(RODEO_ORIGEN_IDS);
   inicializarSelectorRodeo(RODEO_DESTINO_IDS);

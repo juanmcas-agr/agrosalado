@@ -62,6 +62,8 @@ export function exportarHistorial(filasHistorial, nombreBase = 'historial_movimi
     'Categoría destino': f.categoria_destino_nombre || '',
     'Titular origen': f.titular_origen_nombre || '',
     'Titular destino': f.titular_destino_nombre || '',
+    'Destino venta': f.destino_venta || '',
+    Comprador: f.comprador_nombre || '',
     Cabezas: f.cantidad_cabezas,
     'Kg/cabeza': f.kilos_promedio,
     Rodeo: f.rodeo || '',

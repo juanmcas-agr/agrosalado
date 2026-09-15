@@ -82,6 +82,11 @@
           <input id="mov-fecha" type="date" required>
         </label>
 
+        <div data-campo="destino_venta" class="campo-grupo full">
+          <div class="etiqueta-grupo">Destino de venta</div>
+          <div id="mov-destino-venta"></div>
+        </div>
+
         <div data-campo="establecimiento_origen" class="campo-grupo full">
           <div class="etiqueta-grupo">Establecimiento de origen</div>
           <div id="mov-establecimiento-origen"></div>
@@ -102,7 +107,7 @@
           <div id="mov-categoria-destino"></div>
         </div>
 
-        <div class="campo-grupo full">
+        <div data-campo="rodeo" class="campo-grupo full">
           <div class="etiqueta-grupo">Rodeo</div>
           <select id="mov-rodeo" required></select>
           <div id="mov-rodeo-nuevo-wrap" class="oculto" style="margin-top:8px;">
@@ -144,6 +149,16 @@
           <div id="mov-titular-destino-cap-wrap" class="oculto" style="margin-top:8px;">
             <select id="mov-titular-destino-cap"></select>
           </div>
+        </div>
+
+        <div data-campo="cliente" class="campo-grupo full">
+          <div class="etiqueta-grupo">Cliente</div>
+          <select id="mov-cliente" required></select>
+        </div>
+
+        <div data-campo="comprador" class="campo-grupo full">
+          <div class="etiqueta-grupo">Comprador</div>
+          <select id="mov-comprador" required></select>
         </div>
 
         <label>Cantidad de cabezas

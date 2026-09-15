@@ -37,3 +37,29 @@ export async function crearCapitalizador(nombre) {
   cache = [...cache, data];
   return data;
 }
+
+// Cliente de Hotelería: distinto de un capitalizador (no es socio de Agro
+// Salado, los animales son 100% suyos, solo se los aloja/engorda) — pero
+// vive en la misma tabla titulares, namespace de "id" compartido, así que
+// si el nombre ya existe con otro tipo se avisa en vez de reusarlo mal.
+export async function crearCliente(nombre) {
+  const id = slugify(nombre);
+  if (!id) throw new Error('Nombre inválido');
+  const existente = cache.find((t) => t.id === id);
+  if (existente) {
+    if (existente.tipo !== 'cliente') {
+      throw new Error(`Ya existe "${existente.nombre}" como otro tipo de titular — probá con un nombre más específico.`);
+    }
+    return existente;
+  }
+
+  const orden = cache.length ? Math.max(...cache.map((t) => t.orden)) + 1 : 1;
+  const { data, error } = await supabase
+    .from('titulares')
+    .insert({ id, nombre, tipo: 'cliente', orden })
+    .select()
+    .single();
+  if (error) throw error;
+  cache = [...cache, data];
+  return data;
+}

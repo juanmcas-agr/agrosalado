@@ -38,7 +38,10 @@ insert into categorias (id, nombre, orden) values
 create table titulares (
   id text primary key,
   nombre text not null,
-  tipo text not null check (tipo in ('propio', 'capitalizador')),
+  -- 'cliente': hotelería en Feed Lot — animales 100% de un tercero (no
+  -- socio de Agro Salado, a diferencia de 'capitalizador'), ver
+  -- rodeos.es_hoteleria y tipos_movimiento 'hoteleria'/'salida_hoteleria'.
+  tipo text not null check (tipo in ('propio', 'capitalizador', 'cliente')),
   orden int not null default 0,
   activo boolean not null default true
 );
@@ -48,6 +51,24 @@ insert into titulares (id, nombre, tipo, orden) values
   ('dona_julia', 'Doña Julia', 'propio', 2),
   ('sgro', 'SGRO', 'capitalizador', 3),
   ('cym', 'CYM', 'capitalizador', 4);
+
+-- Comprador de una Venta (trazabilidad — no afecta stock/titularidad,
+-- solo registra a quién se le vendió). Lista editable, ver
+-- crearComprador() en compradores.js (mismo patrón "+ Agregar nuevo..."
+-- que titulares).
+create table compradores (
+  id text primary key,
+  nombre text not null,
+  orden int not null default 0,
+  activo boolean not null default true
+);
+
+insert into compradores (id, nombre, orden) values
+  ('brosa', 'Brosa', 1),
+  ('hiriart', 'Hiriart', 2),
+  ('coto', 'Coto', 3),
+  ('mag', 'MAG', 4),
+  ('feigelstock', 'Feigelstock', 5);
 
 create table tipos_movimiento (
   id text primary key,
@@ -79,7 +100,14 @@ insert into tipos_movimiento
   -- Unifica venta_gordo/venta_vaca_prenada/venta_invernada/faena_conserva
   -- (quedan en la tabla por trazabilidad histórica, pero el cliente ya no
   -- las ofrece).
-  ('venta',               'Venta',                              'salida',  true,  false, true,  false, true,  false, 13);
+  ('venta',               'Venta',                              'salida',  true,  false, true,  false, true,  false, 13),
+  -- Hotelería en Feed Lot: animales de un cliente externo (titulares.tipo
+  -- 'cliente'), no de Agro Salado. establecimiento_destino/origen quedan
+  -- fijos en 'feed_lot' del lado cliente (no se ofrecen como selector) y
+  -- el rodeo se crea solo, ver stock/js/movimientos.js (sinRodeo) y
+  -- rodeos.es_hoteleria.
+  ('hoteleria',           'Hotelería',                          'entrada', false, true,  false, true,  false, true,  14),
+  ('salida_hoteleria',    'Salida de hotelería',                'salida',  true,  false, true,  false, true,  false, 15);
 
 -- ─── Rodeos ─────────────────────────────────────────────────────────────
 -- Un rodeo es el grupo real de animales que se trackea como unidad (nace,
@@ -126,6 +154,10 @@ create table rodeos (
   corral text check (corral in ('1', '2', '3', '4')),  -- solo aplica en feed_lot
   fecha_creacion date not null default current_date,
   activo boolean not null default true,  -- false cuando el rodeo se vació del todo
+  -- Auto-creado por un movimiento 'hoteleria' (nunca a mano) — excluido
+  -- del selector de rodeo de los demás tipos de movimiento, solo aparece
+  -- en "Salida de hotelería" (ver rodeosDe() en rodeos.js).
+  es_hoteleria boolean not null default false,
   creado_por uuid not null references auth.users(id),
   creado_at timestamptz not null default now()
 );
@@ -510,6 +542,11 @@ create table movimientos (
   -- curarlo aparte). Para el resto de los tipos queda null.
   rodeo_destino_id uuid references rodeos(id),
   observaciones text,
+  -- Solo se usan en 'venta' (validado del lado cliente, no acá — mismo
+  -- criterio que "Observaciones obligatorio para Mortandad"): a qué se
+  -- destinó la venta y quién la compró.
+  destino_venta text check (destino_venta in ('faena', 'invernada', 'conserva')),
+  comprador_id text references compradores(id),
   created_at timestamptz not null default now(),
   anulado boolean not null default false,
   anulado_por uuid references auth.users(id),
@@ -809,6 +846,7 @@ create view historial_movimientos with (security_invoker = true) as
     m.rodeo_id, r.codigo as rodeo,
     m.rodeo_destino_id, rd.codigo as rodeo_destino,
     m.observaciones,
+    m.destino_venta, m.comprador_id, cp.nombre as comprador_nombre,
     m.usuario_id, p.nombre_completo as usuario_nombre,
     m.created_at, m.anulado, m.anulado_por, m.anulado_at, m.anulado_motivo,
     m.reemplazado_por, m.editado_de,
@@ -823,6 +861,7 @@ create view historial_movimientos with (security_invoker = true) as
   left join titulares tid on tid.id = m.titular_destino
   left join rodeos r on r.id = m.rodeo_id
   left join rodeos rd on rd.id = m.rodeo_destino_id
+  left join compradores cp on cp.id = m.comprador_id
   left join perfiles p on p.user_id = m.usuario_id
   left join movimientos mr on mr.id = m.reemplazado_por
   left join movimientos me on me.id = m.editado_de
@@ -883,6 +922,11 @@ create policy lookup_select_tipos_movimiento on tipos_movimiento for select to a
 
 create policy titulares_select on titulares for select to authenticated using (rol_actual() is not null);
 create policy titulares_insert on titulares for insert to authenticated
+  with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+
+alter table compradores enable row level security;
+create policy compradores_select on compradores for select to authenticated using (rol_actual() is not null);
+create policy compradores_insert on compradores for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
 
 create policy movimientos_select on movimientos for select to authenticated using (rol_actual() is not null);

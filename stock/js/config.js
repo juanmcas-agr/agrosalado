@@ -15,6 +15,13 @@ export const ESTABLECIMIENTOS = [
   { id: 'el_tara', nombre: 'El Tara' },
 ];
 
+// Opciones de "Destino de venta" (solo para el tipo 'venta').
+export const DESTINO_VENTA = [
+  { id: 'faena', nombre: 'Faena' },
+  { id: 'invernada', nombre: 'Invernada' },
+  { id: 'conserva', nombre: 'Conserva' },
+];
+
 // Espejo de la tabla categorias.
 export const CATEGORIAS = [
   { id: 'ternero_al_pie', nombre: 'Ternero al pie' },
@@ -54,7 +61,10 @@ export const SIGUIENTE_CATEGORIA = {
 export const TIPOS_MOVIMIENTO = {
   venta: {
     nombre: 'Venta', clase: 'salida',
-    campos: ['establecimiento_origen', 'categoria_origen', 'titular_origen'],
+    // destino_venta va primero (antes que establecimiento/categoría) y
+    // comprador al final — ver orden real de los campos en el HTML
+    // (stock/index.html), esta lista solo controla mostrar/ocultar.
+    campos: ['destino_venta', 'establecimiento_origen', 'categoria_origen', 'titular_origen', 'comprador'],
   },
   // Unificadas en "venta" de arriba — la categoría elegida ya distingue
   // de qué venta se trataba. Se dejan acá con oculto:true (no aparecen
@@ -129,6 +139,28 @@ export const TIPOS_MOVIMIENTO = {
     nombre: 'Apertura de stock', clase: 'entrada',
     campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
     soloOwner: true,
+  },
+  // Hotelería: animales de un cliente externo que se alojan/engordan en
+  // Feed Lot — no son de Agro Salado ni de un capitalizador (socio), así
+  // que usan su propio campo "Cliente" (titulares.tipo='cliente') en vez
+  // de Titularidad de destino. establecimientoDestinoFijo reemplaza al
+  // selector de establecimiento (siempre Feed Lot); sinRodeo esconde el
+  // selector de Rodeo — el rodeo se crea solo por lote, ver onSubmit() en
+  // movimientos.js.
+  hoteleria: {
+    nombre: 'Hotelería', clase: 'entrada',
+    campos: ['categoria_destino', 'cliente'],
+    establecimientoDestinoFijo: 'feed_lot',
+    sinRodeo: true,
+  },
+  // Retiro del cliente: cierra el lote (libera el corral, cierra el ciclo
+  // de feed lot) — ver rodeosDe(soloHoteleria) en rodeos.js, que filtra el
+  // selector de Rodeo para mostrar solo lotes de hotelería.
+  salida_hoteleria: {
+    nombre: 'Salida de hotelería', clase: 'salida',
+    campos: ['categoria_origen', 'cliente'],
+    establecimientoOrigenFijo: 'feed_lot',
+    soloRodeosHoteleria: true,
   },
 };
 
