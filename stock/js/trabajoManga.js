@@ -9,7 +9,7 @@ import { supabase } from './supabaseClient.js';
 import { CATEGORIAS, ESTABLECIMIENTOS } from './config.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
-import { cargarRodeos, rodeosDe, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
+import { cargarRodeos, rodeosDeEstablecimiento, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
 import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
 
 function el(id) {
@@ -132,17 +132,18 @@ function limpiarSeleccionMultipleCatalogo(clave, idLista) {
   renderChips(idLista, clave);
 }
 
-// Establecimiento primero: si hay rodeos de la misma categoría en más de
-// un establecimiento (ej. "Novillito" en San Miguel Y en San Juan), antes
-// se mezclaban todos en un mismo desplegable sin forma de distinguirlos.
+// Establecimiento primero, después Rodeo (filtrado solo por
+// establecimiento — un mismo establecimiento puede tener rodeos de
+// distintas categorías, todos aparecen acá) y recién ahí Categoría, que
+// se DERIVA del rodeo elegido (ver actualizarCategoriaSegunRodeo) — no se
+// elige a mano, un rodeo ya tiene una única categoría fija.
 function poblarSelectRodeoManga() {
   const establecimientoId = obtenerSeleccion('manga-establecimiento');
-  const categoriaId = obtenerSeleccion('manga-categoria');
   const select = el('manga-rodeo');
   const valorPrevio = select.value;
   select.innerHTML = '<option value="">Elegir...</option>';
-  if (establecimientoId && categoriaId) {
-    for (const r of rodeosDe(establecimientoId, categoriaId)) {
+  if (establecimientoId) {
+    for (const r of rodeosDeEstablecimiento(establecimientoId)) {
       const opt = document.createElement('option');
       opt.value = r.id;
       opt.textContent = r.codigo;
@@ -150,6 +151,30 @@ function poblarSelectRodeoManga() {
     }
   }
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+  actualizarCategoriaSegunRodeo();
+}
+
+// La categoría ya no se elige: se deriva del rodeo elegido y se nublan
+// (deshabilitan) las demás opciones, para que no se pueda cargar con una
+// categoría que no corresponde a ese rodeo. Sin rodeo elegido, se deja
+// todo habilitado y sin selección (estado neutro).
+function actualizarCategoriaSegunRodeo() {
+  const rodeo = obtenerRodeosCache().find((r) => r.id === el('manga-rodeo').value);
+  const grupo = el('manga-categoria');
+  if (rodeo) {
+    establecerSeleccion('manga-categoria', rodeo.categoria_id);
+    grupo.querySelectorAll('.boton-opcion').forEach((b) => {
+      const activo = b.dataset.value === rodeo.categoria_id;
+      b.disabled = !activo;
+      b.classList.toggle('deshabilitado', !activo);
+    });
+  } else {
+    limpiarSeleccion('manga-categoria');
+    grupo.querySelectorAll('.boton-opcion').forEach((b) => {
+      b.disabled = false;
+      b.classList.remove('deshabilitado');
+    });
+  }
 }
 
 function leerSanidad() {
@@ -731,8 +756,8 @@ function mostrarMensaje(texto, tipo) {
 function resetFormulario() {
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('manga-establecimiento');
-  limpiarSeleccion('manga-categoria');
   el('manga-rodeo').innerHTML = '<option value="">Elegir...</option>';
+  actualizarCategoriaSegunRodeo();
   limpiarSeleccion('manga-propietarios');
   el('manga-cantidad').value = '';
   el('manga-observaciones').value = '';
@@ -754,8 +779,8 @@ async function onSubmit(evento) {
   if (!fecha) { mostrarMensaje('Falta la fecha.', 'error'); return; }
   if (fecha > new Date().toISOString().slice(0, 10)) { mostrarMensaje('La fecha no puede ser futura.', 'error'); return; }
   if (!establecimientoId) { mostrarMensaje('Elegí un establecimiento.', 'error'); return; }
-  if (!categoriaId) { mostrarMensaje('Elegí una categoría.', 'error'); return; }
   if (!rodeoId) { mostrarMensaje('Elegí un rodeo.', 'error'); return; }
+  if (!categoriaId) { mostrarMensaje('Elegí una categoría.', 'error'); return; }
   if (!propietarios.length) { mostrarMensaje('Elegí al menos un propietario.', 'error'); return; }
   if (!Number.isInteger(cantidad) || cantidad <= 0) { mostrarMensaje('La cantidad trabajada debe ser un entero mayor a 0.', 'error'); return; }
   if (estaActivo('manga-check-reproduccion') && el('manga-estado-corporal').value) {
@@ -884,7 +909,7 @@ export async function initTrabajoManga() {
   crearGrupoBotones('manga-categoria', CATEGORIAS);
   crearGrupoBotonesMultiple('manga-propietarios', obtenerTitularesCache());
   el('manga-establecimiento').addEventListener('cambio', poblarSelectRodeoManga);
-  el('manga-categoria').addEventListener('cambio', poblarSelectRodeoManga);
+  el('manga-rodeo').addEventListener('change', actualizarCategoriaSegunRodeo);
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   activarBloquesSanidad();
   poblarSelectCatalogo('manga-droga', 'drogas', '+ Nueva droga...');

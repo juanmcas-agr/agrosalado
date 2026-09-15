@@ -28,12 +28,19 @@ export function rodeosDe(establecimientoId, categoriaId, { soloHoteleria = false
   );
 }
 
-// Para Trabajo de Manga: no se elige establecimiento por separado (el
-// rodeo ya sabe dónde está), así que alcanza con filtrar por categoría.
-// Nunca incluye lotes de Hotelería (Trabajo de Manga es solo para stock
-// propio).
+// Para el rodeo destino de Destete (Trabajo de Manga > Manejo de rodeo):
+// no se elige establecimiento por separado ahí, así que alcanza con
+// filtrar por categoría. Nunca incluye lotes de Hotelería.
 export function rodeosDeCategoria(categoriaId) {
   return cache.filter((r) => r.categoria_id === categoriaId && !r.es_hoteleria);
+}
+
+// Para el selector principal de Trabajo de Manga: el rodeo se elige
+// primero (solo filtrado por establecimiento) y la categoría se deriva
+// del rodeo elegido, no al revés — un rodeo ya tiene una única categoría
+// fija en un momento dado. Nunca incluye lotes de Hotelería.
+export function rodeosDeEstablecimiento(establecimientoId) {
+  return cache.filter((r) => r.establecimiento_id === establecimientoId && !r.es_hoteleria);
 }
 
 // El código (ej. "Vaquillona San Miguel 202601") se arma acá, no en la
