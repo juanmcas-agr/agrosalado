@@ -63,24 +63,26 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { user_id, nombre_completo, email, telefono, empresa, cuit, categoria, activo } = JSON.parse(event.body);
+    const { user_id, nombre_completo, email, empresa, cuit, categoria, activo } = JSON.parse(event.body);
 
-    if (!user_id || !nombre_completo || !email || !categoria) {
-      return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: usuario, nombre, email y categoría son obligatorios.' }) };
+    if (!user_id || !nombre_completo || !email || !cuit || !categoria) {
+      return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: usuario, nombre, email, CUIT y categoría son obligatorios.' }) };
     }
     if (!CATEGORIAS_VALIDAS.includes(categoria)) {
       return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Categoría inválida.' }) };
     }
 
+    // Nota: esto no cambia el email de Supabase Auth (solo el dato en la
+    // tabla transportistas) — si hace falta que también pueda loguearse
+    // con el email nuevo, hay que actualizarlo aparte en Auth.
     const resUpdate = await fetch(`${SUPABASE_URL}/rest/v1/transportistas?user_id=eq.${user_id}`, {
       method: 'PATCH',
       headers: headersSupabase({ Prefer: 'return=representation' }),
       body: JSON.stringify({
         nombre_completo,
         email,
-        telefono: telefono || null,
         empresa: empresa || null,
-        cuit: cuit || null,
+        cuit: cuit.replace(/[^a-zA-Z0-9]/g, ''),
         categoria,
         activo: activo !== false,
       }),

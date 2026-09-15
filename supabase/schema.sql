@@ -1521,15 +1521,22 @@ alter table perfiles add column if not exists acceso_logistica_sueldos boolean n
 
 create table transportistas (
   user_id uuid primary key references auth.users(id) on delete cascade,
+  -- Para un chofer (categoria='propio') es su nombre; para un transportista
+  -- (categoria='externo') se usa el valor de "empresa" (no se pide un
+  -- nombre de persona aparte, ver logistica/js/catalogo.js).
   nombre_completo text not null,
-  email text not null,
+  email text not null,   -- usuario para iniciar sesión (ambas categorías)
   telefono text,
-  empresa text,          -- razón social; null para propios
-  cuit text,              -- null para propios
+  empresa text,          -- razón social; solo externos
+  cuit text,              -- dato guardado, no reemplaza al email para loguearse
   categoria text not null check (categoria in ('propio', 'externo')),
   activo boolean not null default true,
   created_at timestamptz not null default now()
 );
+
+-- No puede haber dos transportistas con el mismo CUIT. Permite null para
+-- no romper filas viejas que todavía no lo tengan cargado.
+create unique index transportistas_cuit_unique on transportistas (cuit) where cuit is not null;
 
 alter table transportistas enable row level security;
 

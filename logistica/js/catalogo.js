@@ -29,7 +29,7 @@ function renderTransportistas() {
     tr.innerHTML = `
       <td>${t.nombre_completo}</td>
       <td>${t.email}</td>
-      <td>${t.categoria === 'propio' ? 'Propio' : 'Externo'}</td>
+      <td>${t.categoria === 'propio' ? 'Chofer' : 'Transportista'}</td>
       <td>${t.empresa || ''}</td>
       <td>${t.cuit || ''}</td>
       <td>${t.activo ? 'Activo' : 'Inactivo'}</td>
@@ -63,29 +63,45 @@ export async function cargarTransportistas() {
 function limpiarFormTransportista() {
   el('cat-transportista-user-id').value = '';
   el('cat-transportista-nombre').value = '';
-  el('cat-transportista-email').value = '';
-  el('cat-transportista-telefono').value = '';
   el('cat-transportista-empresa').value = '';
+  el('cat-transportista-email').value = '';
   el('cat-transportista-cuit').value = '';
   el('cat-transportista-password').value = '';
   el('cat-transportista-activo').checked = true;
   document.querySelectorAll('input[name="cat-transportista-categoria"]').forEach((r) => { r.checked = false; });
+  actualizarCamposSegunCategoria();
+}
+
+// Chofer (propio) pide Nombre; Transportista (externo) pide Empresa en vez
+// de Nombre (nombre_completo se arma de "empresa" al guardar, ver
+// guardarTransportista) — nunca ambos a la vez, y nunca queda "required"
+// mientras está oculto (si no, el navegador bloquea el submit en
+// silencio, sin mensaje visible). Email y CUIT son siempre visibles,
+// para las dos categorías.
+function actualizarCamposSegunCategoria() {
+  const categoria = categoriaSeleccionada();
+  const esChofer = categoria === 'propio';
+  const esTransportista = categoria === 'externo';
+  el('cat-transportista-nombre-wrap').classList.toggle('oculto', !esChofer);
+  el('cat-transportista-nombre').required = esChofer;
+  el('cat-transportista-empresa-wrap').classList.toggle('oculto', !esTransportista);
+  el('cat-transportista-empresa').required = esTransportista;
 }
 
 function mostrarFormTransportista(modo, transportista) {
   el('cat-transportista-form-bloque').classList.remove('oculto');
-  el('cat-transportista-form-titulo').textContent = modo === 'editar' ? 'Editar transportista' : 'Nuevo transportista';
+  el('cat-transportista-form-titulo').textContent = modo === 'editar' ? 'Editar Usuario' : 'Nuevo Usuario';
   el('cat-transportista-password-wrap').classList.toggle('oculto', modo === 'editar');
   el('cat-transportista-password').required = modo !== 'editar';
   if (modo === 'editar' && transportista) {
     el('cat-transportista-user-id').value = transportista.user_id;
     el('cat-transportista-nombre').value = transportista.nombre_completo;
-    el('cat-transportista-email').value = transportista.email;
-    el('cat-transportista-telefono').value = transportista.telefono || '';
     el('cat-transportista-empresa').value = transportista.empresa || '';
+    el('cat-transportista-email').value = transportista.email;
     el('cat-transportista-cuit').value = transportista.cuit || '';
     el('cat-transportista-activo').checked = transportista.activo;
     document.querySelectorAll('input[name="cat-transportista-categoria"]').forEach((r) => { r.checked = r.value === transportista.categoria; });
+    actualizarCamposSegunCategoria();
   } else {
     limpiarFormTransportista();
   }
@@ -106,22 +122,43 @@ async function guardarTransportista(evento) {
   mensaje.textContent = '';
 
   const userId = el('cat-transportista-user-id').value;
-  const nombre_completo = el('cat-transportista-nombre').value.trim();
-  const email = el('cat-transportista-email').value.trim();
-  const telefono = el('cat-transportista-telefono').value.trim();
-  const empresa = el('cat-transportista-empresa').value.trim();
-  const cuit = el('cat-transportista-cuit').value.trim();
   const categoria = categoriaSeleccionada();
+  const email = el('cat-transportista-email').value.trim();
+  const cuit = el('cat-transportista-cuit').value.trim();
   const activo = el('cat-transportista-activo').checked;
   const password = el('cat-transportista-password').value;
 
-  if (!nombre_completo || !email || !categoria) {
-    mensaje.textContent = 'Completá nombre, email y categoría.';
+  if (!categoria) {
+    mensaje.textContent = 'Elegí si es Chofer o Transportista.';
     mensaje.className = 'error';
     return;
   }
+  if (!email) {
+    mensaje.textContent = 'Falta el email.';
+    mensaje.className = 'error';
+    return;
+  }
+  if (!cuit) {
+    mensaje.textContent = 'Falta el CUIT.';
+    mensaje.className = 'error';
+    return;
+  }
+
+  // Un chofer se identifica por su nombre; un transportista (empresa) no
+  // tiene un campo de nombre aparte — la razón social ES su nombre.
+  let nombre_completo;
+  let empresa = null;
+  if (categoria === 'propio') {
+    nombre_completo = el('cat-transportista-nombre').value.trim();
+    if (!nombre_completo) { mensaje.textContent = 'Falta el nombre del chofer.'; mensaje.className = 'error'; return; }
+  } else {
+    empresa = el('cat-transportista-empresa').value.trim();
+    if (!empresa) { mensaje.textContent = 'Falta la empresa.'; mensaje.className = 'error'; return; }
+    nombre_completo = empresa;
+  }
+
   if (!userId && !password) {
-    mensaje.textContent = 'Para un transportista nuevo hace falta una contraseña.';
+    mensaje.textContent = 'Para un usuario nuevo hace falta una contraseña.';
     mensaje.className = 'error';
     return;
   }
@@ -131,8 +168,8 @@ async function guardarTransportista(evento) {
 
   const endpoint = userId ? 'admin-actualizar-transportista' : 'admin-crear-transportista';
   const body = userId
-    ? { user_id: userId, nombre_completo, email, telefono, empresa, cuit, categoria, activo }
-    : { email, password, nombre_completo, telefono, empresa, cuit, categoria };
+    ? { user_id: userId, nombre_completo, email, empresa, cuit, categoria, activo }
+    : { email, password, nombre_completo, empresa, cuit, categoria };
 
   try {
     const res = await fetch(`/.netlify/functions/${endpoint}`, {
@@ -150,7 +187,7 @@ async function guardarTransportista(evento) {
     await cargarTransportistas();
     // Recién acá, después de recargar — cargarTransportistas() empieza
     // limpiando este mismo mensaje, así que setearlo antes se perdía solo.
-    mensaje.textContent = userId ? 'Transportista actualizado.' : 'Transportista creado.';
+    mensaje.textContent = userId ? 'Usuario actualizado.' : 'Usuario creado.';
     mensaje.className = 'ok';
   } catch (error) {
     mensaje.textContent = 'Error de red: ' + error.message;
@@ -219,5 +256,8 @@ export function initCatalogo() {
   el('cat-transportista-nuevo').addEventListener('click', () => mostrarFormTransportista('nuevo', null));
   el('cat-transportista-form').addEventListener('submit', guardarTransportista);
   el('cat-transportista-cancelar').addEventListener('click', ocultarFormTransportista);
+  document.querySelectorAll('input[name="cat-transportista-categoria"]').forEach((r) => {
+    r.addEventListener('change', actualizarCamposSegunCategoria);
+  });
   el('cat-camion-form').addEventListener('submit', agregarCamion);
 }

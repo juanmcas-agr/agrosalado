@@ -71,21 +71,20 @@
             <tbody></tbody>
           </table>
         </div>
-        <button type="button" id="cat-transportista-nuevo" class="boton-secundario">+ Nuevo transportista</button>
+        <button type="button" id="cat-transportista-nuevo" class="boton-secundario">+ Nuevo Usuario</button>
 
         <div id="cat-transportista-form-bloque" class="oculto">
-          <h3 id="cat-transportista-form-titulo">Nuevo transportista</h3>
+          <h3 id="cat-transportista-form-titulo">Nuevo Usuario</h3>
           <form id="cat-transportista-form" class="formulario">
             <input type="hidden" id="cat-transportista-user-id">
-            <label>Nombre completo <input id="cat-transportista-nombre" type="text" required></label>
-            <label>Email <input id="cat-transportista-email" type="email" required></label>
-            <label>Teléfono <input id="cat-transportista-telefono" type="tel"></label>
             <div class="full radio-grupo">
-              <label class="check-inline"><input type="radio" name="cat-transportista-categoria" value="propio"> Propio</label>
-              <label class="check-inline"><input type="radio" name="cat-transportista-categoria" value="externo"> Externo</label>
+              <label class="check-inline"><input type="radio" name="cat-transportista-categoria" value="propio"> Chofer</label>
+              <label class="check-inline"><input type="radio" name="cat-transportista-categoria" value="externo"> Transportista</label>
             </div>
-            <label class="full">Empresa (razón social, solo externos) <input id="cat-transportista-empresa" type="text"></label>
-            <label class="full">CUIT (solo externos) <input id="cat-transportista-cuit" type="text"></label>
+            <label class="full" id="cat-transportista-nombre-wrap">Nombre completo <input id="cat-transportista-nombre" type="text"></label>
+            <label class="full" id="cat-transportista-empresa-wrap">Empresa <input id="cat-transportista-empresa" type="text"></label>
+            <label class="full">Email <input id="cat-transportista-email" type="email" required></label>
+            <label class="full">CUIT <input id="cat-transportista-cuit" type="text" required></label>
             <label class="full" id="cat-transportista-password-wrap">Contraseña <input id="cat-transportista-password" type="password" autocomplete="new-password"></label>
             <label class="check-inline full"><input type="checkbox" id="cat-transportista-activo" checked> Activo</label>
             <button type="submit" class="full">Guardar</button>

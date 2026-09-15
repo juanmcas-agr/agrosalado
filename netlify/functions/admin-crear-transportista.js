@@ -5,6 +5,9 @@
 // clientes normales, a propósito (mismo criterio que perfiles: el alta
 // siempre es una operación manual).
 //
+// El usuario para iniciar sesión sigue siendo el email real (ambas
+// categorías) — el CUIT es un dato guardado aparte, no reemplaza al email.
+//
 // Requiere en Netlify: SUPABASE_SERVICE_ROLE_KEY (la misma que usan las
 // otras funciones admin-*.js).
 
@@ -64,9 +67,9 @@ exports.handler = async function (event) {
   }
 
   try {
-    const { email, password, nombre_completo, telefono, empresa, cuit, categoria } = JSON.parse(event.body);
-    if (!email || !password || !nombre_completo || !categoria) {
-      return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: email, contraseña, nombre y categoría son obligatorios.' }) };
+    const { email, password, nombre_completo, empresa, cuit, categoria } = JSON.parse(event.body);
+    if (!email || !password || !nombre_completo || !cuit || !categoria) {
+      return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Faltan datos: email, contraseña, nombre, CUIT y categoría son obligatorios.' }) };
     }
     if (!CATEGORIAS_VALIDAS.includes(categoria)) {
       return { statusCode: 400, headers: headersJson(), body: JSON.stringify({ error: 'Categoría inválida.' }) };
@@ -93,9 +96,8 @@ exports.handler = async function (event) {
         user_id: datosCrear.id,
         nombre_completo,
         email,
-        telefono: telefono || null,
         empresa: empresa || null,
-        cuit: cuit || null,
+        cuit: cuit.replace(/[^a-zA-Z0-9]/g, ''),
         categoria,
       }),
     });
