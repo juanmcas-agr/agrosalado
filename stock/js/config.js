@@ -17,6 +17,8 @@ export const ESTABLECIMIENTOS = [
 
 // Espejo de la tabla categorias.
 export const CATEGORIAS = [
+  { id: 'ternero_al_pie', nombre: 'Ternero al pie' },
+  { id: 'ternera_al_pie', nombre: 'Ternera al pie' },
   { id: 'ternero', nombre: 'Ternero' },
   { id: 'ternera', nombre: 'Ternera' },
   { id: 'vaquillona', nombre: 'Vaquillona' },
@@ -26,6 +28,20 @@ export const CATEGORIAS = [
   { id: 'toro', nombre: 'Toro' },
   { id: 'vaca', nombre: 'Vaca' },
 ];
+
+// Cambio de categoría: a qué categoría única puede pasar cada una (para
+// minimizar error de carga, no se puede "saltar" un paso ni elegir
+// cualquier categoría al voleo). Las que no están acá (torito/toro) no
+// tienen una cadena definida todavía — Cambio de categoría las deja
+// elegir cualquier destino, como antes.
+export const SIGUIENTE_CATEGORIA = {
+  ternera_al_pie: 'ternera',
+  ternera: 'vaquillona',
+  vaquillona: 'vaca',
+  ternero_al_pie: 'ternero',
+  ternero: 'novillito',
+  novillito: 'novillo',
+};
 
 // Espejo de tipos_movimiento: qué campos pedir por cada tipo.
 // clase: 'entrada' (alta), 'salida' (baja), 'interna' (mueve sin cambiar el total).
@@ -38,7 +54,7 @@ export const TIPOS_MOVIMIENTO = {
   paricion: {
     nombre: 'Parición', clase: 'entrada',
     campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
-    categoriasPermitidas: ['ternero', 'ternera'],
+    categoriasPermitidas: ['ternero_al_pie', 'ternera_al_pie'],
   },
   venta: {
     nombre: 'Venta', clase: 'salida',

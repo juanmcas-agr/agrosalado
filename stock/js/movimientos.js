@@ -1,5 +1,5 @@
 import {
-  TIPOS_MOVIMIENTO, ESTABLECIMIENTOS, CATEGORIAS,
+  TIPOS_MOVIMIENTO, ESTABLECIMIENTOS, CATEGORIAS, SIGUIENTE_CATEGORIA,
   KILOS_MIN_SANIDAD, KILOS_MAX_SANIDAD,
 } from './config.js';
 import { encolarMovimiento } from './sync.js';
@@ -395,6 +395,25 @@ function actualizarRequeridoRodeoDestino() {
   el('mov-rodeo-destino').required = aplica;
 }
 
+// Qué categorías puede tener mov-categoria-destino para el tipo actual:
+// - Si el tipo tiene categoriasPermitidas (Parición), solo esas.
+// - Si es Cambio de categoría y el origen elegido tiene una "siguiente"
+//   definida (SIGUIENTE_CATEGORIA), SOLO esa — no se puede saltar un
+//   paso ni elegir cualquier categoría al voleo, para minimizar error de
+//   carga. Si el origen no tiene cadena definida (torito/toro, todavía
+//   sin una), se deja elegir cualquier categoría, como antes.
+// - Cualquier otro tipo: todas.
+function opcionesCategoriaDestino(tipo) {
+  const cfg = TIPOS_MOVIMIENTO[tipo];
+  if (cfg.categoriasPermitidas) return CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id));
+  if (tipo === 'cambio_categoria') {
+    const origen = obtenerSeleccion('mov-categoria-origen');
+    const siguienteId = SIGUIENTE_CATEGORIA[origen];
+    if (siguienteId) return CATEGORIAS.filter((c) => c.id === siguienteId);
+  }
+  return CATEGORIAS;
+}
+
 function actualizarCamposVisibles() {
   const tipo = obtenerSeleccion('mov-tipo');
   if (!tipo) return;
@@ -421,10 +440,7 @@ function actualizarCamposVisibles() {
 
   // Siempre se reconstruye para que quede sin selección al cambiar de tipo
   // (evita arrastrar una categoría elegida que ya no corresponde).
-  crearGrupoBotones(
-    'mov-categoria-destino',
-    cfg.categoriasPermitidas ? CATEGORIAS.filter((c) => cfg.categoriasPermitidas.includes(c.id)) : CATEGORIAS
-  );
+  crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(tipo));
   actualizarSelectsRodeo();
   actualizarBloqueFeedLot();
   actualizarEstablecimientosDestinoDisponibles();
@@ -767,6 +783,12 @@ export async function initMovimientos() {
     el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); actualizarRequeridoRodeoDestino(); });
   }
   el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
+  // Solo importa para Cambio de categoría (el único tipo donde origen y
+  // destino de categoría son independientes) — reconstruye las opciones
+  // de destino según la cadena SIGUIENTE_CATEGORIA del origen elegido.
+  el('mov-categoria-origen').addEventListener('cambio', () => {
+    crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(obtenerSeleccion('mov-tipo')));
+  });
   establecerSeleccion('mov-tipo', primerTipoPermitido());
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);

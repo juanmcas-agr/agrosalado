@@ -24,6 +24,8 @@ create table categorias (
 );
 
 insert into categorias (id, nombre, orden) values
+  ('ternero_al_pie', 'Ternero al pie', 0),
+  ('ternera_al_pie', 'Ternera al pie', 0),
   ('ternero', 'Ternero', 1),
   ('ternera', 'Ternera', 2),
   ('vaquillona', 'Vaquillona', 3),

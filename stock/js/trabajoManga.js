@@ -292,9 +292,10 @@ function limpiarReproduccion() {
 
 // ─── Manejo de rodeo: aparte / capada / pesada de control / Destete ───
 // Destete no es un movimiento en sí — es la bitácora de trabajo_manga_manejo
-// — pero SÍ dispara movimientos reales de cambio_categoria (ternero→
-// novillito, ternera→vaquillona) que además cambian de rodeo (cada sexo
-// pasa a su propio rodeo nuevo), ver ejecutarDestete().
+// — pero SÍ dispara movimientos reales de cambio_categoria (ternero_al_pie→
+// ternero, ternera_al_pie→ternera: primer paso de la cadena de categorías)
+// que además cambian de rodeo (cada sexo pasa a su propio rodeo nuevo), ver
+// ejecutarDestete().
 
 function poblarSelectRodeoDestino(idSelect, categoriaId) {
   const select = el(idSelect);
@@ -389,8 +390,8 @@ async function ejecutarDestete(trabajoMangaId, manejo, contexto) {
     const { error } = await supabase.from('movimientos').insert({
       ...base,
       tipo_movimiento: 'cambio_categoria',
-      categoria_origen: 'ternero',
-      categoria_destino: 'novillito',
+      categoria_origen: 'ternero_al_pie',
+      categoria_destino: 'ternero',
       rodeo_destino_id: manejo.rodeoNovillitoId,
       cantidad_cabezas: manejo.destete_machos_cantidad,
       kilos_promedio: manejo.destete_kilos_ternero,
@@ -401,8 +402,8 @@ async function ejecutarDestete(trabajoMangaId, manejo, contexto) {
     const { error } = await supabase.from('movimientos').insert({
       ...base,
       tipo_movimiento: 'cambio_categoria',
-      categoria_origen: 'ternera',
-      categoria_destino: 'vaquillona',
+      categoria_origen: 'ternera_al_pie',
+      categoria_destino: 'ternera',
       rodeo_destino_id: manejo.rodeoVaquillonaId,
       cantidad_cabezas: manejo.destete_hembras_cantidad,
       kilos_promedio: manejo.destete_kilos_ternera,
@@ -785,16 +786,16 @@ async function onSubmit(evento) {
   if (manejo && manejo.destete) {
     try {
       if (manejo.destete_machos_cantidad > 0) {
-        const stockTernero = await stockDelRodeoPorCategoria(rodeoId, 'ternero');
+        const stockTernero = await stockDelRodeoPorCategoria(rodeoId, 'ternero_al_pie');
         if (manejo.destete_machos_cantidad > stockTernero) {
-          mostrarMensaje(`No hay ${manejo.destete_machos_cantidad} terneros en ese rodeo (hay ${stockTernero}).`, 'error');
+          mostrarMensaje(`No hay ${manejo.destete_machos_cantidad} terneros al pie en ese rodeo (hay ${stockTernero}).`, 'error');
           return;
         }
       }
       if (manejo.destete_hembras_cantidad > 0) {
-        const stockTernera = await stockDelRodeoPorCategoria(rodeoId, 'ternera');
+        const stockTernera = await stockDelRodeoPorCategoria(rodeoId, 'ternera_al_pie');
         if (manejo.destete_hembras_cantidad > stockTernera) {
-          mostrarMensaje(`No hay ${manejo.destete_hembras_cantidad} terneras en ese rodeo (hay ${stockTernera}).`, 'error');
+          mostrarMensaje(`No hay ${manejo.destete_hembras_cantidad} terneras al pie en ese rodeo (hay ${stockTernera}).`, 'error');
           return;
         }
       }
@@ -883,8 +884,8 @@ export async function initTrabajoManga() {
   activarBloquesReproduccion();
   inicializarAgregarCatalogo('manga-toros-agregar', 'manga-toros', 'toros', '+ Nuevo toro...');
   activarBloquesManejo();
-  inicializarSelectorRodeoDestino('novillito', 'novillito');
-  inicializarSelectorRodeoDestino('vaquillona', 'vaquillona');
+  inicializarSelectorRodeoDestino('novillito', 'ternero');
+  inicializarSelectorRodeoDestino('vaquillona', 'ternera');
   el('manga-form').addEventListener('submit', onSubmit);
   refrescarDiferenciasPendientes();
 }
