@@ -121,6 +121,11 @@
           </div>
         </div>
 
+        <div id="mov-feedlot-salida" class="campo-grupo full oculto">
+          <div class="etiqueta-grupo">🚚 Corral de origen (Feed Lot)</div>
+          <div id="mov-feedlot-corral-origen"></div>
+        </div>
+
         <div data-campo="rodeo_destino" class="campo-grupo full">
           <div class="etiqueta-grupo">Rodeo destino</div>
           <select id="mov-rodeo-destino" required></select>
@@ -483,6 +488,7 @@
         <input id="hist-filtro-codigo" type="text" placeholder="Buscar por código (ej: M-000123)">
         <select id="hist-filtro-establecimiento"></select>
         <select id="hist-filtro-tipo"></select>
+        <select id="hist-filtro-usuario"></select>
         <select id="hist-filtro-estado"></select>
         <label>Desde <input id="hist-filtro-desde" type="date"></label>
         <label>Hasta <input id="hist-filtro-hasta" type="date"></label>
@@ -508,6 +514,7 @@
       <div class="filtros">
         <input id="hist-manga-filtro-codigo" type="text" placeholder="Buscar por código (ej: T-000045)">
         <select id="hist-manga-filtro-rodeo"><option value="">Todos los rodeos</option></select>
+        <select id="hist-manga-filtro-usuario"></select>
         <label>Desde <input id="hist-manga-filtro-desde" type="date"></label>
         <label>Hasta <input id="hist-manga-filtro-hasta" type="date"></label>
         <button id="hist-manga-filtrar" class="boton-secundario">Filtrar</button>

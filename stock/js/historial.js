@@ -45,6 +45,25 @@ function poblarFiltros() {
   }
 }
 
+// Comparte la misma lista (nombre + user_id) entre el filtro de
+// movimientos y el de Trabajo de Manga — sirve para buscar más fácil lo
+// que cargó cada uno ("lo que hice yo" vs. "lo que cargó otro").
+async function cargarUsuariosFiltro() {
+  const { data, error } = await supabase.from('perfiles').select('user_id, nombre_completo').order('nombre_completo');
+  if (error || !data) return;
+  for (const idSelect of ['hist-filtro-usuario', 'hist-manga-filtro-usuario']) {
+    const select = el(idSelect);
+    if (!select) continue;
+    select.innerHTML = '<option value="">Todos los usuarios</option>';
+    for (const u of data) {
+      const opt = document.createElement('option');
+      opt.value = u.user_id;
+      opt.textContent = u.nombre_completo;
+      select.appendChild(opt);
+    }
+  }
+}
+
 // Mismas reglas para anular y editar: administrativo/owner sin límite de
 // tiempo, o el propio usuario dentro de la ventana — y en ningún caso si
 // ya está anulado o ya fue reemplazado por una corrección (no tiene
@@ -180,6 +199,7 @@ export async function cargarHistorial() {
   const codigo = el('hist-filtro-codigo').value.trim();
   const establecimiento = el('hist-filtro-establecimiento').value;
   const tipo = el('hist-filtro-tipo').value;
+  const usuario = el('hist-filtro-usuario').value;
   const estado = el('hist-filtro-estado').value;
   const desde = el('hist-filtro-desde').value;
   const hasta = el('hist-filtro-hasta').value;
@@ -193,6 +213,7 @@ export async function cargarHistorial() {
       query = query.or(`establecimiento_origen.eq.${establecimiento},establecimiento_destino.eq.${establecimiento}`);
     }
     if (tipo) query = query.eq('tipo_movimiento', tipo);
+    if (usuario) query = query.eq('usuario_id', usuario);
     if (estado === 'activos') query = query.eq('anulado', false);
     else if (estado === 'anulados') query = query.eq('anulado', true);
     if (desde) query = query.gte('fecha', desde);
@@ -302,11 +323,12 @@ export async function cargarHistorialManga() {
 
   const codigo = el('hist-manga-filtro-codigo').value.trim();
   const rodeoId = el('hist-manga-filtro-rodeo').value;
+  const usuarioId = el('hist-manga-filtro-usuario').value;
   const desde = el('hist-manga-filtro-desde').value;
   const hasta = el('hist-manga-filtro-hasta').value;
 
   try {
-    ultimasFilasManga = await obtenerTrabajosConDetalle({ codigo, rodeoId, desde, hasta });
+    ultimasFilasManga = await obtenerTrabajosConDetalle({ codigo, rodeoId, usuarioId, desde, hasta });
     renderFilasManga(ultimasFilasManga);
   } catch (error) {
     mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
@@ -321,6 +343,7 @@ function exportarManga() {
 
 export function initHistorial() {
   poblarFiltros();
+  cargarUsuariosFiltro();
   el('hist-filtrar').addEventListener('click', cargarHistorial);
   el('hist-exportar').addEventListener('click', exportar);
   cargarHistorial();

@@ -90,7 +90,7 @@ function describirManejo(m) {
 // resueltos) filtrados por código, o por fecha/rodeo si no hay código —
 // y arma para cada uno el texto de propietarios y el detalle completo
 // (Sanidad/Reproducción/Manejo), listo para pintar en una tabla.
-export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, codigo, limite = 200 } = {}) {
+export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuarioId, codigo, limite = 200 } = {}) {
   let query = supabase.from('historial_trabajos_manga').select('*').order('fecha', { ascending: false }).limit(limite);
   if (codigo) {
     query = query.ilike('codigo', `%${codigo}%`);
@@ -98,6 +98,7 @@ export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, codigo,
     if (desde) query = query.gte('fecha', desde);
     if (hasta) query = query.lte('fecha', hasta);
     if (rodeoId) query = query.eq('rodeo_id', rodeoId);
+    if (usuarioId) query = query.eq('usuario_id', usuarioId);
   }
 
   const { data, error } = await query;
