@@ -585,6 +585,15 @@ function calcularEstadoFeedLot() {
 function actualizarBloqueFeedLot() {
   const { entrada } = calcularEstadoFeedLot();
   el('mov-feedlot-entrada').classList.toggle('oculto', !entrada);
+  // En Apertura de stock a Feed Lot, "Kilos de entrada" sería el mismo
+  // dato que "Kilos promedio por cabeza" de arriba (no hay un movimiento
+  // previo del que difiera, como sí puede pasar en un Traslado) — pedirlo
+  // de nuevo es redundante, así que se esconde y se usa directamente
+  // kilos_promedio (ver onSubmit/registrarEntradaFeedLot).
+  const tipo = obtenerSeleccion('mov-tipo');
+  const ocultarKilosEntrada = esAperturaFeedLot(tipo, obtenerSeleccion('mov-establecimiento-destino'));
+  el('mov-feedlot-kilos-entrada-wrap').classList.toggle('oculto', ocultarKilosEntrada);
+  if (ocultarKilosEntrada) el('mov-feedlot-kilos-entrada').value = '';
 }
 
 // A feed lot no hace falta elegir un rodeo destino aparte: las cabezas
