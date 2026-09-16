@@ -2,6 +2,7 @@ import { refrescarDashboard } from './dashboard.js';
 import { cargarHistorial, cargarHistorialManga } from './historial.js';
 import { refrescarDiferenciasPendientes, refrescarRectificacionesPendientes } from './trabajoManga.js';
 import { refrescarReportes } from './reportes.js';
+import { refrescarConsultaEstablecimiento } from './movimientos.js';
 
 const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'reportes'];
 // Un puestero carga datos pero no ve Stock/Historial/Reportes (esas
@@ -39,6 +40,7 @@ function renderRoute(rol) {
   if (pantalla === 'dashboard') refrescarDashboard();
   if (pantalla === 'historial') { cargarHistorial(); cargarHistorialManga(); }
   if (pantalla === 'manga' || pantalla === 'cargar') refrescarDiferenciasPendientes();
+  if (pantalla === 'cargar') refrescarConsultaEstablecimiento();
   if (pantalla === 'manga') refrescarRectificacionesPendientes();
   if (pantalla === 'reportes') refrescarReportes();
 }

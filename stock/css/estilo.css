@@ -260,6 +260,15 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
   font-size: 0.9em;
 }
 
+.consulta-item {
+  padding: 8px 12px;
+  margin: 6px 0;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f7f7f7;
+  font-size: 0.9em;
+}
+
 .bloque-condicional {
   display: flex;
   flex-direction: column;

@@ -134,12 +134,6 @@ export const TIPOS_MOVIMIENTO = {
     duplicarEstablecimientoEnDestino: true,
     duplicarCategoriaEnDestino: true,
   },
-  // Al final del grupo de botones a propósito (uso excepcional, solo owner).
-  apertura_stock: {
-    nombre: 'Apertura de stock', clase: 'entrada',
-    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
-    soloOwner: true,
-  },
   // Hotelería: animales de un cliente externo que se alojan/engordan en
   // Feed Lot — no son de Agro Salado ni de un capitalizador (socio), así
   // que usan su propio campo "Cliente" (titulares.tipo='cliente') en vez
@@ -161,6 +155,12 @@ export const TIPOS_MOVIMIENTO = {
     campos: ['categoria_origen', 'cliente'],
     establecimientoOrigenFijo: 'feed_lot',
     soloRodeosHoteleria: true,
+  },
+  // Al final del grupo de botones a propósito (uso excepcional, solo owner).
+  apertura_stock: {
+    nombre: 'Apertura de stock', clase: 'entrada',
+    campos: ['establecimiento_destino', 'categoria_destino', 'titular_destino'],
+    soloOwner: true,
   },
 };
 

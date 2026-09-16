@@ -2,6 +2,7 @@ import {
   TIPOS_MOVIMIENTO, ESTABLECIMIENTOS, CATEGORIAS, SIGUIENTE_CATEGORIA, DESTINO_VENTA,
   KILOS_MIN_SANIDAD, KILOS_MAX_SANIDAD,
 } from './config.js';
+import { supabase } from './supabaseClient.js';
 import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
@@ -474,6 +475,66 @@ function poblarGrupos() {
   ]);
 }
 
+// ─── Consulta rápida de movimientos por establecimiento ────────────────
+// Vive acá (pantalla "Cargar movimiento") y no en Historial porque un
+// puestero no tiene acceso a Historial (ver router.js), pero sí a esta
+// pantalla — es la única forma que tiene de corroborar, antes de cargar,
+// que nadie más (ej. un encargado desde Historial) ya cargó ese mismo
+// movimiento. Es de solo lectura, sin editar/anular.
+function poblarSelectConsultaEstablecimiento() {
+  const select = el('mov-consulta-establecimiento');
+  select.innerHTML = '';
+  for (const e of ESTABLECIMIENTOS) {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.nombre;
+    select.appendChild(opt);
+  }
+  // El Tara por default: es el establecimiento donde surgió la necesidad
+  // (carga por dos personas distintas, Ponce en el campo y Enriques desde
+  // Historial) — cualquiera puede elegir otro con el selector.
+  select.value = 'el_tara';
+}
+
+function itemConsulta(fila) {
+  const categoria = fila.categoria_origen_nombre || fila.categoria_destino_nombre || '';
+  const hora = fila.created_at ? new Date(fila.created_at).toLocaleString('es-AR') : '';
+  const div = document.createElement('div');
+  div.className = 'consulta-item';
+  div.textContent =
+    `${fila.fecha} — ${fila.tipo_movimiento_nombre}${categoria ? ' · ' + categoria : ''} · ${fila.cantidad_cabezas} cab.` +
+    ` — cargado por ${fila.usuario_nombre || '—'} (${hora})`;
+  return div;
+}
+
+export async function refrescarConsultaEstablecimiento() {
+  const establecimientoId = el('mov-consulta-establecimiento')?.value;
+  const contenedor = el('mov-consulta-lista');
+  if (!establecimientoId || !contenedor) return;
+  if (!navigator.onLine) {
+    contenedor.innerHTML = '<div style="color:#666;">Sin conexión — no se puede consultar ahora.</div>';
+    return;
+  }
+  contenedor.textContent = 'Cargando…';
+  const { data, error } = await supabase
+    .from('historial_movimientos')
+    .select('*')
+    .eq('anulado', false)
+    .or(`establecimiento_origen.eq.${establecimientoId},establecimiento_destino.eq.${establecimientoId}`)
+    .order('created_at', { ascending: false })
+    .limit(15);
+  if (error) {
+    contenedor.innerHTML = `<div class="mensaje error">No se pudo consultar: ${error.message}</div>`;
+    return;
+  }
+  contenedor.innerHTML = '';
+  if (!data.length) {
+    contenedor.innerHTML = '<div style="color:#666;">Sin movimientos cargados todavía en ese establecimiento.</div>';
+    return;
+  }
+  for (const fila of data) contenedor.appendChild(itemConsulta(fila));
+}
+
 // ─── Feed lot: corral + ciclo (fecha estimada de salida, kilos objetivo) ───
 // Entrada = traslado QUE LLEVA a feed_lot (desde otro lado); salida =
 // traslado que SACA de feed_lot, o cualquier venta/faena/mortandad cuyo
@@ -585,9 +646,27 @@ function opcionesCategoriaDestino(tipo) {
   return CATEGORIAS;
 }
 
+// Sin tipo elegido: todos los campos que dependen de él quedan ocultos y
+// sin exigir nada, para no bloquear el submit en silencio (ver onSubmit,
+// que además corta antes con un mensaje visible si no se eligió tipo).
+function ocultarCamposDependientesDeTipo() {
+  for (const campo of CAMPOS) {
+    document.querySelector(`[data-campo="${campo}"]`).classList.add('oculto');
+  }
+  document.querySelector('[data-campo="rodeo"]').classList.add('oculto');
+  document.querySelector('[data-campo="rodeo_destino"]').classList.add('oculto');
+  el('mov-cliente').required = false;
+  el('mov-comprador').required = false;
+  el('mov-rodeo').required = false;
+  el('mov-rodeo-destino').required = false;
+  el('mov-observaciones').required = false;
+  el('mov-observaciones-label').textContent = 'Observaciones (opcional)';
+  actualizarBloqueFeedLot();
+}
+
 function actualizarCamposVisibles() {
   const tipo = obtenerSeleccion('mov-tipo');
-  if (!tipo) return;
+  if (!tipo) { ocultarCamposDependientesDeTipo(); return; }
   const cfg = TIPOS_MOVIMIENTO[tipo];
 
   for (const campo of CAMPOS) {
@@ -761,11 +840,6 @@ function armarFila(datos) {
   };
 }
 
-function primerTipoPermitido() {
-  const rol = getEstado().perfil?.rol;
-  return tiposVisibles().find(([, cfg]) => !cfg.soloOwner || rol === 'owner')[0];
-}
-
 function mostrarMensaje(texto, tipo) {
   const contenedor = el('mov-mensaje');
   contenedor.textContent = texto;
@@ -803,10 +877,12 @@ function resetFormulario() {
   el('mov-feedlot-kilos-entrada').value = '';
   el('mov-feedlot-fecha-salida').value = '';
   el('mov-feedlot-kilos-objetivo').value = '';
-  // establecerSeleccion dispara 'cambio' -> actualizarCamposVisibles() ->
-  // actualizarSelectsRodeo()/actualizarBloqueFeedLot(), que ya reconstruyen
-  // los selects vacíos y ocultan el bloque de feed lot.
-  establecerSeleccion('mov-tipo', primerTipoPermitido());
+  // Sin tipo preseleccionado a propósito: si quedara uno marcado por
+  // defecto, es fácil no darse cuenta y cargar el movimiento equivocado
+  // (venía pasando con "Compra de invernada"). limpiarSeleccion no dispara
+  // 'cambio', así que se llama a mano para ocultar los campos dependientes.
+  limpiarSeleccion('mov-tipo');
+  actualizarCamposVisibles();
 }
 
 function cancelarEdicion() {
@@ -868,6 +944,33 @@ function precargarParaMortandad({ establecimientoId, categoriaId, rodeoId, canti
   location.hash = 'cargar';
 }
 
+// Alerta (no bloquea) si ya existe un movimiento muy parecido: mismo tipo,
+// fecha, establecimiento(s), categoría(s) y cantidad de cabezas, sin
+// anular ni reemplazado. Pensado para el caso real de dos personas
+// cargando por separado (ej. Ponce en el campo, Enriques desde Historial)
+// sin verse una a la otra — ver mov-consulta-establecimiento más arriba,
+// que le da a Ponce una forma de chequear antes de cargar. Solo se puede
+// chequear con conexión; si falla la consulta, se deja pasar (best-effort,
+// mismo criterio que validarStockDisponible).
+async function buscarPosibleDuplicado(datos) {
+  let query = supabase
+    .from('historial_movimientos')
+    .select('codigo, created_at, usuario_nombre')
+    .eq('tipo_movimiento', datos.tipo)
+    .eq('fecha', datos.fecha)
+    .eq('cantidad_cabezas', Number(datos.cantidad_cabezas))
+    .eq('anulado', false)
+    .is('reemplazado_por', null)
+    .limit(1);
+  if (datos.establecimiento_origen) query = query.eq('establecimiento_origen', datos.establecimiento_origen);
+  if (datos.establecimiento_destino) query = query.eq('establecimiento_destino', datos.establecimiento_destino);
+  if (datos.categoria_origen) query = query.eq('categoria_origen', datos.categoria_origen);
+  if (datos.categoria_destino) query = query.eq('categoria_destino', datos.categoria_destino);
+  const { data, error } = await query;
+  if (error) { console.warn('No se pudo chequear duplicados:', error); return null; }
+  return data && data[0] ? data[0] : null;
+}
+
 // Salida/interna sacan cabezas del rodeo de origen — no puede haber más
 // saliendo que las que tiene. Solo se puede chequear con conexión (pide el
 // stock real a Supabase); si está offline se deja pasar como hasta ahora
@@ -893,6 +996,10 @@ async function validarStockDisponible(datos) {
 
 async function onSubmit(evento) {
   evento.preventDefault();
+  if (!obtenerSeleccion('mov-tipo')) {
+    mostrarMensaje('Elegí un tipo de movimiento.', 'error');
+    return;
+  }
   const datos = leerFormulario();
   const { errores, advertencias } = validar(datos);
 
@@ -907,6 +1014,19 @@ async function onSubmit(evento) {
   if (datos.editandoId && !navigator.onLine) {
     mostrarMensaje('Necesitás conexión a internet para guardar una corrección.', 'error');
     return;
+  }
+
+  // No aplica al editar (no tiene sentido que un movimiento se marque
+  // "duplicado" de sí mismo) ni sin conexión (no hay forma de chequear).
+  if (!datos.editandoId && navigator.onLine) {
+    const duplicado = await buscarPosibleDuplicado(datos);
+    if (duplicado) {
+      const hora = duplicado.created_at ? new Date(duplicado.created_at).toLocaleString('es-AR') : '';
+      const seguir = confirm(
+        `⚠️ Ya hay un movimiento muy parecido cargado (${duplicado.codigo || 'sin código'}), por ${duplicado.usuario_nombre || 'otro usuario'} el ${hora}.\n\n¿Confirmás que este NO es un duplicado y querés guardarlo igual?`
+      );
+      if (!seguir) return;
+    }
   }
 
   // Hotelería no elige un rodeo — se crea uno nuevo acá mismo, dedicado a
@@ -1021,10 +1141,15 @@ export async function initMovimientos() {
   el('mov-categoria-origen').addEventListener('cambio', () => {
     crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(obtenerSeleccion('mov-tipo')));
   });
-  establecerSeleccion('mov-tipo', primerTipoPermitido());
+  ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
   el('mov-editando-cancelar').addEventListener('click', cancelarEdicion);
   document.addEventListener('hacienda:editar-movimiento', (evento) => precargarParaEditar(evento.detail));
   document.addEventListener('hacienda:precargar-mortandad', (evento) => precargarParaMortandad(evento.detail));
+
+  poblarSelectConsultaEstablecimiento();
+  el('mov-consulta-establecimiento').addEventListener('change', refrescarConsultaEstablecimiento);
+  el('mov-consulta-actualizar').addEventListener('click', refrescarConsultaEstablecimiento);
+  refrescarConsultaEstablecimiento();
 }
