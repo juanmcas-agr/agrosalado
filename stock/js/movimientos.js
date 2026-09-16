@@ -516,20 +516,22 @@ export async function refrescarConsultaEstablecimiento() {
     return;
   }
   contenedor.textContent = 'Cargando…';
+  const hoy = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabase
     .from('historial_movimientos')
     .select('*')
     .eq('anulado', false)
+    .eq('fecha', hoy)
     .or(`establecimiento_origen.eq.${establecimientoId},establecimiento_destino.eq.${establecimientoId}`)
     .order('created_at', { ascending: false })
-    .limit(15);
+    .limit(30);
   if (error) {
     contenedor.innerHTML = `<div class="mensaje error">No se pudo consultar: ${error.message}</div>`;
     return;
   }
   contenedor.innerHTML = '';
   if (!data.length) {
-    contenedor.innerHTML = '<div style="color:#666;">Sin movimientos cargados todavía en ese establecimiento.</div>';
+    contenedor.innerHTML = '<div style="color:#666;">Sin movimientos cargados hoy en ese establecimiento.</div>';
     return;
   }
   for (const fila of data) contenedor.appendChild(itemConsulta(fila));

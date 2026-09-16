@@ -661,6 +661,65 @@ export async function refrescarDiferenciasPendientes() {
   renderDiferenciasPendientes(pendientes);
 }
 
+// ─── Consulta rápida de trabajos de manga por establecimiento (mismo
+// criterio que mov-consulta-establecimiento en movimientos.js: evitar que
+// dos personas carguen el mismo Trabajo de Manga sin saberlo) ───────────
+function poblarSelectConsultaManga() {
+  const select = el('manga-consulta-establecimiento');
+  select.innerHTML = '';
+  for (const e of ESTABLECIMIENTOS) {
+    const opt = document.createElement('option');
+    opt.value = e.id;
+    opt.textContent = e.nombre;
+    select.appendChild(opt);
+  }
+  select.value = 'el_tara';
+}
+
+function itemConsultaManga(fila) {
+  const hora = fila.creado_at ? new Date(fila.creado_at).toLocaleString('es-AR') : '';
+  const div = document.createElement('div');
+  div.className = 'consulta-item';
+  div.textContent =
+    `${fila.fecha} — rodeo ${fila.rodeo || fila.rodeo_id} (${fila.categoria_nombre || ''}) · ${fila.cantidad_trabajada} trabajadas` +
+    ` — cargado por ${fila.usuario_nombre || '—'} (${hora})`;
+  return div;
+}
+
+// La vista historial_trabajos_manga no trae establecimiento (un trabajo
+// se ata a un rodeo, no a un establecimiento directo) — se filtra acá
+// cruzando con el rodeo en caché en vez de sumar un join a la vista.
+export async function refrescarConsultaManga() {
+  const establecimientoId = el('manga-consulta-establecimiento')?.value;
+  const contenedor = el('manga-consulta-lista');
+  if (!establecimientoId || !contenedor) return;
+  if (!navigator.onLine) {
+    contenedor.innerHTML = '<div style="color:#666;">Sin conexión — no se puede consultar ahora.</div>';
+    return;
+  }
+  contenedor.textContent = 'Cargando…';
+  const hoy = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from('historial_trabajos_manga')
+    .select('*')
+    .eq('anulado', false)
+    .eq('fecha', hoy)
+    .order('creado_at', { ascending: false })
+    .limit(30);
+  if (error) {
+    contenedor.innerHTML = `<div class="mensaje error">No se pudo consultar: ${error.message}</div>`;
+    return;
+  }
+  const rodeosPorId = new Map(obtenerRodeosCache().map((r) => [r.id, r]));
+  const filas = data.filter((f) => rodeosPorId.get(f.rodeo_id)?.establecimiento_id === establecimientoId);
+  contenedor.innerHTML = '';
+  if (!filas.length) {
+    contenedor.innerHTML = '<div style="color:#666;">Sin trabajos de manga cargados hoy en ese establecimiento.</div>';
+    return;
+  }
+  for (const fila of filas) contenedor.appendChild(itemConsultaManga(fila));
+}
+
 // ─── Rectificaciones pendientes de aprobar (solo owner) ────────────────
 // Cuando encargado/administrativo propone una rectificación, queda acá
 // hasta que un owner la apruebe (aplica el cambio) o la rechace (no toca
@@ -922,4 +981,9 @@ export async function initTrabajoManga() {
   inicializarSelectorRodeoDestino('vaquillona', 'ternera');
   el('manga-form').addEventListener('submit', onSubmit);
   refrescarDiferenciasPendientes();
+
+  poblarSelectConsultaManga();
+  el('manga-consulta-establecimiento').addEventListener('change', refrescarConsultaManga);
+  el('manga-consulta-actualizar').addEventListener('click', refrescarConsultaManga);
+  refrescarConsultaManga();
 }
