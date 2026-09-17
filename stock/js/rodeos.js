@@ -129,6 +129,24 @@ export async function stockDelRodeoPorCategoria(rodeoId, categoriaId) {
   return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
 }
 
+// Cabezas de una categoría Y titular puntuales dentro de un rodeo — un
+// rodeo puede tener stock de más de un titular a la vez (ej. dos
+// Aperturas de stock distintas al mismo corral de Feed Lot), así que
+// "el rodeo tiene stock" no alcanza para validar una salida/interna:
+// tiene que ser ESE titular el que tenga stock de ESA categoría ahí. Sin
+// esto, se podía vender a nombre de un titular sin stock real con tal de
+// que ALGÚN otro titular del mismo rodeo sí lo tuviera.
+export async function stockDelRodeoPorCategoriaYTitular(rodeoId, categoriaId, titularId) {
+  const { data, error } = await supabase
+    .from('stock_actual')
+    .select('cabezas')
+    .eq('rodeo_id', rodeoId)
+    .eq('categoria', categoriaId)
+    .eq('titular', titularId);
+  if (error) throw error;
+  return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
+}
+
 // Titulares con cabezas reales en un rodeo (para no dejar elegir, al
 // cargar un movimiento de salida/interna, una titularidad que ese rodeo
 // ni siquiera tiene).

@@ -7,7 +7,7 @@ import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
 import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
-import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeo, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot, actualizarCorralRodeo } from './rodeos.js';
+import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot, actualizarCorralRodeo } from './rodeos.js';
 import { marcarComoReemplazado } from './historial.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
@@ -250,8 +250,14 @@ async function actualizarTitularesOrigenDisponibles() {
     [...capSelect.options].forEach((o) => { o.disabled = false; });
   };
 
-  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
-  const rodeoId = el(RODEO_ORIGEN_IDS.select).value;
+  const tipo = obtenerSeleccion('mov-tipo');
+  const cfg = TIPOS_MOVIMIENTO[tipo];
+  // Venta (u otra salida) desde Feed Lot no usa el selector de Rodeo
+  // (está oculto, ver esSinRodeo) — el rodeo real sale de resolver el
+  // corral elegido, igual que en onSubmit.
+  const rodeoId = esSalidaFeedLotPorCorral(tipo, obtenerSeleccion('mov-establecimiento-origen'))
+    ? rodeoActivoEnCorral(obtenerSeleccion('mov-categoria-origen'), obtenerSeleccion('mov-feedlot-corral-origen'))?.id
+    : el(RODEO_ORIGEN_IDS.select).value;
   if (!cfg || !cfg.campos.includes('titular_origen') || !rodeoId || rodeoId === '__nuevo__' || !navigator.onLine) {
     habilitarTodo();
     return;
@@ -1169,16 +1175,26 @@ async function buscarPosibleDuplicado(datos) {
 async function validarStockDisponible(datos) {
   if (datos.cfg.clase === 'entrada') return null;
   if (!navigator.onLine) return null;
+  // Filtrado por categoría Y titular, no solo por rodeo: un rodeo puede
+  // tener cabezas de más de un titular a la vez (ver
+  // stockDelRodeoPorCategoriaYTitular en rodeos.js) — sin este filtro se
+  // podía vender/mover a nombre de un titular sin stock real ahí con tal
+  // de que otro titular del mismo rodeo sí lo tuviera.
   let disponible;
   try {
-    disponible = await stockDelRodeo(datos.rodeo_id);
+    disponible = await stockDelRodeoPorCategoriaYTitular(datos.rodeo_id, datos.categoria_origen, datos.titular_origen || 'agro_salado');
   } catch (error) {
     console.warn('No se pudo verificar el stock del rodeo antes de guardar:', error);
     return null;
   }
   const cabezas = Number(datos.cantidad_cabezas);
   if (cabezas > disponible) {
-    return `No hay stock suficiente en ese rodeo: tiene ${disponible} cabeza(s) y se intentan mover ${cabezas}.`;
+    const NOMBRES_TITULAR_BASE = { agro_salado: 'Agro Salado', dona_julia: 'Doña Julia' };
+    const nombreTitular = NOMBRES_TITULAR_BASE[datos.titular_origen]
+      || obtenerTitularesCache().find((t) => t.id === datos.titular_origen)?.nombre
+      || (datos.titular_origen ? datos.titular_origen : 'Agro Salado');
+    const nombreCategoria = CATEGORIAS.find((c) => c.id === datos.categoria_origen)?.nombre || datos.categoria_origen;
+    return `No hay stock suficiente: ${nombreTitular} tiene ${disponible} cabeza(s) de ${nombreCategoria} en ese rodeo y se intentan mover ${cabezas}.`;
   }
   return null;
 }
@@ -1370,7 +1386,10 @@ export async function initMovimientos() {
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
-    el(id).addEventListener('cambio', () => { actualizarSelectsRodeo(); actualizarBloqueFeedLot(); actualizarRequeridoRodeoDestino(); actualizarRequeridoRodeo(); });
+    el(id).addEventListener('cambio', () => {
+      actualizarSelectsRodeo(); actualizarBloqueFeedLot(); actualizarRequeridoRodeoDestino(); actualizarRequeridoRodeo();
+      actualizarTitularesOrigenDisponibles();
+    });
   }
   el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
   // Solo importa para Traslado con destino Feed Lot — nubla "al pie" apenas
@@ -1382,7 +1401,10 @@ export async function initMovimientos() {
   el('mov-categoria-origen').addEventListener('cambio', () => {
     crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(obtenerSeleccion('mov-tipo')));
   });
-  el('mov-feedlot-corral-origen').addEventListener('cambio', actualizarAvisoCambioCategoriaExpress);
+  el('mov-feedlot-corral-origen').addEventListener('cambio', () => {
+    actualizarAvisoCambioCategoriaExpress();
+    actualizarTitularesOrigenDisponibles();
+  });
   el('mov-feedlot-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
   ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
