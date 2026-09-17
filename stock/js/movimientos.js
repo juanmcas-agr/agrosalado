@@ -7,7 +7,7 @@ import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
 import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
-import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeo, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot } from './rodeos.js';
+import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeo, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot, actualizarCorralRodeo } from './rodeos.js';
 import { marcarComoReemplazado } from './historial.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
@@ -1252,6 +1252,15 @@ async function onSubmit(evento) {
       // hay que volver a registrarla (evita duplicar filas en
       // feed_lot_ciclos para el mismo rodeo).
       datos.feedlotEntrada = false;
+      // Reconfirma el corral igual (barato, idempotente): si por lo que
+      // sea había quedado sin corral (ej. una falla de red puntual la vez
+      // que se creó), esta carga lo autocorrige en vez de dejarlo roto
+      // hasta que alguien lo note al intentar vender de ahí.
+      try {
+        await actualizarCorralRodeo(datos.rodeo_id, datos.feedlotCorral);
+      } catch (error) {
+        advertencias.push(`No se pudo confirmar el corral del rodeo (${error.message}) — revisalo en Stock.`);
+      }
     } else if (!navigator.onLine) {
       mostrarMensaje('Necesitás conexión a internet para cargar esto (crea un rodeo nuevo).', 'error');
       return;
@@ -1298,8 +1307,10 @@ async function onSubmit(evento) {
   await encolarMovimiento(fila);
 
   // Best-effort: el movimiento en sí ya quedó guardado (offline-first vía
-  // outbox); el corral/ciclo de feed lot es metadata complementaria, no
-  // bloquea ni se reintenta si falla (ej. sin conexión en este instante).
+  // outbox); no se bloquea ni se reintenta si esto falla (ej. sin conexión
+  // en este instante) — pero el corral SÍ importa para el resto del flujo
+  // (Apertura/Venta por corral), así que un fallo acá se avisa igual con
+  // una advertencia visible, no solo en la consola.
   if (datos.feedlotEntrada) {
     try {
       await registrarEntradaFeedLot({
@@ -1312,12 +1323,14 @@ async function onSubmit(evento) {
       });
     } catch (error) {
       console.warn('No se pudo registrar la entrada a feed lot:', error);
+      advertencias.push(`No se pudo registrar el Corral ${datos.feedlotCorral} para este rodeo (${error.message}) — revisalo en Stock.`);
     }
   } else if (datos.feedlotSalida) {
     try {
       await registrarSalidaFeedLot({ rodeoId: datos.rodeo_id, fecha: datos.fecha, kilosSalida: Number(datos.kilos_promedio) });
     } catch (error) {
       console.warn('No se pudo registrar la salida de feed lot:', error);
+      advertencias.push(`No se pudo liberar el corral de ese rodeo (${error.message}) — revisalo en Stock.`);
     }
   }
 

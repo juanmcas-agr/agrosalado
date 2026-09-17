@@ -141,12 +141,24 @@ export async function titularesDelRodeo(rodeoId) {
 }
 
 // ─── Feed lot: corral + ciclo ───
+// Separado de registrarEntradaFeedLot para poder (re)confirmar el corral
+// de un rodeo SIN insertar un ciclo nuevo — se usa también cuando una
+// Apertura de stock reusa un rodeo que ya estaba en ese corral (ver
+// movimientos.js), para que un corral mal etiquetado (ej. por una falla
+// de red puntual la primera vez) se autocorrija en la próxima carga a ese
+// corral en vez de quedar roto hasta que alguien lo note.
+export async function actualizarCorralRodeo(rodeoId, corral) {
+  const { error } = await supabase.from('rodeos').update({ corral }).eq('id', rodeoId);
+  if (error) throw error;
+  const rodeo = cache.find((r) => r.id === rodeoId);
+  if (rodeo) rodeo.corral = corral;
+}
+
 // fecha/kilos de INGRESO salen del propio movimiento que trae el rodeo a
 // feed lot (no se vuelven a tipear); fecha estimada de salida y kilos
 // objetivo son el único dato nuevo que se pide en ese momento.
 export async function registrarEntradaFeedLot({ rodeoId, corral, fecha, kilosIngreso, fechaEstimadaSalida, kilosSalidaObjetivo }) {
-  const { error: errorCorral } = await supabase.from('rodeos').update({ corral }).eq('id', rodeoId);
-  if (errorCorral) throw errorCorral;
+  await actualizarCorralRodeo(rodeoId, corral);
   const { error } = await supabase.from('feed_lot_ciclos').insert({
     rodeo_id: rodeoId,
     fecha_ingreso: fecha,
@@ -162,8 +174,7 @@ export async function registrarEntradaFeedLot({ rodeoId, corral, fecha, kilosIng
 // abierto con la fecha/kilos reales del propio movimiento, y limpia el
 // corral (ya no está físicamente ahí).
 export async function registrarSalidaFeedLot({ rodeoId, fecha, kilosSalida }) {
-  const { error: errorCorral } = await supabase.from('rodeos').update({ corral: null }).eq('id', rodeoId);
-  if (errorCorral) throw errorCorral;
+  await actualizarCorralRodeo(rodeoId, null);
   const { error } = await supabase
     .from('feed_lot_ciclos')
     .update({ fecha_salida_real: fecha, kilos_salida_real: kilosSalida, activo: false })
