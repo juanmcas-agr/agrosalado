@@ -335,6 +335,18 @@ function rodeoActivoEnCorral(categoriaId, corral) {
     r.establecimiento_id === 'feed_lot' && r.categoria_id === categoriaId && r.corral === corral && r.activo);
 }
 
+// Caso real que reportó Juan: los animales de un corral "engordan" (pasan
+// a la siguiente categoría de SIGUIENTE_CATEGORIA) pero nadie cargó el
+// Cambio de categoría todavía — el corral sigue figurando con la
+// categoría vieja. Si el corral tiene la categoría ANTERIOR a la que se
+// está por vender, es (casi seguro) ese caso, no un error de carga.
+function categoriaAnteriorEnCorral(categoriaDeseada, corral) {
+  if (!corral) return null;
+  return obtenerRodeosCache().find((r) =>
+    r.establecimiento_id === 'feed_lot' && r.corral === corral && r.activo
+    && SIGUIENTE_CATEGORIA[r.categoria_id] === categoriaDeseada);
+}
+
 // IDs de los dos selectores de rodeo posibles — "origen" (siempre visible,
 // el rodeo que ya existe) y "destino" (solo para cambio_rodeo: separar/
 // fusionar animales en OTRO rodeo). Mismos ids que usaba el selector único
@@ -628,6 +640,100 @@ function actualizarBloqueFeedLot() {
   // que se resuelve al rodeo activo ahí recién al guardar (ver onSubmit).
   const salidaPorCorral = esSalidaFeedLotPorCorral(tipo, obtenerSeleccion('mov-establecimiento-origen'));
   el('mov-feedlot-salida').classList.toggle('oculto', !salidaPorCorral);
+
+  actualizarAvisoCambioCategoriaExpress();
+}
+
+// Si el corral elegido para vender no tiene la categoría pedida pero SÍ
+// tiene la categoría anterior de la cadena (ver categoriaAnteriorEnCorral
+// arriba), se ofrece resolverlo ahí mismo en vez de solo tirar el error
+// al guardar — mucho más claro para el encargado que se dio cuenta recién
+// al vender de que el corral "engordó" y nadie cargó el cambio antes.
+function actualizarAvisoCambioCategoriaExpress() {
+  const aviso = el('mov-feedlot-cambio-cat-aviso');
+  const tipo = obtenerSeleccion('mov-tipo');
+  if (!esSalidaFeedLotPorCorral(tipo, obtenerSeleccion('mov-establecimiento-origen'))) {
+    aviso.classList.add('oculto');
+    return;
+  }
+  const categoriaDeseada = obtenerSeleccion('mov-categoria-origen');
+  const corral = obtenerSeleccion('mov-feedlot-corral-origen');
+  if (!categoriaDeseada || !corral || rodeoActivoEnCorral(categoriaDeseada, corral)) {
+    aviso.classList.add('oculto');
+    return;
+  }
+  const rodeoAnterior = categoriaAnteriorEnCorral(categoriaDeseada, corral);
+  if (!rodeoAnterior) {
+    aviso.classList.add('oculto');
+    return;
+  }
+  const nombreAnterior = CATEGORIAS.find((c) => c.id === rodeoAnterior.categoria_id)?.nombre || rodeoAnterior.categoria_id;
+  const nombreDeseada = CATEGORIAS.find((c) => c.id === categoriaDeseada)?.nombre || categoriaDeseada;
+  el('mov-feedlot-cambio-cat-texto').textContent =
+    `⚠️ El Corral ${corral} todavía figura como ${nombreAnterior}, no ${nombreDeseada} — si ya engordaron, cambialos de categoría acá y seguí con la venta.`;
+  aviso.dataset.rodeoId = rodeoAnterior.id;
+  aviso.dataset.categoriaDestino = categoriaDeseada;
+  aviso.classList.remove('oculto');
+}
+
+// Ejecuta el Cambio de categoría "express": un movimiento real de tipo
+// cambio_categoria por cada titular con stock en ese rodeo+categoría (un
+// rodeo puede tener cabezas de más de un titular a la vez), usando el
+// peso promedio ponderado real de cada uno (stock_actual). Requiere
+// conexión — es un insert directo, no pasa por el outbox offline, mismo
+// criterio que "+Crear rodeo nuevo..." o crear el rodeo de Hotelería.
+async function ejecutarCambioCategoriaExpress() {
+  const aviso = el('mov-feedlot-cambio-cat-aviso');
+  const rodeoId = aviso.dataset.rodeoId;
+  const categoriaDestino = aviso.dataset.categoriaDestino;
+  if (!rodeoId || !categoriaDestino) return;
+  if (!navigator.onLine) {
+    mostrarMensaje('Necesitás conexión a internet para cambiar la categoría del corral.', 'error');
+    return;
+  }
+  const boton = el('mov-feedlot-cambio-cat-boton');
+  boton.disabled = true;
+  boton.textContent = 'Cambiando…';
+  try {
+    const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
+    const { data: stock, error: errorStock } = await supabase
+      .from('stock_actual')
+      .select('titular, cabezas, kilos_promedio_ponderado')
+      .eq('rodeo_id', rodeoId)
+      .eq('categoria', rodeo.categoria_id);
+    if (errorStock) throw errorStock;
+    const conStock = (stock || []).filter((f) => f.cabezas > 0);
+    if (!conStock.length) throw new Error('No encontré stock cargado en ese rodeo para cambiar de categoría.');
+
+    for (const fila of conStock) {
+      const { error: errorInsert } = await supabase.from('movimientos').insert({
+        id: crypto.randomUUID(),
+        tipo_movimiento: 'cambio_categoria',
+        fecha: el('mov-fecha').value || new Date().toISOString().slice(0, 10),
+        establecimiento_origen: 'feed_lot',
+        establecimiento_destino: 'feed_lot',
+        categoria_origen: rodeo.categoria_id,
+        categoria_destino: categoriaDestino,
+        titular_origen: fila.titular,
+        titular_destino: fila.titular,
+        cantidad_cabezas: fila.cabezas,
+        kilos_promedio: fila.kilos_promedio_ponderado,
+        usuario_id: getEstado().session.user.id,
+        rodeo_id: rodeoId,
+        observaciones: 'Cambio de categoría express (desde Venta en Feed Lot) — el corral ya tenía la categoría siguiente.',
+      });
+      if (errorInsert) throw errorInsert;
+    }
+
+    await cargarRodeos();
+    mostrarToast('✅ Categoría del corral actualizada — ya podés guardar la venta.');
+    actualizarAvisoCambioCategoriaExpress();
+  } catch (error) {
+    mostrarMensaje('No se pudo cambiar la categoría del corral: ' + error.message, 'error');
+  } finally {
+    boton.disabled = false;
+    boton.textContent = 'Cambiar categoría del corral y continuar';
+  }
 }
 
 // A feed lot no hace falta elegir un rodeo destino aparte: las cabezas
@@ -1263,6 +1369,8 @@ export async function initMovimientos() {
   el('mov-categoria-origen').addEventListener('cambio', () => {
     crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(obtenerSeleccion('mov-tipo')));
   });
+  el('mov-feedlot-corral-origen').addEventListener('cambio', actualizarAvisoCambioCategoriaExpress);
+  el('mov-feedlot-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
   ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
