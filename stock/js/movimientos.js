@@ -324,6 +324,17 @@ function esSinRodeo(cfg, tipo, establecimientoOrigen, establecimientoDestino) {
   return Boolean(cfg?.sinRodeo) || esAperturaFeedLot(tipo, establecimientoDestino) || esSalidaFeedLotPorCorral(tipo, establecimientoOrigen);
 }
 
+// El corral es una identidad FIJA dentro de Feed Lot, no un batch nuevo
+// por cada carga: "Corral 3" siempre es el mismo rodeo mientras tenga
+// stock de esa categoría (obtenerRodeosCache() ya está cargada por
+// initMovimientos, no requiere conexión). Usado tanto para reusar el
+// rodeo en una Apertura de stock repetida al mismo corral, como para
+// resolverlo al vender/sacar stock de ahí.
+function rodeoActivoEnCorral(categoriaId, corral) {
+  return obtenerRodeosCache().find((r) =>
+    r.establecimiento_id === 'feed_lot' && r.categoria_id === categoriaId && r.corral === corral && r.activo);
+}
+
 // IDs de los dos selectores de rodeo posibles — "origen" (siempre visible,
 // el rodeo que ya existe) y "destino" (solo para cambio_rodeo: separar/
 // fusionar animales en OTRO rodeo). Mismos ids que usaba el selector único
@@ -1112,14 +1123,10 @@ async function onSubmit(evento) {
       // lote original, no crea uno nuevo.
       datos.rodeo_id = rodeoIdEditandoSinRodeo;
     } else if (esSalidaFeedLotPorCorral(datos.tipo, datos.establecimiento_origen)) {
-      // Vender (u otra salida) desde Feed Lot no crea nada — busca en la
-      // caché (no requiere conexión) el rodeo YA ACTIVO en ese corral y
-      // categoría. Si no hay ninguno, no hay nada que vender de ahí.
-      const rodeoEnCorral = obtenerRodeosCache().find((r) =>
-        r.establecimiento_id === 'feed_lot'
-        && r.categoria_id === datos.categoria_origen
-        && r.corral === datos.feedlotCorralOrigen
-        && r.activo);
+      // Vender (u otra salida) desde Feed Lot no crea nada — busca el
+      // rodeo YA ACTIVO en ese corral y categoría. Si no hay ninguno, no
+      // hay nada que vender de ahí.
+      const rodeoEnCorral = rodeoActivoEnCorral(datos.categoria_origen, datos.feedlotCorralOrigen);
       if (!rodeoEnCorral) {
         mostrarMensaje(
           `No encontré un rodeo activo de esa categoría en el Corral ${datos.feedlotCorralOrigen} — revisá la categoría y el corral elegidos.`,
@@ -1128,6 +1135,17 @@ async function onSubmit(evento) {
         return;
       }
       datos.rodeo_id = rodeoEnCorral.id;
+    } else if (esAperturaFeedLot(datos.tipo, datos.establecimiento_destino) && rodeoActivoEnCorral(datos.categoria_destino, datos.feedlotCorral)) {
+      // El corral ya tiene un rodeo activo de esa categoría (de una
+      // apertura anterior) — se suma stock a ESE, no se crea uno nuevo
+      // cada vez. Sin esto, cada apertura al mismo corral abría un rodeo
+      // distinto ("Corral 3 Novillito 202603", "...202604", etc.).
+      datos.rodeo_id = rodeoActivoEnCorral(datos.categoria_destino, datos.feedlotCorral).id;
+      // El rodeo ya está "adentro" de feed lot desde que se creó (mismo
+      // corral, mismo ciclo activo) — no es una entrada nueva, así que no
+      // hay que volver a registrarla (evita duplicar filas en
+      // feed_lot_ciclos para el mismo rodeo).
+      datos.feedlotEntrada = false;
     } else if (!navigator.onLine) {
       mostrarMensaje('Necesitás conexión a internet para cargar esto (crea un rodeo nuevo).', 'error');
       return;
@@ -1140,7 +1158,8 @@ async function onSubmit(evento) {
           nombreRodeo = `Hotelería ${cliente?.nombre || datos.cliente}`;
           esHoteleria = true;
         } else {
-          // Apertura de stock a Feed Lot: el rodeo no importa, lo que
+          // Apertura de stock a Feed Lot (primera vez en este corral+
+          // categoría, ver rama de arriba): el rodeo no importa, lo que
           // importa es el corral (ver esAperturaFeedLot más arriba) — se
           // nombra por corral + categoría solo para que sea identificable
           // en Historial/Stock, nunca se elige a mano.
