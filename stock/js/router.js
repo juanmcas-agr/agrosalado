@@ -3,6 +3,7 @@ import { cargarHistorial, cargarHistorialManga } from './historial.js';
 import { refrescarDiferenciasPendientes, refrescarRectificacionesPendientes, refrescarConsultaManga } from './trabajoManga.js';
 import { refrescarReportes } from './reportes.js';
 import { refrescarConsultaEstablecimiento } from './movimientos.js';
+import { cargarRodeos } from './rodeos.js';
 
 const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'reportes'];
 // Un puestero carga datos pero no ve Stock/Historial/Reportes (esas
@@ -40,7 +41,13 @@ function renderRoute(rol) {
   if (pantalla === 'dashboard') refrescarDashboard();
   if (pantalla === 'historial') { cargarHistorial(); cargarHistorialManga(); }
   if (pantalla === 'manga' || pantalla === 'cargar') refrescarDiferenciasPendientes();
-  if (pantalla === 'cargar') refrescarConsultaEstablecimiento();
+  // La caché de rodeos se carga una sola vez al entrar a la app — si
+  // alguien corrió una migración o cargó algo desde otra sesión mientras
+  // esta quedó abierta, Cargar movimiento (que resuelve rodeos por
+  // corral en Feed Lot, sin selector manual ni "+Crear nuevo..." de
+  // respaldo) se queda con datos viejos. Se refresca cada vez que se
+  // entra a esta pantalla para que eso no se note.
+  if (pantalla === 'cargar') { refrescarConsultaEstablecimiento(); cargarRodeos(); }
   if (pantalla === 'manga') { refrescarRectificacionesPendientes(); refrescarConsultaManga(); }
   if (pantalla === 'reportes') refrescarReportes();
 }
