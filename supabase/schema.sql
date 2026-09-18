@@ -814,19 +814,24 @@ grant execute on function resetear_hacienda() to authenticated;
 -- usa el mismo rodeo que origen); 'cambio_rodeo' y 'traslado' sí lo
 -- completan, y ahí el lado que ENTRA cabezas debe acreditarse al rodeo
 -- destino, no al de origen.
+-- "reemplazado_por is null": un movimiento editado sigue existiendo (para
+-- el historial/auditoría) pero deja de contar para el stock — solo la
+-- versión más nueva de la cadena (la corrección, o el original si nunca
+-- se editó) debe sumar. Sin este filtro, editar un movimiento duplicaba
+-- el stock: la fila vieja seguía sumando y la corrección sumaba de nuevo.
 create view movimiento_lineas with (security_invoker = true) as
   select id, fecha, establecimiento_destino as establecimiento, categoria_destino as categoria,
          coalesce(titular_destino, 'agro_salado') as titular,
          coalesce(rodeo_destino_id, rodeo_id) as rodeo_id,
          cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
-  where not anulado and establecimiento_destino is not null
+  where not anulado and reemplazado_por is null and establecimiento_destino is not null
   union all
   select id, fecha, establecimiento_origen as establecimiento, categoria_origen as categoria,
          coalesce(titular_origen, 'agro_salado') as titular, rodeo_id,
          -cantidad_cabezas as delta_cabezas, kilos_promedio, usuario_id
   from movimientos
-  where not anulado and establecimiento_origen is not null;
+  where not anulado and reemplazado_por is null and establecimiento_origen is not null;
 -- Nota: los movimientos previos a la funcionalidad de titularidad no tienen
 -- titular cargado; se asumen de Agro Salado (coalesce) para no perder stock
 -- en los totales. Si corresponde, se pueden corregir cargando un
