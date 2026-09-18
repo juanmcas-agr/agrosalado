@@ -1,5 +1,8 @@
 import { initAuth, onAuthChange, iniciarSesion, cerrarSesion, getEstado } from './auth.js';
-import { initSync, onSyncChange, reintentarErrores } from './sync.js';
+import { initSync, onSyncChange, reintentarErrores, outboxConError, descartarDeLaCola } from './sync.js';
+import { TIPOS_MOVIMIENTO, CATEGORIAS } from './config.js';
+import { obtenerTitularesCache } from './titulares.js';
+import { obtenerRodeosCache } from './rodeos.js';
 import { initMovimientos } from './movimientos.js';
 import { initTrabajoManga } from './trabajoManga.js';
 import { initDashboard } from './dashboard.js';
@@ -32,7 +35,7 @@ function iniciarPantallasDeLaApp(rol) {
 function actualizarBannerSync({ pendientes, conError }) {
   const banner = el('sync-estado');
   if (conError) {
-    banner.textContent = `${conError} movimiento(s) con error de sincronización. Tocá para reintentar.`;
+    banner.textContent = `${conError} movimiento(s) que el servidor rechazó. Tocá para ver el detalle.`;
     banner.className = 'banner-sync error clickeable';
   } else if (pendientes) {
     banner.textContent = `${pendientes} movimiento(s) pendiente(s) de sincronizar...`;
@@ -41,26 +44,123 @@ function actualizarBannerSync({ pendientes, conError }) {
     banner.textContent = 'Todo sincronizado.';
     banner.className = 'banner-sync ok';
   }
+  // Si ya no hay rechazados (se reintentaron bien o se descartaron), el
+  // panel de detalle no tiene nada que mostrar.
+  if (!conError) el('sync-cola').classList.add('oculto');
 }
 
-let reintentando = false;
+const NOMBRES_TITULAR_BASE = { agro_salado: 'Agro Salado', dona_julia: 'Doña Julia' };
+
+function nombreTitular(id) {
+  if (!id) return '';
+  return NOMBRES_TITULAR_BASE[id] || obtenerTitularesCache().find((t) => t.id === id)?.nombre || id;
+}
+
+// Una línea legible del movimiento trabado, para que se pueda reconocer
+// cuál es sin tener que adivinar por el id.
+function describirFilaCola(fila) {
+  const partes = [TIPOS_MOVIMIENTO[fila.tipo_movimiento]?.nombre || fila.tipo_movimiento];
+  if (fila.fecha) partes.push(fila.fecha.split('-').reverse().join('/'));
+  partes.push(`${fila.cantidad_cabezas} cab.`);
+  const categoria = CATEGORIAS.find((c) => c.id === (fila.categoria_origen || fila.categoria_destino))?.nombre;
+  if (categoria) partes.push(categoria);
+  const titular = nombreTitular(fila.titular_origen || fila.titular_destino);
+  if (titular) partes.push(`de ${titular}`);
+  const rodeo = obtenerRodeosCache().find((r) => r.id === fila.rodeo_id)?.codigo;
+  if (rodeo) partes.push(`(${rodeo})`);
+  return partes.join(' · ');
+}
+
+let ocupadoCola = false;
+
+// Se arma con nodos del DOM, no con innerHTML: el texto del error trae
+// nombres cargados por el usuario (rodeos, capitalizadores), y concatenarlos
+// como HTML sería una vía de inyección.
+async function renderColaErrores() {
+  const panel = el('sync-cola');
+  const items = await outboxConError();
+  panel.textContent = '';
+  if (!items.length) {
+    panel.classList.add('oculto');
+    return;
+  }
+
+  const titulo = document.createElement('div');
+  titulo.className = 'cola-titulo';
+  titulo.textContent = `El servidor rechazó ${items.length} movimiento(s)`;
+  panel.appendChild(titulo);
+
+  const ayuda = document.createElement('div');
+  ayuda.className = 'cola-ayuda';
+  ayuda.textContent = 'Están guardados en este celular pero no entraron al sistema. Corregí lo que diga el error y reintentá, o descartalos si ya no corresponden (descartar no se puede deshacer).';
+  panel.appendChild(ayuda);
+
+  for (const item of items) {
+    const fila = document.createElement('div');
+    fila.className = 'cola-item';
+
+    const desc = document.createElement('div');
+    desc.className = 'cola-item-desc';
+    desc.textContent = describirFilaCola(item);
+    fila.appendChild(desc);
+
+    const error = document.createElement('div');
+    error.className = 'cola-item-error';
+    error.textContent = item.ultimo_error || 'Sin detalle del error.';
+    fila.appendChild(error);
+
+    const descartar = document.createElement('button');
+    descartar.type = 'button';
+    descartar.className = 'boton-secundario';
+    descartar.textContent = 'Descartar este movimiento';
+    descartar.addEventListener('click', async () => {
+      if (ocupadoCola) return;
+      if (!confirm(`¿Descartar este movimiento?\n\n${describirFilaCola(item)}\n\nNo se va a cargar nunca y no se puede deshacer.`)) return;
+      ocupadoCola = true;
+      try {
+        await descartarDeLaCola(item.id);
+        await renderColaErrores();
+      } finally {
+        ocupadoCola = false;
+      }
+    });
+    fila.appendChild(descartar);
+
+    panel.appendChild(fila);
+  }
+
+  const acciones = document.createElement('div');
+  acciones.className = 'cola-acciones';
+  const reintentar = document.createElement('button');
+  reintentar.type = 'button';
+  reintentar.className = 'boton-secundario';
+  reintentar.textContent = 'Reintentar todos';
+  reintentar.addEventListener('click', async () => {
+    if (ocupadoCola) return;
+    ocupadoCola = true;
+    reintentar.textContent = 'Reintentando...';
+    reintentar.disabled = true;
+    try {
+      await reintentarErrores();
+      await renderColaErrores();
+    } finally {
+      ocupadoCola = false;
+    }
+  });
+  acciones.appendChild(reintentar);
+  panel.appendChild(acciones);
+
+  panel.classList.remove('oculto');
+}
 
 function wireSyncBanner() {
   el('sync-estado').addEventListener('click', async () => {
-    if (reintentando) return;
-    reintentando = true;
-    const banner = el('sync-estado');
-    const original = banner.textContent;
-    banner.textContent = 'Reintentando...';
-    try {
-      const erroresRestantes = await reintentarErrores();
-      if (erroresRestantes.length) {
-        alert('Todavía no se pudieron sincronizar. Error de Supabase:\n\n' + erroresRestantes.join('\n'));
-      }
-    } finally {
-      reintentando = false;
-      if (banner.textContent === 'Reintentando...') banner.textContent = original;
+    const panel = el('sync-cola');
+    if (!panel.classList.contains('oculto')) {
+      panel.classList.add('oculto');
+      return;
     }
+    await renderColaErrores();
   });
 }
 

@@ -384,6 +384,29 @@ button:active { filter: brightness(0.9); }
 .banner-sync.error { background: #f8d7da; color: #ad1e19; }
 .banner-sync.clickeable { cursor: pointer; }
 
+/* Detalle de los movimientos que el servidor rechazó (se abre tocando el
+   banner de error de sincronización). */
+.panel-cola {
+  border: 1px solid #f5c2c7;
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  background: #fff5f5;
+}
+.panel-cola .cola-titulo { font-weight: bold; color: #ad1e19; font-size: 0.9em; }
+.panel-cola .cola-ayuda { font-size: 0.85em; color: #666; margin: 4px 0 8px; }
+.panel-cola .cola-item {
+  border-top: 1px solid #f5c2c7;
+  padding: 8px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+.panel-cola .cola-item-desc { font-size: 0.9em; font-weight: bold; }
+.panel-cola .cola-item-error { font-size: 0.85em; color: #ad1e19; }
+.panel-cola .cola-acciones { display: flex; gap: 8px; margin-top: 10px; }
+
 .banner-indices {
   text-align: center;
   padding: 6px;

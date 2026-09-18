@@ -92,11 +92,30 @@ export async function trySync() {
   }
 }
 
-// Se llama desde el banner "Tocá para reintentar": trySync() ignora para
-// siempre los movimientos que ya llegaron a 'error' (así no reintenta sin
-// parar algo roto), así que esta función los reintenta directo, una vez,
-// fuera de ese circuito, y avisa en el momento si siguen fallando (en vez
-// de dejarlos en 'pending' esperando 3 ciclos automáticos más).
+// Los movimientos que el servidor rechazó (no por falta de red: por una
+// validación que no se cumple, ej. "no hay stock suficiente"). Quedan
+// guardados acá para que el usuario pueda verlos y decidir — si no, el
+// banner de error no se va nunca y no hay forma de saber qué los trabó.
+export async function outboxConError() {
+  const todos = await outboxGetAll();
+  return todos.filter((m) => m.sync_status === 'error');
+}
+
+// Saca un movimiento de la cola sin mandarlo. Es la única salida cuando el
+// servidor lo rechaza por algo que ya no tiene arreglo (ej. una venta
+// cargada sin señal contra stock que ya no existe): antes quedaba trabado
+// para siempre, con el banner de error permanente y sin forma de sacarlo
+// que no fuera borrar los datos del navegador.
+export async function descartarDeLaCola(id) {
+  await outboxDelete(id);
+  await reportarEstado();
+}
+
+// Se llama desde el panel de la cola: trySync() ignora para siempre los
+// movimientos que ya llegaron a 'error' (así no reintenta sin parar algo
+// roto), así que esta función los reintenta directo, una vez, fuera de ese
+// circuito, y avisa en el momento si siguen fallando (en vez de dejarlos
+// en 'pending' esperando 3 ciclos automáticos más).
 export async function reintentarErrores() {
   const todos = await outboxGetAll();
   const conError = todos.filter((m) => m.sync_status === 'error');
