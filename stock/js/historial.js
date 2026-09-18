@@ -39,7 +39,7 @@ function poblarFiltros() {
   if (!selEstado.options.length) {
     selEstado.innerHTML = `
       <option value="activos" selected>Sin anular</option>
-      <option value="anulados">Anulados</option>
+      <option value="anulados">Anulados / editados</option>
       <option value="">Todos</option>
     `;
   }
@@ -215,8 +215,12 @@ export async function cargarHistorial() {
     }
     if (tipo) query = query.eq('tipo_movimiento', tipo);
     if (usuario) query = query.eq('usuario_id', usuario);
-    if (estado === 'activos') query = query.eq('anulado', false);
-    else if (estado === 'anulados') query = query.eq('anulado', true);
+    // "Sin anular" también deja afuera al movimiento que quedó reemplazado
+    // por una corrección (editar un movimiento) — ya no está vigente, así
+    // que no tiene sentido verlo mezclado con los que sí cuentan para el
+    // stock. Sigue pudiéndose ver desde "Anulados / editados" o "Todos".
+    if (estado === 'activos') query = query.eq('anulado', false).is('reemplazado_por', null);
+    else if (estado === 'anulados') query = query.or('anulado.eq.true,reemplazado_por.not.is.null');
     if (desde) query = query.gte('fecha', desde);
     if (hasta) query = query.lte('fecha', hasta);
   }
