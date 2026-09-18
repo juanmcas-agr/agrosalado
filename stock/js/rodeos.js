@@ -151,6 +151,25 @@ export async function stockDelRodeoPorCategoriaYTitular(rodeoId, categoriaId, ti
   return data.reduce((acc, r) => acc + Number(r.cabezas), 0);
 }
 
+// Igual que la de arriba, pero además devuelve el kilo promedio ponderado
+// — lo usa el Cambio de categoría "express" (ver movimientos.js) para
+// saber no solo si hay stock de la categoría anterior de la cadena, sino
+// cuántas cabezas y con qué peso mover exactamente.
+export async function stockDetalleRodeoCategoriaYTitular(rodeoId, categoriaId, titularId) {
+  const { data, error } = await supabase
+    .from('stock_actual')
+    .select('cabezas, kilos_promedio_ponderado')
+    .eq('rodeo_id', rodeoId)
+    .eq('categoria', categoriaId)
+    .eq('titular', titularId);
+  if (error) throw error;
+  const cabezas = data.reduce((acc, r) => acc + Number(r.cabezas), 0);
+  const kilosPromedioPonderado = cabezas > 0
+    ? data.reduce((acc, r) => acc + Number(r.cabezas) * Number(r.kilos_promedio_ponderado), 0) / cabezas
+    : null;
+  return { cabezas, kilosPromedioPonderado };
+}
+
 // Titulares con cabezas reales en un rodeo (para no dejar elegir, al
 // cargar un movimiento de salida/interna, una titularidad que ese rodeo
 // ni siquiera tiene).
