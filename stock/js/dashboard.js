@@ -170,6 +170,31 @@ function renderEstado({ offline, fetchedAt, fecha }) {
   contenedor.className = 'advertencia';
 }
 
+// Un bolsillo (rodeo + categoría + titular) en negativo significa que se
+// sacaron más cabezas de las que había — dato roto que hay que corregir a
+// mano. Desde la migración 042 la base no deja que pase, pero los que
+// hayan quedado de antes seguirían restando en silencio de los totales.
+function renderStockNegativo(rows) {
+  const contenedor = el('dash-stock-negativo');
+  const negativos = rows.filter((r) => r.cabezas < 0);
+  if (!negativos.length) {
+    contenedor.classList.add('oculto');
+    contenedor.textContent = '';
+    return;
+  }
+  const detalle = negativos.map((r) => {
+    const rodeo = r.rodeo || obtenerRodeosCache().find((x) => x.id === r.rodeo_id)?.codigo || 'sin rodeo';
+    const categoria = CATEGORIAS.find((c) => c.id === r.categoria)?.nombre || r.categoria;
+    // Agro Salado y Doña Julia no viven en la tabla titulares (son fijos),
+    // así que el cache solo resuelve capitalizadores/clientes.
+    const NOMBRES_BASE = { agro_salado: 'Agro Salado', dona_julia: 'Doña Julia' };
+    const titular = NOMBRES_BASE[r.titular] || obtenerTitularesCache().find((t) => t.id === r.titular)?.nombre || r.titular;
+    return `${rodeo} — ${categoria} de ${titular}: ${r.cabezas}`;
+  }).join(' · ');
+  contenedor.textContent = `⚠️ Hay stock en negativo (se sacaron más cabezas de las que había): ${detalle}. Estos totales están mal hasta que se corrija: revisá el Historial de ese rodeo y anulá o corregí el movimiento que sobra.`;
+  contenedor.classList.remove('oculto');
+}
+
 function renderResumenTitularidad(rows) {
   const suma = (filtro) => rows.filter(filtro).reduce((acc, r) => acc + r.cabezas, 0);
   const totalAgro = suma((r) => r.titular === 'agro_salado');
@@ -397,6 +422,7 @@ export async function refrescarDashboard() {
 
   ultimasFilasStock = rows;
   renderEstado({ offline, fetchedAt, fecha });
+  renderStockNegativo(rows);
   renderResumenTitularidad(rows);
   renderTablaCategoria();
   renderTablaEstablecimiento();

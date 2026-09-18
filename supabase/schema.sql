@@ -854,6 +854,130 @@ create view stock_actual with (security_invoker = true) as
   left join rodeos r on r.id = ml.rodeo_id
   group by ml.establecimiento, ml.categoria, ml.titular, ml.rodeo_id, r.codigo;
 
+-- ─── Stock no negativo (ver migración 042) ──────────────────────────────
+-- Va acá, después de las vistas, porque necesita movimiento_lineas: es la
+-- misma definición de "bolsillo" (establecimiento + categoría + titular +
+-- rodeo) que usa todo el stock.
+--
+-- El chequeo de disponibilidad del cliente (validarStockDisponible en
+-- stock/js/movimientos.js) NO alcanza: se saltea sin señal, no puede ver
+-- lo que carga otro usuario al mismo tiempo, y un movimiento encolado
+-- offline sincroniza cuando el stock ya cambió. Este trigger es la única
+-- barrera que no se puede esquivar.
+create or replace function validar_stock_no_negativo() returns trigger
+language plpgsql as $$
+declare
+  v_est text;
+  v_cat text;
+  v_tit text;
+  v_rodeo uuid;
+  v_saca int;
+  v_stock int;
+  v_excluir uuid := null;
+  v_es_update boolean := false;
+  v_nombre_cat text;
+  v_nombre_tit text;
+  v_nombre_rodeo text;
+begin
+  if tg_op = 'INSERT' then
+    -- Reenvío de la cola offline: si el movimiento YA está guardado, este
+    -- insert no hace nada (sync.js manda upsert con ignoreDuplicates) pero
+    -- el trigger corre igual. Sin esta salida, un reintento después de una
+    -- respuesta perdida fallaría con "no hay stock" — porque ese mismo
+    -- movimiento ya está descontado.
+    if exists (select 1 from movimientos where id = new.id) then return new; end if;
+
+    -- Las entradas puras (apertura, compra, hotelería, parición) no tienen
+    -- establecimiento_origen: no pueden dejar nada en negativo.
+    if new.establecimiento_origen is null then return new; end if;
+    v_est := new.establecimiento_origen;
+    v_cat := new.categoria_origen;
+    v_tit := coalesce(new.titular_origen, 'agro_salado');
+    v_rodeo := new.rodeo_id;
+    v_saca := new.cantidad_cabezas;
+
+    -- Corrección de un movimiento ("Editar" en el Historial): el original
+    -- todavía cuenta en este instante y deja de contar recién un renglón
+    -- más abajo, al marcarlo como reemplazado. Sin descontarlo acá,
+    -- corregir una venta que dejó el corral en cero quedaría bloqueada
+    -- contra sí misma, siempre.
+    v_excluir := new.editado_de;
+  else
+    -- Si ya no contaba (anulado o reemplazado de antes), volver a sacarlo
+    -- no cambia ningún stock.
+    if old.anulado or old.reemplazado_por is not null then return new; end if;
+
+    -- UPDATE: solo importa cuando el movimiento DEJA de contar (se anula o
+    -- queda reemplazado por una corrección). Ahí desaparece lo que había
+    -- ACREDITADO, y eso sí puede dejar el destino en negativo (ej. anular
+    -- una apertura de stock de la que ya se vendió).
+    if not ((new.anulado and not old.anulado)
+            or (new.reemplazado_por is not null and old.reemplazado_por is null)) then
+      return new;
+    end if;
+    if new.establecimiento_destino is null then return new; end if;
+    v_es_update := true;
+    v_est := new.establecimiento_destino;
+    v_cat := new.categoria_destino;
+    v_tit := coalesce(new.titular_destino, 'agro_salado');
+    v_rodeo := coalesce(new.rodeo_destino_id, new.rodeo_id);
+    v_saca := new.cantidad_cabezas;
+  end if;
+
+  if v_cat is null or v_rodeo is null then return new; end if;
+
+  -- Serializa contra otra transacción que toque el mismo bolsillo: sin
+  -- esto, dos ventas simultáneas del mismo corral leen las dos el stock
+  -- viejo, pasan las dos, y queda negativo igual.
+  perform pg_advisory_xact_lock(
+    hashtext(v_est || '|' || v_cat || '|' || v_tit || '|' || v_rodeo::text)::bigint
+  );
+
+  -- En INSERT la fila nueva todavía no está; en UPDATE la vieja todavía
+  -- cuenta. En los dos casos, lo que queda después es lo de ahora menos lo
+  -- que este movimiento saca (o deja de acreditar).
+  select coalesce(sum(delta_cabezas), 0) into v_stock
+  from movimiento_lineas
+  where establecimiento = v_est
+    and categoria = v_cat
+    and titular = v_tit
+    and rodeo_id = v_rodeo
+    and (v_excluir is null or id <> v_excluir);
+
+  if v_stock - v_saca >= 0 then return new; end if;
+
+  select nombre into v_nombre_cat from categorias where id = v_cat;
+  select nombre into v_nombre_tit from titulares where id = v_tit;
+  select codigo into v_nombre_rodeo from rodeos where id = v_rodeo;
+
+  if v_es_update then
+    raise exception
+      'No se puede % este movimiento: dejaría a % con % cabeza(s) de % en % (stock negativo). Anulá o corregí primero los movimientos posteriores que sacaron de ahí.',
+      case when new.anulado then 'anular' else 'corregir' end,
+      coalesce(v_nombre_tit, v_tit),
+      v_stock - v_saca,
+      coalesce(v_nombre_cat, v_cat),
+      coalesce(v_nombre_rodeo, 'ese rodeo');
+  else
+    raise exception
+      'No hay stock suficiente: % tiene % cabeza(s) de % en % y este movimiento saca %. Revisá la cantidad, el corral/rodeo y el titular.',
+      coalesce(v_nombre_tit, v_tit),
+      v_stock,
+      coalesce(v_nombre_cat, v_cat),
+      coalesce(v_nombre_rodeo, 'ese rodeo'),
+      v_saca;
+  end if;
+
+  return new;
+end;
+$$;
+
+-- Corre después de trg_validar_movimiento (mismo momento, orden
+-- alfabético): primero la forma del movimiento, después la disponibilidad.
+create trigger trg_validar_stock_no_negativo
+  before insert or update on movimientos
+  for each row execute function validar_stock_no_negativo();
+
 -- ─── Vista de historial (con etiquetas legibles para la UI) ─────────────
 
 create view historial_movimientos with (security_invoker = true) as
