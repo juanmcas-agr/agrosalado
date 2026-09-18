@@ -8,7 +8,6 @@ import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
 import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
 import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, stockDetalleRodeoCategoriaYTitular, titularesDelRodeo, rodeoDelCorral } from './rodeos.js';
-import { marcarComoReemplazado } from './historial.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
@@ -1236,13 +1235,9 @@ async function onSubmit(evento) {
     return;
   }
 
-  // Guardar una corrección exige conexión: además de encolar el movimiento
-  // nuevo, hay que marcar el original como reemplazado con un UPDATE en
-  // vivo (no pasa por el outbox) — mismo criterio que anular.
-  if (datos.editandoId && !navigator.onLine) {
-    mostrarMensaje('Necesitás conexión a internet para guardar una corrección.', 'error');
-    return;
-  }
+  // Corregir ya no exige conexión: la marca del original viaja con la
+  // corrección en el mismo ítem de la cola (ver guardarMovimiento en
+  // sync.js), así que las dos entran juntas o ninguna.
 
   // No aplica al editar (no tiene sentido que un movimiento se marque
   // "duplicado" de sí mismo) ni sin conexión (no hay forma de chequear).
@@ -1291,22 +1286,10 @@ async function onSubmit(evento) {
     return;
   }
 
+  // armarFila deja editado_de = id del movimiento corregido: sync.js lo usa
+  // para marcar el original como reemplazado apenas entra la corrección.
   const fila = armarFila(datos);
   await encolarMovimiento(fila);
-
-  if (datos.editandoId) {
-    try {
-      await marcarComoReemplazado(datos.editandoId, fila.id);
-    } catch (error) {
-      mostrarMensaje(
-        `La corrección se guardó, pero no se pudo marcar el movimiento original como reemplazado: ${error.message}. Avisá para resolverlo a mano.`,
-        'advertencia'
-      );
-      cancelarEdicion();
-      mostrarToast('✅ CORRECCIÓN REGISTRADA');
-      return;
-    }
-  }
 
   mostrarToast(datos.editandoId ? '✅ CORRECCIÓN REGISTRADA' : '✅ MOVIMIENTO REGISTRADO');
   if (advertencias.length) {

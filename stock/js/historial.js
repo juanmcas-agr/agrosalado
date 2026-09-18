@@ -130,18 +130,13 @@ async function anularMovimiento(id) {
   await cargarHistorial();
 }
 
-// Se llama desde movimientos.js al confirmar una corrección — el
-// movimiento nuevo ya se guardó (con editado_de=id), esto solo marca el
-// viejo. Requiere conexión (igual que anular): es un UPDATE puntual, no
-// pasa por el outbox offline.
-export async function marcarComoReemplazado(idOriginal, idNuevo) {
-  const { error } = await supabase.from('movimientos').update({ reemplazado_por: idNuevo }).eq('id', idOriginal);
-  if (error) throw error;
-}
+// Marcar el original como reemplazado ya no se hace acá: viaja junto con la
+// corrección en el mismo ítem de la cola de sincronización (ver
+// guardarMovimiento en sync.js), para que no puedan entrar por separado.
 
 // Pide precargar el formulario de "Cargar movimiento" con esta fila — vía
 // evento en vez de importar movimientos.js directo, para no armar un
-// import circular (movimientos.js si necesita marcarComoReemplazado de acá).
+// import circular entre los dos módulos.
 function pedirEdicion(fila) {
   document.dispatchEvent(new CustomEvent('hacienda:editar-movimiento', { detail: fila }));
 }

@@ -51,6 +51,36 @@ function esErrorDeRed(error) {
   return !error?.code && /fetch|network|failed/i.test(msg);
 }
 
+// Guarda el movimiento y, si es una corrección (editado_de), marca el
+// original como reemplazado para que deje de contar en el stock.
+//
+// Las dos operaciones viajan juntas en el MISMO ítem de la cola a
+// propósito: antes la corrección se encolaba (durable) pero la marca se
+// mandaba en vivo desde el formulario, así que si la conexión se cortaba
+// entre una y otra —o si navigator.onLine mentía, que es lo normal con un
+// wifi sin internet— la corrección terminaba entrando y el original seguía
+// contando: stock duplicado, con un aviso que se perdía de vista. Acá, si
+// la marca falla, el ítem NO se borra de la cola y se reintenta entero.
+// Reintentarlo es inofensivo: el upsert no duplica (ignoreDuplicates) y el
+// update deja exactamente el mismo valor.
+async function guardarMovimiento(fila) {
+  const { error } = await supabase
+    .from('movimientos')
+    .upsert(fila, { onConflict: 'id', ignoreDuplicates: true });
+  if (error) return error;
+  if (!fila.editado_de) return null;
+
+  const { error: errorMarca } = await supabase
+    .from('movimientos')
+    .update({ reemplazado_por: fila.id })
+    .eq('id', fila.editado_de);
+  if (!errorMarca) return null;
+  return {
+    ...errorMarca,
+    message: `La corrección entró, pero no se pudo marcar el movimiento original como reemplazado: ${errorMarca.message}`,
+  };
+}
+
 export async function trySync() {
   if (sincronizando) return;
   sincronizando = true;
@@ -61,9 +91,7 @@ export async function trySync() {
 
     for (const item of todos) {
       const { sync_status, intentos, ultimo_error, creado_localmente_at, ...fila } = item;
-      const { error } = await supabase
-        .from('movimientos')
-        .upsert(fila, { onConflict: 'id', ignoreDuplicates: true });
+      const error = await guardarMovimiento(fila);
 
       if (!error) {
         await outboxDelete(item.id);
@@ -124,9 +152,7 @@ export async function reintentarErrores() {
   const siguenFallando = [];
   for (const item of conError) {
     const { sync_status, intentos, ultimo_error, creado_localmente_at, ...fila } = item;
-    const { error } = await supabase
-      .from('movimientos')
-      .upsert(fila, { onConflict: 'id', ignoreDuplicates: true });
+    const error = await guardarMovimiento(fila);
 
     if (!error) {
       await outboxDelete(item.id);

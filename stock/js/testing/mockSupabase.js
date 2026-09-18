@@ -155,6 +155,13 @@ function clonar(filas) {
 export function activarMockSupabase(supabase, tablas) {
   const TABLAS = tablas || tablasVacias();
 
+  // Inyección de fallas, para probar los caminos de error sin tener que
+  // desenchufar nada. Desde la consola:
+  //   window.__MOCK.fallas.update = { code: 'X', message: 'lo que sea' }
+  //   window.__MOCK.fallas.update = { message: 'Failed to fetch' }  // "sin red"
+  const fallas = { insert: null, upsert: null, update: null };
+  const comoError = (falla) => ({ then: (resolve) => resolve({ data: null, error: falla }) });
+
   supabase.auth.getSession = async () => ({ data: { session: { user: { id: 'u1' } } } });
   supabase.auth.onAuthStateChange = () => ({ data: { subscription: { unsubscribe() {} } } });
   supabase.auth.signInWithPassword = async () => ({ data: { session: { user: { id: 'u1' } } }, error: null });
@@ -178,6 +185,7 @@ export function activarMockSupabase(supabase, tablas) {
     const builder = {
       select() { return builder; },
       insert(obj) {
+        if (fallas.insert) return comoError(fallas.insert);
         const objs = Array.isArray(obj) ? obj : [obj];
         const nuevas = objs.map((o) => ({ id: 'gen_' + Math.random().toString(36).slice(2), activo: true, ...o }));
         if (tabla === 'movimientos') {
@@ -192,6 +200,7 @@ export function activarMockSupabase(supabase, tablas) {
         return builder;
       },
       upsert(obj, opciones) {
+        if (fallas.upsert) return comoError(fallas.upsert);
         const objs = Array.isArray(obj) ? obj : [obj];
         for (const o of objs) {
           const existente = TABLAS[tabla].find((f) => f.id === o.id);
@@ -248,6 +257,10 @@ export function activarMockSupabase(supabase, tablas) {
         return Promise.resolve({ data: r.data?.[0] ?? null, error: r.data?.[0] ? null : { message: 'no encontrado' } });
       },
       then(resolve) {
+        if (modo === 'update' && fallas.update) {
+          resolve({ data: null, error: fallas.update });
+          return;
+        }
         if (modo === 'delete') {
           const aBorrar = new Set(filas.map((f) => f.id));
           TABLAS[tabla] = TABLAS[tabla].filter((f) => !aBorrar.has(f.id));
@@ -283,7 +296,7 @@ export function activarMockSupabase(supabase, tablas) {
     });
   };
 
-  window.__MOCK = { TABLAS, supabase, sembrarStock, stockActual: () => stockActualDe(TABLAS) };
+  window.__MOCK = { TABLAS, supabase, fallas, sembrarStock, stockActual: () => stockActualDe(TABLAS) };
   window.__TABLAS_MOCK = TABLAS; // alias corto, cómodo desde la consola
   console.warn('⚠️ MOCK SUPABASE ACTIVO (?mocksupabase=1) — datos falsos, solo para testing. Helpers en window.__MOCK');
   return window.__MOCK;
