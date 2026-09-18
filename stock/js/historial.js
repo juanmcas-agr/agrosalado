@@ -81,7 +81,11 @@ function describirMovimiento(fila) {
   const origen = fila.establecimiento_origen_nombre
     ? `${fila.establecimiento_origen_nombre} (${fila.categoria_origen_nombre})`
     : '—';
-  const destino = fila.establecimiento_destino_nombre
+  // En una Venta no hay establecimiento_destino (el animal sale del
+  // sistema) — el "destino" real es el comprador.
+  const destino = fila.tipo_movimiento === 'venta' && fila.comprador_nombre
+    ? fila.comprador_nombre
+    : fila.establecimiento_destino_nombre
     ? `${fila.establecimiento_destino_nombre} (${fila.categoria_destino_nombre})`
     : '—';
   return { origen, destino };
@@ -94,15 +98,12 @@ function describirTitular(fila) {
   return fila.titular_origen_nombre || fila.titular_destino_nombre || '—';
 }
 
-// Destino de venta + comprador no tienen columna propia en la tabla — se
-// muestran junto a Observaciones, solo para movimientos tipo 'venta'.
+// Destino de venta (Faena/Invernada/Conserva) no tiene columna propia en
+// la tabla — se muestra junto a Observaciones, solo para 'venta'. El
+// comprador ya se muestra en la columna Destino (ver describirMovimiento).
 function describirVenta(fila) {
-  const partes = [];
-  if (fila.destino_venta) {
-    partes.push(DESTINO_VENTA.find((d) => d.id === fila.destino_venta)?.nombre || fila.destino_venta);
-  }
-  if (fila.comprador_nombre) partes.push(`Comprador: ${fila.comprador_nombre}`);
-  return partes.join(' · ');
+  if (!fila.destino_venta) return '';
+  return DESTINO_VENTA.find((d) => d.id === fila.destino_venta)?.nombre || fila.destino_venta;
 }
 
 async function anularMovimiento(id) {

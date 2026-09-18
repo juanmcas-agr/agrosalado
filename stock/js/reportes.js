@@ -259,7 +259,11 @@ function enriquecerPesadasConGDP(pesadas) {
 
 function describirMovimientoTimeline(m) {
   const origen = m.establecimiento_origen_nombre ? `${m.establecimiento_origen_nombre} (${m.categoria_origen_nombre})` : null;
-  const destino = m.establecimiento_destino_nombre ? `${m.establecimiento_destino_nombre} (${m.categoria_destino_nombre})` : null;
+  // En una Venta no hay establecimiento_destino (el animal sale del
+  // sistema) — el "destino" real es el comprador.
+  const destino = m.tipo_movimiento === 'venta' && m.comprador_nombre
+    ? m.comprador_nombre
+    : m.establecimiento_destino_nombre ? `${m.establecimiento_destino_nombre} (${m.categoria_destino_nombre})` : null;
   const recorrido = [origen, destino].filter(Boolean).join(' → ');
   const titular = m.titular_origen_nombre || m.titular_destino_nombre;
   return [
