@@ -7,7 +7,7 @@ import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
 import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
-import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, titularesDelRodeo, registrarEntradaFeedLot, registrarSalidaFeedLot, actualizarCorralRodeo } from './rodeos.js';
+import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, titularesDelRodeo, rodeoDelCorral } from './rodeos.js';
 import { marcarComoReemplazado } from './historial.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
@@ -16,12 +16,6 @@ import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSelecc
 // precargarParaEditar() (disparado desde historial.js vía evento, para no
 // armar un import circular entre los dos módulos).
 let editandoId = null;
-
-// Para editar un movimiento sin selector de Rodeo (hoteleria, o apertura
-// de stock a Feed Lot — ver esSinRodeo): no hay forma de volver a elegirlo
-// a mano, así que se guarda acá el rodeo_id original y onSubmit() lo
-// reusa en vez de crear un rodeo nuevo.
-let rodeoIdEditandoSinRodeo = null;
 
 const CAMPOS = [
   'establecimiento_origen', 'establecimiento_destino',
@@ -250,15 +244,16 @@ async function actualizarTitularesOrigenDisponibles() {
     [...capSelect.options].forEach((o) => { o.disabled = false; });
   };
 
-  const tipo = obtenerSeleccion('mov-tipo');
-  const cfg = TIPOS_MOVIMIENTO[tipo];
-  // Venta (u otra salida) desde Feed Lot no usa el selector de Rodeo
-  // (está oculto, ver esSinRodeo) — el rodeo real sale de resolver el
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (!cfg || !cfg.campos.includes('titular_origen')) { habilitarTodo(); return; }
+  // Si el lado origen va por Feed Lot, el selector de Rodeo está oculto
+  // (ver actualizarRequeridoRodeo) — el rodeo real sale de resolver el
   // corral elegido, igual que en onSubmit.
-  const rodeoId = esSalidaFeedLotPorCorral(tipo, obtenerSeleccion('mov-establecimiento-origen'))
-    ? rodeoActivoEnCorral(obtenerSeleccion('mov-categoria-origen'), obtenerSeleccion('mov-feedlot-corral-origen'))?.id
+  const { origen } = establecimientosResueltos(cfg);
+  const rodeoId = origen === 'feed_lot'
+    ? rodeoDelCorral(obtenerSeleccion('mov-feedlot-corral-origen'))?.id
     : el(RODEO_ORIGEN_IDS.select).value;
-  if (!cfg || !cfg.campos.includes('titular_origen') || !rodeoId || rodeoId === '__nuevo__' || !navigator.onLine) {
+  if (!rodeoId || rodeoId === '__nuevo__' || !navigator.onLine) {
     habilitarTodo();
     return;
   }
@@ -302,55 +297,51 @@ function campoRelevante(cfg, base) {
   return cfg.campos.includes(`${base}_origen`) ? 'origen' : 'destino';
 }
 
-// Apertura de stock con destino Feed Lot: acordado con Juan que ahí el
-// rodeo no importa, lo que importa es el CORRAL (1-4) — no se elige ni
-// crea un rodeo a mano, se crea uno nuevo automático por corral al
-// guardar (ver onSubmit), igual que Hotelería. A diferencia de Hotelería
-// (que SIEMPRE es sinRodeo, fijo en config.js), acá depende de a qué
-// establecimiento se destina esta carga puntual — apertura_stock también
-// se usa para San Miguel/San Juan/El Tara, donde el rodeo sigue siendo
-// normal.
-function esAperturaFeedLot(tipo, establecimientoDestino) {
-  return tipo === 'apertura_stock' && establecimientoDestino === 'feed_lot';
+// ─── Feed Lot: se organiza por CORRAL, no por Rodeo ─────────────────────
+// Acordado con Juan tras varios bugs en cadena (corral sin categoría
+// correcta, rodeo creado de más, corral sin guardar por una falla de
+// red): en Feed Lot dejan de crearse/buscarse rodeos por categoría —
+// existen 4 corrales FIJOS ("Corral n°1".."Corral n°4", ver migración
+// 039 y rodeoDelCorral en rodeos.js) que siempre existen y pueden tener
+// stock de varias categorías y titulares a la vez. Cualquier movimiento
+// que toque Feed Lot (de cualquier lado, incluida Hotelería) elige un
+// corral con un botón en vez de un selector de Rodeo — nunca hay que
+// "encontrar" ni "crear" nada, el corral resuelve el rodeo siempre.
+//
+// Devuelve, para el tipo/establecimientos actuales, qué lado(s) del
+// formulario hay que resolver por corral en vez de por selector de Rodeo:
+// - principalEnFeedLot: el selector genérico "Rodeo" (mov-rodeo) — que
+//   representa el lado ORIGEN si el tipo lo tiene (venta, traslado,
+//   cambio_categoria, cambio_titular, cambio_rodeo, salida_hoteleria) o
+//   el lado DESTINO si no (compra_invernada, apertura_stock, parición,
+//   hotelería) — necesita corral en vez de Rodeo.
+// - destinoSecundarioEnFeedLot: el selector "Rodeo destino"
+//   (mov-rodeo-destino, solo Traslado/Cambio de rodeo) necesita corral.
+// Un mismo movimiento puede necesitar los dos a la vez (Cambio de rodeo
+// moviendo animales de un corral a otro).
+function ladoRodeoPrincipal(cfg) {
+  if (cfg.establecimientoOrigenFijo) return 'origen';
+  if (cfg.establecimientoDestinoFijo) return 'destino';
+  return campoRelevante(cfg, 'establecimiento');
 }
 
-// Simétrico a esAperturaFeedLot pero para el lado SALIDA: vender (o
-// cualquier otro TIPOS_SALIDA_STOCK) desde Feed Lot tampoco elige un
-// Rodeo por nombre — se elige el CORRAL de origen y se resuelve solo al
-// rodeo que YA está activo ahí (no se crea nada, a diferencia de
-// Apertura: acá el rodeo tiene que existir de antes, si no no hay nada
-// que vender). TIPOS_SALIDA_STOCK se define más abajo, pero al ser solo
-// referenciada dentro de funciones (nunca en el top-level del módulo) no
-// importa el orden de declaración.
-function esSalidaFeedLotPorCorral(tipo, establecimientoOrigen) {
-  return TIPOS_SALIDA_STOCK.includes(tipo) && establecimientoOrigen === 'feed_lot';
+function estadoFeedLot(cfg, establecimientoOrigen, establecimientoDestino) {
+  const establecimientoPrincipal = ladoRodeoPrincipal(cfg) === 'origen' ? establecimientoOrigen : establecimientoDestino;
+  return {
+    principalEnFeedLot: establecimientoPrincipal === 'feed_lot',
+    destinoSecundarioEnFeedLot: cfg.campos.includes('rodeo_destino') && establecimientoDestino === 'feed_lot',
+  };
 }
 
-function esSinRodeo(cfg, tipo, establecimientoOrigen, establecimientoDestino) {
-  return Boolean(cfg?.sinRodeo) || esAperturaFeedLot(tipo, establecimientoDestino) || esSalidaFeedLotPorCorral(tipo, establecimientoOrigen);
-}
-
-// El corral es una identidad FIJA dentro de Feed Lot, no un batch nuevo
-// por cada carga: "Corral 3" siempre es el mismo rodeo mientras tenga
-// stock de esa categoría (obtenerRodeosCache() ya está cargada por
-// initMovimientos, no requiere conexión). Usado tanto para reusar el
-// rodeo en una Apertura de stock repetida al mismo corral, como para
-// resolverlo al vender/sacar stock de ahí.
-function rodeoActivoEnCorral(categoriaId, corral) {
-  return obtenerRodeosCache().find((r) =>
-    r.establecimiento_id === 'feed_lot' && r.categoria_id === categoriaId && r.corral === corral && r.activo);
-}
-
-// Caso real que reportó Juan: los animales de un corral "engordan" (pasan
-// a la siguiente categoría de SIGUIENTE_CATEGORIA) pero nadie cargó el
-// Cambio de categoría todavía — el corral sigue figurando con la
-// categoría vieja. Si el corral tiene la categoría ANTERIOR a la que se
-// está por vender, es (casi seguro) ese caso, no un error de carga.
-function categoriaAnteriorEnCorral(categoriaDeseada, corral) {
-  if (!corral) return null;
-  return obtenerRodeosCache().find((r) =>
-    r.establecimiento_id === 'feed_lot' && r.corral === corral && r.activo
-    && SIGUIENTE_CATEGORIA[r.categoria_id] === categoriaDeseada);
+// Establecimiento origen/destino ya resueltos (fijo o elegido) para el
+// tipo actual — mismo cálculo que hace leerFormulario(), reusado acá para
+// no duplicarlo en cada función que necesita saber si Feed Lot está
+// involucrado antes de leer el formulario completo.
+function establecimientosResueltos(cfg) {
+  return {
+    origen: cfg.establecimientoOrigenFijo || (cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null),
+    destino: cfg.establecimientoDestinoFijo || (cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null),
+  };
 }
 
 // IDs de los dos selectores de rodeo posibles — "origen" (siempre visible,
@@ -397,7 +388,7 @@ function poblarSelectRodeo(ids, excluirId) {
   select.appendChild(opcionVacia);
 
   if (categoriaId && establecimientoId) {
-    for (const r of rodeosDe(establecimientoId, categoriaId, { soloHoteleria: Boolean(cfg.soloRodeosHoteleria) })) {
+    for (const r of rodeosDe(establecimientoId, categoriaId)) {
       if (excluirId && r.id === excluirId) continue;
       const opt = document.createElement('option');
       opt.value = r.id;
@@ -405,10 +396,8 @@ function poblarSelectRodeo(ids, excluirId) {
       select.appendChild(opt);
     }
   }
-  // Un puestero no da de alta rodeos — solo puede elegir entre los que ya
-  // existen. Salida de hotelería tampoco ofrece crear uno: solo se puede
-  // cerrar un lote de hotelería que ya existe.
-  if (getEstado().perfil?.rol !== 'puestero' && !cfg.soloRodeosHoteleria) {
+  // Un puestero no da de alta rodeos — solo puede elegir entre los que ya existen.
+  if (getEstado().perfil?.rol !== 'puestero') {
     const opcionNueva = document.createElement('option');
     opcionNueva.value = '__nuevo__';
     opcionNueva.textContent = '+ Crear rodeo nuevo...';
@@ -421,14 +410,15 @@ function poblarSelectRodeo(ids, excluirId) {
 // El rodeo destino nunca puede ser el mismo que el de origen — se re-arma
 // cada vez que cambia cualquiera de los dos, para excluir siempre el actual.
 function actualizarSelectsRodeo() {
-  const tipo = obtenerSeleccion('mov-tipo');
-  const cfg = TIPOS_MOVIMIENTO[tipo];
-  // Hotelería / Apertura de stock a Feed Lot / Venta (u otra salida)
-  // desde Feed Lot no tienen selector de rodeo por nombre — se elige o
-  // resuelve por corral (ver onSubmit), no hace falta poblar nada.
-  if (cfg && esSinRodeo(cfg, tipo, obtenerSeleccion('mov-establecimiento-origen'), obtenerSeleccion('mov-establecimiento-destino'))) return;
-  poblarSelectRodeo(RODEO_ORIGEN_IDS, null);
-  if (cfg && cfg.campos.includes('rodeo_destino')) {
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (!cfg) return;
+  const { origen, destino } = establecimientosResueltos(cfg);
+  const { principalEnFeedLot, destinoSecundarioEnFeedLot } = estadoFeedLot(cfg, origen, destino);
+  // Los lados que van por Feed Lot no tienen selector de rodeo por nombre
+  // — se eligen por corral (ver actualizarBloquesCorral/onSubmit), no
+  // hace falta poblar nada ahí.
+  if (!principalEnFeedLot) poblarSelectRodeo(RODEO_ORIGEN_IDS, null);
+  if (cfg.campos.includes('rodeo_destino') && !destinoSecundarioEnFeedLot) {
     poblarSelectRodeo(RODEO_DESTINO_IDS, el(RODEO_ORIGEN_IDS.select).value);
   }
 }
@@ -601,174 +591,40 @@ export async function refrescarConsultaEstablecimiento() {
   for (const fila of data) contenedor.appendChild(itemConsulta(fila));
 }
 
-// ─── Feed lot: corral + ciclo (fecha estimada de salida, kilos objetivo) ───
-// Entrada = traslado QUE LLEVA a feed_lot (desde otro lado); salida =
-// traslado que SACA de feed_lot, o cualquier venta/faena/mortandad cuyo
-// origen es feed_lot. Para 'traslado' el establecimiento_destino es un
-// campo elegido directo (no duplicado), así que se puede leer en vivo acá
-// sin esperar a armarFila().
-// 'venta' (el tipo unificado, ver config.js) faltaba acá — sin esto, una
-// venta con origen feed_lot nunca liberaba el corral/cerraba el ciclo.
-const TIPOS_SALIDA_STOCK = ['venta', 'venta_gordo', 'venta_vaca_prenada', 'venta_invernada', 'faena_conserva', 'mortandad'];
-
-function calcularEstadoFeedLot() {
-  const tipo = obtenerSeleccion('mov-tipo');
-  const cfg = TIPOS_MOVIMIENTO[tipo];
-  if (!cfg) return { entrada: false, salida: false };
-  const origen = cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null;
-  const destino = cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null;
-  // Hotelería/Salida de hotelería tienen el establecimiento fijo en
-  // feed_lot (sin selector), así que entran/salen de corral siempre. Lo
-  // mismo Apertura de stock cuando el destino elegido es Feed Lot.
-  const entrada = (tipo === 'traslado' && destino === 'feed_lot' && origen !== 'feed_lot') || tipo === 'hoteleria' || esAperturaFeedLot(tipo, destino);
-  const salida =
-    (tipo === 'traslado' && origen === 'feed_lot' && destino !== 'feed_lot') ||
-    (TIPOS_SALIDA_STOCK.includes(tipo) && origen === 'feed_lot') ||
-    tipo === 'salida_hoteleria';
-  return { entrada, salida };
-}
-
-function actualizarBloqueFeedLot() {
-  const { entrada } = calcularEstadoFeedLot();
-  el('mov-feedlot-entrada').classList.toggle('oculto', !entrada);
-  // En Apertura de stock a Feed Lot, "Kilos de entrada" sería el mismo
-  // dato que "Kilos promedio por cabeza" de arriba (no hay un movimiento
-  // previo del que difiera, como sí puede pasar en un Traslado) — pedirlo
-  // de nuevo es redundante, así que se esconde y se usa directamente
-  // kilos_promedio (ver onSubmit/registrarEntradaFeedLot).
-  const tipo = obtenerSeleccion('mov-tipo');
-  const ocultarKilosEntrada = esAperturaFeedLot(tipo, obtenerSeleccion('mov-establecimiento-destino'));
-  el('mov-feedlot-kilos-entrada-wrap').classList.toggle('oculto', ocultarKilosEntrada);
-  if (ocultarKilosEntrada) el('mov-feedlot-kilos-entrada').value = '';
-
-  // Venta (u otra salida) desde Feed Lot: en vez del selector de Rodeo
-  // (oculto, ver actualizarRequeridoRodeo) se elige el corral de origen,
-  // que se resuelve al rodeo activo ahí recién al guardar (ver onSubmit).
-  const salidaPorCorral = esSalidaFeedLotPorCorral(tipo, obtenerSeleccion('mov-establecimiento-origen'));
-  el('mov-feedlot-salida').classList.toggle('oculto', !salidaPorCorral);
-
-  actualizarAvisoCambioCategoriaExpress();
-}
-
-// Si el corral elegido para vender no tiene la categoría pedida pero SÍ
-// tiene la categoría anterior de la cadena (ver categoriaAnteriorEnCorral
-// arriba), se ofrece resolverlo ahí mismo en vez de solo tirar el error
-// al guardar — mucho más claro para el encargado que se dio cuenta recién
-// al vender de que el corral "engordó" y nadie cargó el cambio antes.
-function actualizarAvisoCambioCategoriaExpress() {
-  const aviso = el('mov-feedlot-cambio-cat-aviso');
-  const tipo = obtenerSeleccion('mov-tipo');
-  if (!esSalidaFeedLotPorCorral(tipo, obtenerSeleccion('mov-establecimiento-origen'))) {
-    aviso.classList.add('oculto');
+// Muestra/esconde los bloques de "Corral de origen"/"Corral de destino"
+// según los establecimientos elegidos — un bloque por lado, pueden
+// mostrarse los dos a la vez (Cambio de rodeo moviendo entre corrales).
+function actualizarBloquesCorral() {
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  if (!cfg) {
+    el('mov-feedlot-salida').classList.add('oculto');
+    el('mov-feedlot-entrada').classList.add('oculto');
     return;
   }
-  const categoriaDeseada = obtenerSeleccion('mov-categoria-origen');
-  const corral = obtenerSeleccion('mov-feedlot-corral-origen');
-  if (!categoriaDeseada || !corral || rodeoActivoEnCorral(categoriaDeseada, corral)) {
-    aviso.classList.add('oculto');
-    return;
-  }
-  const rodeoAnterior = categoriaAnteriorEnCorral(categoriaDeseada, corral);
-  if (!rodeoAnterior) {
-    aviso.classList.add('oculto');
-    return;
-  }
-  const nombreAnterior = CATEGORIAS.find((c) => c.id === rodeoAnterior.categoria_id)?.nombre || rodeoAnterior.categoria_id;
-  const nombreDeseada = CATEGORIAS.find((c) => c.id === categoriaDeseada)?.nombre || categoriaDeseada;
-  el('mov-feedlot-cambio-cat-texto').textContent =
-    `⚠️ El Corral ${corral} todavía figura como ${nombreAnterior}, no ${nombreDeseada} — si ya engordaron, cambialos de categoría acá y seguí con la venta.`;
-  aviso.dataset.rodeoId = rodeoAnterior.id;
-  aviso.dataset.categoriaDestino = categoriaDeseada;
-  aviso.classList.remove('oculto');
-}
-
-// Ejecuta el Cambio de categoría "express": un movimiento real de tipo
-// cambio_categoria por cada titular con stock en ese rodeo+categoría (un
-// rodeo puede tener cabezas de más de un titular a la vez), usando el
-// peso promedio ponderado real de cada uno (stock_actual). Requiere
-// conexión — es un insert directo, no pasa por el outbox offline, mismo
-// criterio que "+Crear rodeo nuevo..." o crear el rodeo de Hotelería.
-async function ejecutarCambioCategoriaExpress() {
-  const aviso = el('mov-feedlot-cambio-cat-aviso');
-  const rodeoId = aviso.dataset.rodeoId;
-  const categoriaDestino = aviso.dataset.categoriaDestino;
-  if (!rodeoId || !categoriaDestino) return;
-  if (!navigator.onLine) {
-    mostrarMensaje('Necesitás conexión a internet para cambiar la categoría del corral.', 'error');
-    return;
-  }
-  const boton = el('mov-feedlot-cambio-cat-boton');
-  boton.disabled = true;
-  boton.textContent = 'Cambiando…';
-  try {
-    const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
-    const { data: stock, error: errorStock } = await supabase
-      .from('stock_actual')
-      .select('titular, cabezas, kilos_promedio_ponderado')
-      .eq('rodeo_id', rodeoId)
-      .eq('categoria', rodeo.categoria_id);
-    if (errorStock) throw errorStock;
-    const conStock = (stock || []).filter((f) => f.cabezas > 0);
-    if (!conStock.length) throw new Error('No encontré stock cargado en ese rodeo para cambiar de categoría.');
-
-    for (const fila of conStock) {
-      const { error: errorInsert } = await supabase.from('movimientos').insert({
-        id: crypto.randomUUID(),
-        tipo_movimiento: 'cambio_categoria',
-        fecha: el('mov-fecha').value || new Date().toISOString().slice(0, 10),
-        establecimiento_origen: 'feed_lot',
-        establecimiento_destino: 'feed_lot',
-        categoria_origen: rodeo.categoria_id,
-        categoria_destino: categoriaDestino,
-        titular_origen: fila.titular,
-        titular_destino: fila.titular,
-        cantidad_cabezas: fila.cabezas,
-        kilos_promedio: fila.kilos_promedio_ponderado,
-        usuario_id: getEstado().session.user.id,
-        rodeo_id: rodeoId,
-        observaciones: 'Cambio de categoría express (desde Venta en Feed Lot) — el corral ya tenía la categoría siguiente.',
-      });
-      if (errorInsert) throw errorInsert;
-    }
-
-    await cargarRodeos();
-    mostrarToast('✅ Categoría del corral actualizada — ya podés guardar la venta.');
-    actualizarAvisoCambioCategoriaExpress();
-  } catch (error) {
-    mostrarMensaje('No se pudo cambiar la categoría del corral: ' + error.message, 'error');
-  } finally {
-    boton.disabled = false;
-    boton.textContent = 'Cambiar categoría del corral y continuar';
-  }
-}
-
-// A feed lot no hace falta elegir un rodeo destino aparte: las cabezas
-// entran directo al corral (bloque de arriba), quedándose en el mismo
-// rodeo de origen (ver registrarEntradaFeedLot/armarFila) — la excepción
-// solo aplica a "Traslado", el único tipo que puede tener feed_lot como
-// destino y a la vez pedir rodeo_destino.
-function trasladoAFeedLot() {
-  return obtenerSeleccion('mov-tipo') === 'traslado' && obtenerSeleccion('mov-establecimiento-destino') === 'feed_lot';
+  const { origen, destino } = establecimientosResueltos(cfg);
+  el('mov-feedlot-salida').classList.toggle('oculto', origen !== 'feed_lot');
+  el('mov-feedlot-entrada').classList.toggle('oculto', destino !== 'feed_lot');
 }
 
 function actualizarRequeridoRodeoDestino() {
   const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
   if (!cfg) return;
-  const aplica = cfg.campos.includes('rodeo_destino') && !trasladoAFeedLot();
+  const { destino } = establecimientosResueltos(cfg);
+  const aplica = cfg.campos.includes('rodeo_destino') && destino !== 'feed_lot';
   document.querySelector('[data-campo="rodeo_destino"]').classList.toggle('oculto', !aplica);
   el('mov-rodeo-destino').required = aplica;
 }
 
-// Hotelería / Apertura de stock a Feed Lot no tienen selector de Rodeo (se
-// crea uno solo al guardar) — se esconde el bloque entero, mismo criterio
-// que mov-rodeo-destino de arriba.
+// El selector "Rodeo" (mov-rodeo) se esconde cuando el lado que
+// representa (ver ladoRodeoPrincipal) va por Feed Lot — ese lado se
+// resuelve por corral en vez de por nombre.
 function actualizarRequeridoRodeo() {
-  const tipo = obtenerSeleccion('mov-tipo');
-  const cfg = TIPOS_MOVIMIENTO[tipo];
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
   if (!cfg) return;
-  const sinRodeo = esSinRodeo(cfg, tipo, obtenerSeleccion('mov-establecimiento-origen'), obtenerSeleccion('mov-establecimiento-destino'));
-  document.querySelector('[data-campo="rodeo"]').classList.toggle('oculto', sinRodeo);
-  el('mov-rodeo').required = !sinRodeo;
+  const { origen, destino } = establecimientosResueltos(cfg);
+  const { principalEnFeedLot } = estadoFeedLot(cfg, origen, destino);
+  document.querySelector('[data-campo="rodeo"]').classList.toggle('oculto', principalEnFeedLot);
+  el('mov-rodeo').required = !principalEnFeedLot;
 }
 
 const CATEGORIAS_AL_PIE = ['ternero_al_pie', 'ternera_al_pie'];
@@ -787,13 +643,15 @@ function opcionesCategoriaOrigen(tipo) {
   return CATEGORIAS;
 }
 
-// Traslado con destino Feed Lot: "al pie" no tiene sentido ahí (todavía
-// están con la madre) — se nublan (deshabilitan) esas 2 opciones en vez de
-// reconstruir el grupo entero, mismo criterio que
+// Cuando el destino elegido es Feed Lot (Traslado, Cambio de rodeo):
+// "al pie" no tiene sentido ahí (todavía están con la madre) — se
+// nublan (deshabilitan) esas 2 opciones en vez de reconstruir el grupo
+// entero, mismo criterio que
 // actualizarEstablecimientosDestinoDisponibles/actualizarTitularesOrigenDisponibles,
 // para no perder una selección válida solo por tocar el establecimiento.
 function actualizarCategoriasOrigenDisponibles() {
-  const bloquear = trasladoAFeedLot();
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  const bloquear = Boolean(cfg) && establecimientosResueltos(cfg).destino === 'feed_lot';
   const grupo = el('mov-categoria-origen');
   grupo.querySelectorAll('.boton-opcion').forEach((boton) => {
     const deshabilitar = bloquear && CATEGORIAS_AL_PIE.includes(boton.dataset.value);
@@ -840,7 +698,7 @@ function ocultarCamposDependientesDeTipo() {
   el('mov-rodeo-destino').required = false;
   el('mov-observaciones').required = false;
   el('mov-observaciones-label').textContent = 'Observaciones (opcional)';
-  actualizarBloqueFeedLot();
+  actualizarBloquesCorral();
 }
 
 function actualizarCamposVisibles() {
@@ -853,8 +711,9 @@ function actualizarCamposVisibles() {
     contenedor.classList.toggle('oculto', !cfg.campos.includes(campo));
   }
   // mov-rodeo-destino es "required" en el HTML, pero solo corresponde para
-  // los tipos que lo usan (y no a feed lot, ver trasladoAFeedLot) — si
-  // queda required mientras su contenedor está oculto, el navegador
+  // los tipos que lo usan (y no cuando ese lado va por Feed Lot, ver
+  // actualizarRequeridoRodeoDestino) — si queda required mientras su
+  // contenedor está oculto, el navegador
   // bloquea el submit en SILENCIO (sin mensaje visible) para cualquier
   // otro caso. Mismo motivo para mov-cliente/mov-comprador: son <select>
   // required en el HTML, pero solo corresponden a algunos tipos.
@@ -877,7 +736,7 @@ function actualizarCamposVisibles() {
   crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(tipo));
   actualizarCategoriasOrigenDisponibles();
   actualizarSelectsRodeo();
-  actualizarBloqueFeedLot();
+  actualizarBloquesCorral();
   actualizarEstablecimientosDestinoDisponibles();
   actualizarTitularesOrigenDisponibles();
 }
@@ -895,15 +754,13 @@ function leerFormulario() {
   // Cliente (Hotelería): reemplaza a Titularidad de origen/destino para
   // 'hoteleria'/'salida_hoteleria' — ver campos en config.js.
   const cliente = cfg.campos.includes('cliente') ? obtenerCliente() : null;
-  const establecimientoOrigen = cfg.establecimientoOrigenFijo
-    || (cfg.campos.includes('establecimiento_origen') ? obtenerSeleccion('mov-establecimiento-origen') : null);
-  const establecimientoDestino = cfg.establecimientoDestinoFijo
-    || (cfg.campos.includes('establecimiento_destino') ? obtenerSeleccion('mov-establecimiento-destino') : null);
-  const sinRodeo = esSinRodeo(cfg, tipo, establecimientoOrigen, establecimientoDestino);
+  const { origen: establecimientoOrigen, destino: establecimientoDestino } = establecimientosResueltos(cfg);
+  const { principalEnFeedLot, destinoSecundarioEnFeedLot } = estadoFeedLot(cfg, establecimientoOrigen, establecimientoDestino);
   return {
     tipo,
     cfg,
-    sinRodeo,
+    principalEnFeedLot,
+    destinoSecundarioEnFeedLot,
     fecha: el('mov-fecha').value,
     establecimiento_origen: establecimientoOrigen,
     establecimiento_destino: establecimientoDestino,
@@ -916,16 +773,14 @@ function leerFormulario() {
     comprador: cfg.campos.includes('comprador') ? obtenerComprador() : null,
     cantidad_cabezas: el('mov-cabezas').value,
     kilos_promedio: el('mov-kilos').value,
-    rodeo_id: sinRodeo ? null : el('mov-rodeo').value,
-    rodeo_destino: (cfg.campos.includes('rodeo_destino') && !trasladoAFeedLot()) ? el('mov-rodeo-destino').value : null,
+    rodeo_id: principalEnFeedLot ? null : el('mov-rodeo').value,
+    rodeo_destino: (cfg.campos.includes('rodeo_destino') && !destinoSecundarioEnFeedLot) ? el('mov-rodeo-destino').value : null,
     observaciones: el('mov-observaciones').value.trim() || null,
-    feedlotEntrada: calcularEstadoFeedLot().entrada,
-    feedlotSalida: calcularEstadoFeedLot().salida,
-    feedlotCorral: obtenerSeleccion('mov-feedlot-corral'),
+    // Corral de origen/destino: se leen siempre (aunque el bloque esté
+    // oculto) — es más simple que ramificar acá, y quedan sin usar si el
+    // establecimiento correspondiente no es Feed Lot.
     feedlotCorralOrigen: obtenerSeleccion('mov-feedlot-corral-origen'),
-    feedlotKilosEntrada: el('mov-feedlot-kilos-entrada').value || null,
-    feedlotFechaSalida: el('mov-feedlot-fecha-salida').value || null,
-    feedlotKilosObjetivo: el('mov-feedlot-kilos-objetivo').value || null,
+    feedlotCorralDestino: obtenerSeleccion('mov-feedlot-corral'),
     editandoId,
   };
 }
@@ -946,13 +801,12 @@ function validar(datos) {
     if (!datos[campo]) errores.push('Falta completar un campo obligatorio.');
   }
 
-  // Hotelería / Apertura de stock a Feed Lot no eligen rodeo — se crea
-  // uno solo al guardar (ver onSubmit).
-  if (!datos.sinRodeo && (!datos.rodeo_id || datos.rodeo_id === '__nuevo__')) {
+  // El lado que va por Feed Lot no elige rodeo por nombre — se resuelve
+  // por corral (ver onSubmit), siempre existe (son los 4 corrales fijos).
+  if (!datos.principalEnFeedLot && (!datos.rodeo_id || datos.rodeo_id === '__nuevo__')) {
     errores.push('Elegí un rodeo (o creá uno nuevo con "+ Crear rodeo nuevo...").');
   }
-  const esTrasladoAFeedLot = datos.tipo === 'traslado' && datos.establecimiento_destino === 'feed_lot';
-  if (datos.cfg.campos.includes('rodeo_destino') && !esTrasladoAFeedLot) {
+  if (datos.cfg.campos.includes('rodeo_destino') && !datos.destinoSecundarioEnFeedLot) {
     if (!datos.rodeo_destino) {
       errores.push('Elegí un rodeo destino (o creá uno nuevo con "+ Crear rodeo nuevo...").');
     } else if (datos.rodeo_destino === '__nuevo__') {
@@ -962,17 +816,11 @@ function validar(datos) {
     }
   }
 
-  // No aplica al editar: el rodeo ya quedó fijado (rodeoIdEditandoSinRodeo,
-  // ver onSubmit) y no se vuelve a resolver por corral, así que no hace
-  // falta que el corral esté elegido en el formulario para guardar la
-  // corrección.
-  if (!datos.editandoId) {
-    if (datos.feedlotEntrada && !datos.feedlotCorral) {
-      errores.push('Elegí a qué corral entra el rodeo en feed lot.');
-    }
-    if (esSalidaFeedLotPorCorral(datos.tipo, datos.establecimiento_origen) && !datos.feedlotCorralOrigen) {
-      errores.push('Elegí de qué corral sale.');
-    }
+  if (datos.establecimiento_origen === 'feed_lot' && !datos.feedlotCorralOrigen) {
+    errores.push('Elegí de qué corral sale.');
+  }
+  if (datos.establecimiento_destino === 'feed_lot' && !datos.feedlotCorralDestino) {
+    errores.push('Elegí a qué corral entra.');
   }
 
   const cabezas = Number(datos.cantidad_cabezas);
@@ -1050,7 +898,6 @@ function mostrarToast(texto, duracionMs) {
 }
 
 function resetFormulario() {
-  rodeoIdEditandoSinRodeo = null;
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
   el('mov-observaciones').value = '';
@@ -1069,9 +916,6 @@ function resetFormulario() {
   el('mov-rodeo-destino-nuevo-nombre').value = '';
   limpiarSeleccion('mov-feedlot-corral');
   limpiarSeleccion('mov-feedlot-corral-origen');
-  el('mov-feedlot-kilos-entrada').value = '';
-  el('mov-feedlot-fecha-salida').value = '';
-  el('mov-feedlot-kilos-objetivo').value = '';
   // Sin tipo preseleccionado a propósito: si quedara uno marcado por
   // defecto, es fácil no darse cuenta y cargar el movimiento equivocado
   // (venía pasando con "Compra de invernada"). limpiarSeleccion no dispara
@@ -1095,8 +939,6 @@ function cancelarEdicion() {
 function precargarParaEditar(fila) {
   editandoId = fila.id;
   establecerSeleccion('mov-tipo', fila.tipo_movimiento);
-  const cfgTipo = TIPOS_MOVIMIENTO[fila.tipo_movimiento];
-  rodeoIdEditandoSinRodeo = esSinRodeo(cfgTipo, fila.tipo_movimiento, fila.establecimiento_origen, fila.establecimiento_destino) ? fila.rodeo_id : null;
   if (fila.establecimiento_origen) establecerSeleccion('mov-establecimiento-origen', fila.establecimiento_origen);
   if (fila.establecimiento_destino) establecerSeleccion('mov-establecimiento-destino', fila.establecimiento_destino);
   if (fila.categoria_origen) establecerSeleccion('mov-categoria-origen', fila.categoria_origen);
@@ -1112,8 +954,26 @@ function precargarParaEditar(fila) {
   el('mov-fecha').value = fila.fecha;
   el('mov-observaciones').value = fila.observaciones || '';
   actualizarSelectsRodeo();
-  if (fila.rodeo_id) el('mov-rodeo').value = fila.rodeo_id;
-  if (fila.rodeo_destino_id) el('mov-rodeo-destino').value = fila.rodeo_destino_id;
+  // Si el lado origen/destino es Feed Lot, el selector de Rodeo queda
+  // oculto (ver actualizarRequeridoRodeo) — hay que precargar el botón
+  // de Corral correspondiente en su lugar, mirando en qué corral está el
+  // rodeo guardado (rodeoDelCorral resuelve al revés: acá se busca el
+  // corral A PARTIR del rodeo, por eso se consulta la caché directo).
+  if (fila.establecimiento_origen === 'feed_lot') {
+    const rodeoOrigen = obtenerRodeosCache().find((r) => r.id === fila.rodeo_id);
+    if (rodeoOrigen) establecerSeleccion('mov-feedlot-corral-origen', rodeoOrigen.corral);
+  } else if (fila.rodeo_id) {
+    el('mov-rodeo').value = fila.rodeo_id;
+  }
+  if (fila.establecimiento_destino === 'feed_lot') {
+    // El rodeo "destino" puede ser el mismo rodeo (tipos donde mov-rodeo
+    // representa el lado destino, ej. Apertura de stock) o rodeo_destino_id
+    // real (Traslado/Cambio de rodeo).
+    const rodeoDestino = obtenerRodeosCache().find((r) => r.id === (fila.rodeo_destino_id || fila.rodeo_id));
+    if (rodeoDestino) establecerSeleccion('mov-feedlot-corral', rodeoDestino.corral);
+  } else if (fila.rodeo_destino_id) {
+    el('mov-rodeo-destino').value = fila.rodeo_destino_id;
+  }
   actualizarTitularesOrigenDisponibles();
 
   el('mov-editando-texto').textContent =
@@ -1133,7 +993,12 @@ function precargarParaMortandad({ establecimientoId, categoriaId, rodeoId, canti
   if (establecimientoId) establecerSeleccion('mov-establecimiento-origen', establecimientoId);
   if (categoriaId) establecerSeleccion('mov-categoria-origen', categoriaId);
   actualizarSelectsRodeo();
-  if (rodeoId) el('mov-rodeo').value = rodeoId;
+  if (establecimientoId === 'feed_lot' && rodeoId) {
+    const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId);
+    if (rodeo) establecerSeleccion('mov-feedlot-corral-origen', rodeo.corral);
+  } else if (rodeoId) {
+    el('mov-rodeo').value = rodeoId;
+  }
   actualizarTitularesOrigenDisponibles();
   if (cantidad) el('mov-cabezas').value = cantidad;
   location.hash = 'cargar';
@@ -1234,84 +1099,33 @@ async function onSubmit(evento) {
     }
   }
 
-  // Hotelería / Apertura de stock a Feed Lot / salidas desde Feed Lot no
-  // eligen un rodeo por nombre: las dos primeras crean uno nuevo acá
-  // mismo (exige conexión, no es offline-first como el resto del
-  // movimiento); la salida por corral solo busca el que ya está activo
-  // ahí (no crea nada, no necesita conexión).
-  if (datos.sinRodeo) {
-    if (datos.editandoId && rodeoIdEditandoSinRodeo) {
-      // Corrección de un movimiento ya cargado: reusa el mismo rodeo del
-      // lote original, no crea uno nuevo.
-      datos.rodeo_id = rodeoIdEditandoSinRodeo;
-    } else if (esSalidaFeedLotPorCorral(datos.tipo, datos.establecimiento_origen)) {
-      // Vender (u otra salida) desde Feed Lot no crea nada — busca el
-      // rodeo YA ACTIVO en ese corral y categoría. Si no hay ninguno, no
-      // hay nada que vender de ahí.
-      const rodeoEnCorral = rodeoActivoEnCorral(datos.categoria_origen, datos.feedlotCorralOrigen);
-      if (!rodeoEnCorral) {
-        mostrarMensaje(
-          `No encontré un rodeo activo de esa categoría en el Corral ${datos.feedlotCorralOrigen} — revisá la categoría y el corral elegidos.`,
-          'error'
-        );
-        return;
-      }
-      datos.rodeo_id = rodeoEnCorral.id;
-    } else if (esAperturaFeedLot(datos.tipo, datos.establecimiento_destino) && rodeoActivoEnCorral(datos.categoria_destino, datos.feedlotCorral)) {
-      // El corral ya tiene un rodeo activo de esa categoría (de una
-      // apertura anterior) — se suma stock a ESE, no se crea uno nuevo
-      // cada vez. Sin esto, cada apertura al mismo corral abría un rodeo
-      // distinto ("Corral 3 Novillito 202603", "...202604", etc.).
-      datos.rodeo_id = rodeoActivoEnCorral(datos.categoria_destino, datos.feedlotCorral).id;
-      // El rodeo ya está "adentro" de feed lot desde que se creó (mismo
-      // corral, mismo ciclo activo) — no es una entrada nueva, así que no
-      // hay que volver a registrarla (evita duplicar filas en
-      // feed_lot_ciclos para el mismo rodeo).
-      datos.feedlotEntrada = false;
-      // Reconfirma el corral igual (barato, idempotente): si por lo que
-      // sea había quedado sin corral (ej. una falla de red puntual la vez
-      // que se creó), esta carga lo autocorrige en vez de dejarlo roto
-      // hasta que alguien lo note al intentar vender de ahí.
-      try {
-        await actualizarCorralRodeo(datos.rodeo_id, datos.feedlotCorral);
-      } catch (error) {
-        advertencias.push(`No se pudo confirmar el corral del rodeo (${error.message}) — revisalo en Stock.`);
-      }
-    } else if (!navigator.onLine) {
-      mostrarMensaje('Necesitás conexión a internet para cargar esto (crea un rodeo nuevo).', 'error');
+  // El lado de Feed Lot se resuelve por corral, no por nombre: los 4
+  // corrales son fijos (ver rodeoDelCorral en rodeos.js) — nunca se crea
+  // ni se busca por categoría, si el corral está elegido el rodeo
+  // siempre existe. "No encontré el corral" solo puede pasar si los 4
+  // corrales todavía no se crearon en la base (ver migración 039).
+  if (datos.establecimiento_origen === 'feed_lot') {
+    const rodeo = rodeoDelCorral(datos.feedlotCorralOrigen);
+    if (!rodeo) {
+      mostrarMensaje(`No encontré el Corral ${datos.feedlotCorralOrigen} — avisá para revisarlo.`, 'error');
       return;
-    } else {
-      try {
-        let nombreRodeo;
-        let esHoteleria = false;
-        if (datos.tipo === 'hoteleria') {
-          const cliente = obtenerTitularesCache().find((t) => t.id === datos.cliente);
-          nombreRodeo = `Hotelería ${cliente?.nombre || datos.cliente}`;
-          esHoteleria = true;
-        } else {
-          // Apertura de stock a Feed Lot (primera vez en este corral+
-          // categoría, ver rama de arriba): el rodeo no importa, lo que
-          // importa es el corral (ver esAperturaFeedLot más arriba) — se
-          // nombra por corral + categoría solo para que sea identificable
-          // en Historial/Stock, nunca se elige a mano.
-          const categoriaNombre = CATEGORIAS.find((c) => c.id === datos.categoria_destino)?.nombre || datos.categoria_destino;
-          nombreRodeo = `Corral ${datos.feedlotCorral} ${categoriaNombre}`;
-        }
-        const nuevoRodeo = await crearRodeo({
-          nombre: nombreRodeo,
-          categoriaId: datos.categoria_destino,
-          establecimientoId: datos.establecimiento_destino,
-          fechaCreacion: datos.fecha,
-          usuarioId: getEstado().session.user.id,
-          esHoteleria,
-        });
-        datos.rodeo_id = nuevoRodeo.id;
-      } catch (error) {
-        mostrarMensaje('No se pudo crear el rodeo: ' + error.message, 'error');
-        return;
-      }
     }
+    if (ladoRodeoPrincipal(datos.cfg) === 'origen') datos.rodeo_id = rodeo.id;
   }
+  if (datos.establecimiento_destino === 'feed_lot') {
+    const rodeo = rodeoDelCorral(datos.feedlotCorralDestino);
+    if (!rodeo) {
+      mostrarMensaje(`No encontré el Corral ${datos.feedlotCorralDestino} — avisá para revisarlo.`, 'error');
+      return;
+    }
+    if (ladoRodeoPrincipal(datos.cfg) === 'destino') datos.rodeo_id = rodeo.id;
+    if (datos.cfg.campos.includes('rodeo_destino')) datos.rodeo_destino = rodeo.id;
+  }
+
+  // Hotelería sigue sin crear un rodeo propio por lote: comparte uno de
+  // los 4 corrales fijos (resuelto arriba), distinguiéndose por
+  // "Cliente"/titular en stock_actual — no necesita conexión especial ni
+  // creación acá.
 
   const errorStock = await validarStockDisponible(datos);
   if (errorStock) {
@@ -1321,34 +1135,6 @@ async function onSubmit(evento) {
 
   const fila = armarFila(datos);
   await encolarMovimiento(fila);
-
-  // Best-effort: el movimiento en sí ya quedó guardado (offline-first vía
-  // outbox); no se bloquea ni se reintenta si esto falla (ej. sin conexión
-  // en este instante) — pero el corral SÍ importa para el resto del flujo
-  // (Apertura/Venta por corral), así que un fallo acá se avisa igual con
-  // una advertencia visible, no solo en la consola.
-  if (datos.feedlotEntrada) {
-    try {
-      await registrarEntradaFeedLot({
-        rodeoId: datos.rodeo_id,
-        corral: datos.feedlotCorral,
-        fecha: datos.fecha,
-        kilosIngreso: Number(datos.feedlotKilosEntrada || datos.kilos_promedio),
-        fechaEstimadaSalida: datos.feedlotFechaSalida,
-        kilosSalidaObjetivo: datos.feedlotKilosObjetivo,
-      });
-    } catch (error) {
-      console.warn('No se pudo registrar la entrada a feed lot:', error);
-      advertencias.push(`No se pudo registrar el Corral ${datos.feedlotCorral} para este rodeo (${error.message}) — revisalo en Stock.`);
-    }
-  } else if (datos.feedlotSalida) {
-    try {
-      await registrarSalidaFeedLot({ rodeoId: datos.rodeo_id, fecha: datos.fecha, kilosSalida: Number(datos.kilos_promedio) });
-    } catch (error) {
-      console.warn('No se pudo registrar la salida de feed lot:', error);
-      advertencias.push(`No se pudo liberar el corral de ese rodeo (${error.message}) — revisalo en Stock.`);
-    }
-  }
 
   if (datos.editandoId) {
     try {
@@ -1387,13 +1173,13 @@ export async function initMovimientos() {
   el('mov-tipo').addEventListener('cambio', actualizarCamposVisibles);
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
     el(id).addEventListener('cambio', () => {
-      actualizarSelectsRodeo(); actualizarBloqueFeedLot(); actualizarRequeridoRodeoDestino(); actualizarRequeridoRodeo();
+      actualizarSelectsRodeo(); actualizarBloquesCorral(); actualizarRequeridoRodeoDestino(); actualizarRequeridoRodeo();
       actualizarTitularesOrigenDisponibles();
     });
   }
   el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
-  // Solo importa para Traslado con destino Feed Lot — nubla "al pie" apenas
-  // se elige Feed Lot como establecimiento de destino.
+  // Nubla "al pie" apenas se elige Feed Lot como establecimiento de
+  // destino (Traslado, Cambio de rodeo).
   el('mov-establecimiento-destino').addEventListener('cambio', actualizarCategoriasOrigenDisponibles);
   // Solo importa para Cambio de categoría (el único tipo donde origen y
   // destino de categoría son independientes) — reconstruye las opciones
@@ -1401,11 +1187,7 @@ export async function initMovimientos() {
   el('mov-categoria-origen').addEventListener('cambio', () => {
     crearGrupoBotones('mov-categoria-destino', opcionesCategoriaDestino(obtenerSeleccion('mov-tipo')));
   });
-  el('mov-feedlot-corral-origen').addEventListener('cambio', () => {
-    actualizarAvisoCambioCategoriaExpress();
-    actualizarTitularesOrigenDisponibles();
-  });
-  el('mov-feedlot-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
+  el('mov-feedlot-corral-origen').addEventListener('cambio', actualizarTitularesOrigenDisponibles);
   ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);

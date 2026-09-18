@@ -154,14 +154,16 @@ function poblarSelectRodeoManga() {
   actualizarCategoriaSegunRodeo();
 }
 
-// La categoría ya no se elige: se deriva del rodeo elegido y se nublan
-// (deshabilitan) las demás opciones, para que no se pueda cargar con una
-// categoría que no corresponde a ese rodeo. Sin rodeo elegido, se deja
-// todo habilitado y sin selección (estado neutro).
+// La categoría se deriva del rodeo elegido y se nublan (deshabilitan) las
+// demás opciones, para que no se pueda cargar con una categoría que no
+// corresponde a ese rodeo. Excepción: los 4 corrales fijos de Feed Lot
+// (rodeo.categoria_id null, ver rodeoDelCorral en rodeos.js) pueden tener
+// varias categorías a la vez — ahí no hay nada que derivar, se deja igual
+// que sin rodeo elegido (todo habilitado, a elegir a mano).
 function actualizarCategoriaSegunRodeo() {
   const rodeo = obtenerRodeosCache().find((r) => r.id === el('manga-rodeo').value);
   const grupo = el('manga-categoria');
-  if (rodeo) {
+  if (rodeo && rodeo.categoria_id) {
     establecerSeleccion('manga-categoria', rodeo.categoria_id);
     grupo.querySelectorAll('.boton-opcion').forEach((b) => {
       const activo = b.dataset.value === rodeo.categoria_id;

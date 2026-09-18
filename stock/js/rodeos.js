@@ -15,32 +15,37 @@ export function obtenerRodeosCache() {
   return cache;
 }
 
-// soloHoteleria: false (default) trae los rodeos "propios" (de Agro
-// Salado/capitalizadores) — los de Hotelería (rodeos.es_hoteleria) quedan
-// afuera de TODOS los tipos de movimiento normales para no mezclar el
-// stock de un cliente externo con el propio. true invierte el filtro,
-// usado solo por "Salida de hotelería" para mostrar los lotes del cliente.
-export function rodeosDe(establecimientoId, categoriaId, { soloHoteleria = false } = {}) {
-  return cache.filter((r) =>
-    r.establecimiento_id === establecimientoId &&
-    r.categoria_id === categoriaId &&
-    Boolean(r.es_hoteleria) === soloHoteleria
-  );
+// Nota: los rodeos de Feed Lot (los 4 corrales fijos) nunca aparecen acá
+// con una categoria_id útil para filtrar — ver rodeoDelCorral() más abajo,
+// que es como se resuelve un rodeo en Feed Lot (por corral, no por
+// categoría/establecimiento como el resto).
+export function rodeosDe(establecimientoId, categoriaId) {
+  return cache.filter((r) => r.establecimiento_id === establecimientoId && r.categoria_id === categoriaId);
 }
 
 // Para el rodeo destino de Destete (Trabajo de Manga > Manejo de rodeo):
 // no se elige establecimiento por separado ahí, así que alcanza con
-// filtrar por categoría. Nunca incluye lotes de Hotelería.
+// filtrar por categoría.
 export function rodeosDeCategoria(categoriaId) {
-  return cache.filter((r) => r.categoria_id === categoriaId && !r.es_hoteleria);
+  return cache.filter((r) => r.categoria_id === categoriaId);
 }
 
 // Para el selector principal de Trabajo de Manga: el rodeo se elige
 // primero (solo filtrado por establecimiento) y la categoría se deriva
 // del rodeo elegido, no al revés — un rodeo ya tiene una única categoría
-// fija en un momento dado. Nunca incluye lotes de Hotelería.
+// fija en un momento dado. Excepción: los 4 corrales fijos de Feed Lot no
+// tienen una categoría fija (pueden tener varias a la vez), ver
+// trabajoManga.js.
 export function rodeosDeEstablecimiento(establecimientoId) {
-  return cache.filter((r) => r.establecimiento_id === establecimientoId && !r.es_hoteleria);
+  return cache.filter((r) => r.establecimiento_id === establecimientoId);
+}
+
+// Un rodeo de Feed Lot es uno de los 4 corrales fijos ("Corral n°1".."Corral
+// n°4") — nunca se crea ni se busca por categoría, siempre existen. Esto
+// es lo único que hace falta para resolver a qué rodeo va/sale cualquier
+// movimiento que toque Feed Lot (ver movimientos.js).
+export function rodeoDelCorral(corral) {
+  return cache.find((r) => r.establecimiento_id === 'feed_lot' && r.corral === corral);
 }
 
 // El código (ej. "Vaquillona San Miguel 202601") se arma acá, no en la
@@ -50,7 +55,7 @@ export function rodeosDeEstablecimiento(establecimientoId) {
 // (año, nombre) — no un contador global compartido por todos los
 // rodeos del año — así "San Miguel" cuenta 01, 02, 03... indepen-
 // dientemente de "San Juan" 01, 02, 03...
-export async function crearRodeo({ nombre, categoriaId, establecimientoId, fechaCreacion, usuarioId, esHoteleria }) {
+export async function crearRodeo({ nombre, categoriaId, establecimientoId, fechaCreacion, usuarioId }) {
   const fecha = fechaCreacion || new Date().toISOString().slice(0, 10);
   const anio = Number(fecha.slice(0, 4));
   const { data: secuencia, error: errorSecuencia } = await supabase.rpc('siguiente_secuencia_rodeo', { p_anio: anio, p_nombre: nombre });
@@ -68,7 +73,6 @@ export async function crearRodeo({ nombre, categoriaId, establecimientoId, fecha
       establecimiento_id: establecimientoId,
       fecha_creacion: fecha,
       creado_por: usuarioId,
-      es_hoteleria: Boolean(esHoteleria),
     })
     .select()
     .single();
@@ -158,64 +162,8 @@ export async function titularesDelRodeo(rodeoId) {
   return conStock;
 }
 
-// ─── Feed lot: corral + ciclo ───
-// Separado de registrarEntradaFeedLot para poder (re)confirmar el corral
-// de un rodeo SIN insertar un ciclo nuevo — se usa también cuando una
-// Apertura de stock reusa un rodeo que ya estaba en ese corral (ver
-// movimientos.js), para que un corral mal etiquetado (ej. por una falla
-// de red puntual la primera vez) se autocorrija en la próxima carga a ese
-// corral en vez de quedar roto hasta que alguien lo note.
-export async function actualizarCorralRodeo(rodeoId, corral) {
-  const { error } = await supabase.from('rodeos').update({ corral }).eq('id', rodeoId);
-  if (error) throw error;
-  const rodeo = cache.find((r) => r.id === rodeoId);
-  if (rodeo) rodeo.corral = corral;
-}
-
-// fecha/kilos de INGRESO salen del propio movimiento que trae el rodeo a
-// feed lot (no se vuelven a tipear); fecha estimada de salida y kilos
-// objetivo son el único dato nuevo que se pide en ese momento.
-export async function registrarEntradaFeedLot({ rodeoId, corral, fecha, kilosIngreso, fechaEstimadaSalida, kilosSalidaObjetivo }) {
-  await actualizarCorralRodeo(rodeoId, corral);
-  const { error } = await supabase.from('feed_lot_ciclos').insert({
-    rodeo_id: rodeoId,
-    fecha_ingreso: fecha,
-    kilos_ingreso: kilosIngreso,
-    fecha_estimada_salida: fechaEstimadaSalida || null,
-    kilos_salida_objetivo: kilosSalidaObjetivo || null,
-  });
-  if (error) throw error;
-}
-
-// Se llama cuando un rodeo deja feed lot (traslado a otro establecimiento,
-// o una salida — venta/faena/mortandad — desde feed lot): cierra el ciclo
-// abierto con la fecha/kilos reales del propio movimiento, y limpia el
-// corral (ya no está físicamente ahí).
-export async function registrarSalidaFeedLot({ rodeoId, fecha, kilosSalida }) {
-  await actualizarCorralRodeo(rodeoId, null);
-  const { error } = await supabase
-    .from('feed_lot_ciclos')
-    .update({ fecha_salida_real: fecha, kilos_salida_real: kilosSalida, activo: false })
-    .eq('rodeo_id', rodeoId)
-    .eq('activo', true);
-  if (error) throw error;
-}
-
-// Corral + ciclo activo por rodeo, para mostrar en el dashboard al mirar
-// el stock de feed lot ("¿en qué corral está, cuándo sale?").
-export async function cargarInfoFeedLot() {
-  const [{ data: rodeosFeedLot, error: errorRodeos }, { data: ciclos, error: errorCiclos }] = await Promise.all([
-    supabase.from('rodeos').select('id, corral').eq('establecimiento_id', 'feed_lot'),
-    supabase.from('feed_lot_ciclos').select('rodeo_id, fecha_estimada_salida, kilos_salida_objetivo').eq('activo', true),
-  ]);
-  const info = {};
-  if (!errorRodeos) {
-    for (const r of rodeosFeedLot) info[r.id] = { corral: r.corral };
-  }
-  if (!errorCiclos) {
-    for (const c of ciclos) {
-      info[c.rodeo_id] = { ...(info[c.rodeo_id] || {}), fechaEstimadaSalida: c.fecha_estimada_salida, kilosSalidaObjetivo: c.kilos_salida_objetivo };
-    }
-  }
-  return info;
-}
+// Nota: ya no hace falta "registrar entrada/salida de feed lot" — el
+// corral de un rodeo de Feed Lot es fijo para siempre (uno de los 4
+// corrales), nunca se asigna ni se limpia por movimiento. El "corral"
+// simplemente ES el campo `corral` de esos 4 rodeos, ya disponible en
+// cache/obtenerRodeosCache() sin pedir nada aparte (ver dashboard.js).

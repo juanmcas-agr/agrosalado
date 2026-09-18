@@ -153,18 +153,31 @@ create table rodeos (
   anio int not null,
   secuencia int not null,
   codigo text not null unique,           -- ej. "Vaquillona San Miguel 202601"
-  categoria_id text not null references categorias(id),
+  -- Nullable a propósito (ver migración 039): los 4 corrales fijos de
+  -- Feed Lot ("Corral n°1".."Corral n°4") pueden tener stock de varias
+  -- categorías a la vez, así que no tienen UNA categoria_id — queda en
+  -- null para siempre. El resto de los rodeos (San Miguel/San Juan/
+  -- El Tara) la siguen usando normalmente.
+  categoria_id text references categorias(id),
   establecimiento_id text not null references establecimientos(id),
   corral text check (corral in ('1', '2', '3', '4')),  -- solo aplica en feed_lot
   fecha_creacion date not null default current_date,
   activo boolean not null default true,  -- false cuando el rodeo se vació del todo
-  -- Auto-creado por un movimiento 'hoteleria' (nunca a mano) — excluido
-  -- del selector de rodeo de los demás tipos de movimiento, solo aparece
-  -- en "Salida de hotelería" (ver rodeosDe() en rodeos.js).
+  -- Ya no se usa para altas nuevas (Hotelería ahora comparte los 4
+  -- corrales fijos de Feed Lot, distinguida por titular/cliente en
+  -- stock_actual, ver migración 039) — se deja la columna por
+  -- trazabilidad histórica de rodeos viejos que sí la tenían en true.
   es_hoteleria boolean not null default false,
   creado_por uuid not null references auth.users(id),
   creado_at timestamptz not null default now()
 );
+
+-- Los 4 corrales fijos de Feed Lot ("Corral n°1".."Corral n°4") NO se
+-- seedean acá (creado_por necesita un usuario real de perfiles, que
+-- todavía no existe en este punto del archivo) — se crean en la
+-- migración 039_feedlot_4_corrales_fijos.sql, que además borra todo lo
+-- que había antes de ese modelo. En una base nueva desde cero, correr esa
+-- migración después de tener al menos un owner en `perfiles`.
 
 alter table rodeos enable row level security;
 
@@ -745,11 +758,13 @@ language plpgsql as $$
 begin
   if new.tipo_movimiento = 'traslado' and new.rodeo_destino_id is null then
     update rodeos set establecimiento_id = new.establecimiento_destino where id = new.rodeo_id;
-  elsif new.tipo_movimiento = 'cambio_categoria' and new.rodeo_destino_id is null then
+  elsif new.tipo_movimiento = 'cambio_categoria' and new.rodeo_destino_id is null and new.establecimiento_origen <> 'feed_lot' then
     -- Recategorización dentro del mismo rodeo (caso normal). Cuando
     -- rodeo_destino_id no es null (Destete), el rodeo de origen NO cambia
     -- de categoría — solo pierde cabezas hacia el rodeo nuevo, que ya
-    -- nace con la categoría correcta (se crea con esa categoría).
+    -- nace con la categoría correcta (se crea con esa categoría). Los 4
+    -- corrales fijos de Feed Lot nunca actualizan categoria_id (queda
+    -- null para siempre, ver migración 039).
     update rodeos set categoria_id = new.categoria_destino where id = new.rodeo_id;
   end if;
   return new;

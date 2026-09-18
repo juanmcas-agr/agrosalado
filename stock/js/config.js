@@ -138,23 +138,24 @@ export const TIPOS_MOVIMIENTO = {
   // Feed Lot — no son de Agro Salado ni de un capitalizador (socio), así
   // que usan su propio campo "Cliente" (titulares.tipo='cliente') en vez
   // de Titularidad de destino. establecimientoDestinoFijo reemplaza al
-  // selector de establecimiento (siempre Feed Lot); sinRodeo esconde el
-  // selector de Rodeo — el rodeo se crea solo por lote, ver onSubmit() en
-  // movimientos.js.
+  // selector de establecimiento (siempre Feed Lot); al ser Feed Lot, el
+  // rodeo se resuelve por Corral como cualquier otro movimiento que toque
+  // Feed Lot (ver movimientos.js) — nunca crea un rodeo propio por lote,
+  // comparte uno de los 4 corrales fijos con el resto de la hacienda
+  // (se distinguen por "Cliente"/titular en stock_actual).
   hoteleria: {
     nombre: 'Hotelería', clase: 'entrada',
     campos: ['categoria_destino', 'cliente'],
     establecimientoDestinoFijo: 'feed_lot',
-    sinRodeo: true,
   },
-  // Retiro del cliente: cierra el lote (libera el corral, cierra el ciclo
-  // de feed lot) — ver rodeosDe(soloHoteleria) en rodeos.js, que filtra el
-  // selector de Rodeo para mostrar solo lotes de hotelería.
+  // Retiro del cliente: se vende/saca esa porción puntual del corral
+  // (identificada por corral+categoría+cliente en stock_actual), no
+  // "cierra un lote" — un corral es una identidad fija, nunca deja de
+  // existir.
   salida_hoteleria: {
     nombre: 'Salida de hotelería', clase: 'salida',
     campos: ['categoria_origen', 'cliente'],
     establecimientoOrigenFijo: 'feed_lot',
-    soloRodeosHoteleria: true,
   },
   // Al final del grupo de botones a propósito (uso excepcional, solo owner).
   apertura_stock: {

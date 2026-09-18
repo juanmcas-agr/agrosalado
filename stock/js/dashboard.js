@@ -3,7 +3,7 @@ import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { stockCacheGet, stockCacheSet } from './db-local.js';
 import { exportarMatrizStock, exportarStockEstablecimiento } from './export.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
-import { cargarRodeos, obtenerRodeosCache, cargarInfoFeedLot } from './rodeos.js';
+import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion } from './botones.js';
 
 function el(id) {
@@ -86,13 +86,16 @@ function formatearKilos(kg) {
 }
 
 // Rodeos con stock (>0) en un establecimiento, sumando titulares — para el
-// detalle que se abre al tocar la fila en "Por establecimiento".
+// detalle que se abre al tocar la fila en "Por establecimiento". Un rodeo
+// puede tener más de una categoría a la vez (los 4 corrales fijos de Feed
+// Lot, ver rodeoDelCorral en rodeos.js), así que se acumula una lista de
+// categoría+cabezas por rodeo, no un valor único.
 function rodeosPorEstablecimiento(rows, establecimientoId) {
   const acumulado = {};
   for (const r of rows) {
     if (r.establecimiento !== establecimientoId || !r.rodeo_id || r.cabezas <= 0) continue;
-    if (!acumulado[r.rodeo_id]) acumulado[r.rodeo_id] = { rodeoId: r.rodeo_id, rodeo: r.rodeo, categoriaId: r.categoria, cabezas: 0 };
-    acumulado[r.rodeo_id].cabezas += r.cabezas;
+    if (!acumulado[r.rodeo_id]) acumulado[r.rodeo_id] = { rodeoId: r.rodeo_id, rodeo: r.rodeo, categorias: [] };
+    acumulado[r.rodeo_id].categorias.push({ categoriaId: r.categoria, cabezas: r.cabezas });
   }
   return Object.values(acumulado).sort((a, b) => (a.rodeo || '').localeCompare(b.rodeo || ''));
 }
@@ -234,17 +237,10 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
     const rodeos = rodeosPorEstablecimiento(rowsFiltradas, e.id);
     tdRodeos.innerHTML = rodeos.length
       ? `<strong>${rodeos.length} rodeo(s):</strong> ` + rodeos.map((r) => {
-          const cat = CATEGORIAS.find((c) => c.id === r.categoriaId);
-          let extra = '';
-          if (e.id === 'feed_lot') {
-            const info = infoFeedLot[r.rodeoId];
-            const partes = [];
-            if (info?.corral) partes.push(`corral ${info.corral}`);
-            if (info?.fechaEstimadaSalida) partes.push(`salida est. ${formatearFechaDMY(info.fechaEstimadaSalida)}`);
-            if (info?.kilosSalidaObjetivo) partes.push(`objetivo ${info.kilosSalidaObjetivo}kg`);
-            if (partes.length) extra = ` [${partes.join(', ')}]`;
-          }
-          return `<button type="button" class="link-rodeo" data-rodeo-id="${r.rodeoId}">${r.rodeo}</button> (${cat ? cat.nombre : r.categoriaId}: ${r.cabezas})${extra}`;
+          const detalle = r.categorias
+            .map(({ categoriaId, cabezas }) => `${CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId}: ${cabezas}`)
+            .join(', ');
+          return `<button type="button" class="link-rodeo" data-rodeo-id="${r.rodeoId}">${r.rodeo}</button> (${detalle})`;
         }).join(' · ')
       : 'Sin rodeos con stock en este establecimiento.';
     tdRodeos.querySelectorAll('.link-rodeo').forEach((boton) => {
@@ -351,7 +347,6 @@ function leerVista(idGrupo, idCapSelect) {
 }
 
 let ultimasFilasStock = [];
-let infoFeedLot = {}; // { [rodeoId]: { corral, fechaEstimadaSalida, kilosSalidaObjetivo } }
 
 function renderTablaCategoria() {
   const { vista, capitalizadorId } = leerVista('dash-categoria-vista', 'dash-categoria-cap-select');
@@ -401,10 +396,6 @@ export async function refrescarDashboard() {
   }
 
   ultimasFilasStock = rows;
-  infoFeedLot = {};
-  if (hoy && !offline) {
-    try { infoFeedLot = await cargarInfoFeedLot(); } catch (error) { console.warn('No se pudo cargar corral/ciclo de feed lot:', error); }
-  }
   renderEstado({ offline, fetchedAt, fecha });
   renderResumenTitularidad(rows);
   renderTablaCategoria();
