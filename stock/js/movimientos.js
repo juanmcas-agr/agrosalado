@@ -716,12 +716,50 @@ async function ejecutarCambioCategoriaExpress() {
     if (error) throw error;
     mostrarToast('✅ Categoría actualizada — ya podés continuar.');
     await actualizarAvisoCambioCategoriaExpress();
+    await actualizarStockDisponibleTexto();
   } catch (error) {
     mostrarMensaje('No se pudo cambiar la categoría: ' + error.message, 'error');
   } finally {
     boton.disabled = false;
     boton.textContent = 'Cambiar categoría y continuar';
   }
+}
+
+// Cuánto stock hay realmente de la categoría+titular elegidos en el
+// corral de origen — se ve de entrada, sin esperar al error de
+// validarStockDisponible() recién al guardar. Aplica a cualquier tipo con
+// categoria_origen cuyo origen resuelva a Feed Lot (no solo salidas:
+// Traslado/Cambio de categoría/Cambio de rodeo también sacan de un
+// corral puntual).
+let tokenStockDisponible = 0;
+async function actualizarStockDisponibleTexto() {
+  const idPropio = ++tokenStockDisponible;
+  const texto = el('mov-stock-disponible');
+  const ocultar = () => texto.classList.add('oculto');
+
+  const tipo = obtenerSeleccion('mov-tipo');
+  const cfg = TIPOS_MOVIMIENTO[tipo];
+  if (!cfg || !cfg.campos.includes('categoria_origen')) { ocultar(); return; }
+  if (establecimientosResueltos(cfg).origen !== 'feed_lot') { ocultar(); return; }
+
+  const corral = obtenerSeleccion('mov-feedlot-corral-origen');
+  const categoriaId = obtenerSeleccion('mov-categoria-origen');
+  const titular = titularOrigenActual(tipo, cfg);
+  const rodeo = rodeoDelCorral(corral);
+  if (!corral || !categoriaId || !titular || !rodeo || !navigator.onLine) { ocultar(); return; }
+
+  let cabezas;
+  try {
+    cabezas = await stockDelRodeoPorCategoriaYTitular(rodeo.id, categoriaId, titular);
+  } catch (error) {
+    ocultar();
+    return;
+  }
+  if (idPropio !== tokenStockDisponible) return; // el usuario ya cambió algo mientras esperábamos
+
+  const nombreCategoria = CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
+  texto.textContent = `Stock disponible de ${nombreCategoria} de este titular en el Corral ${corral}: ${cabezas} cabeza(s).`;
+  texto.classList.remove('oculto');
 }
 
 function actualizarRequeridoRodeoDestino() {
@@ -858,6 +896,7 @@ function actualizarCamposVisibles() {
   actualizarEstablecimientosDestinoDisponibles();
   actualizarTitularesOrigenDisponibles();
   actualizarAvisoCambioCategoriaExpress();
+  actualizarStockDisponibleTexto();
 }
 
 function activarAccesoRapidoFeedLot() {
@@ -1295,6 +1334,7 @@ export async function initMovimientos() {
       actualizarSelectsRodeo(); actualizarBloquesCorral(); actualizarRequeridoRodeoDestino(); actualizarRequeridoRodeo();
       actualizarTitularesOrigenDisponibles();
       actualizarAvisoCambioCategoriaExpress();
+      actualizarStockDisponibleTexto();
     });
   }
   el('mov-establecimiento-origen').addEventListener('cambio', actualizarEstablecimientosDestinoDisponibles);
@@ -1310,10 +1350,20 @@ export async function initMovimientos() {
   el('mov-feedlot-corral-origen').addEventListener('cambio', () => {
     actualizarTitularesOrigenDisponibles();
     actualizarAvisoCambioCategoriaExpress();
+    actualizarStockDisponibleTexto();
   });
-  el('mov-titular-origen-tipo').addEventListener('cambio', actualizarAvisoCambioCategoriaExpress);
-  el('mov-titular-origen-cap').addEventListener('change', actualizarAvisoCambioCategoriaExpress);
-  el('mov-cliente').addEventListener('change', actualizarAvisoCambioCategoriaExpress);
+  el('mov-titular-origen-tipo').addEventListener('cambio', () => {
+    actualizarAvisoCambioCategoriaExpress();
+    actualizarStockDisponibleTexto();
+  });
+  el('mov-titular-origen-cap').addEventListener('change', () => {
+    actualizarAvisoCambioCategoriaExpress();
+    actualizarStockDisponibleTexto();
+  });
+  el('mov-cliente').addEventListener('change', () => {
+    actualizarAvisoCambioCategoriaExpress();
+    actualizarStockDisponibleTexto();
+  });
   el('mov-feedlot-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
   ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
