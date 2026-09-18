@@ -2,7 +2,7 @@
 // No cachea llamadas a Supabase — eso lo maneja IndexedDB (ver js/db-local.js
 // y js/sync.js), para no tener dos mecanismos de "offline" compitiendo.
 
-const CACHE_NAME = 'agrosalado-stock-shell-v52';
+const CACHE_NAME = 'agrosalado-stock-shell-v53';
 
 // Local: si falta CUALQUIERA de estos, no hay app-shell offline, así que
 // tienen que cachearse sí o sí (si uno falla, falla toda la instalación).
@@ -37,6 +37,9 @@ const APP_SHELL_LOCAL = [
   '/assets/logo-full.png',
   '/assets/fondo-login.jpg',
 ];
+// js/testing/mockSupabase.js NO va en esta lista a propósito: solo se carga
+// en localhost con ?mocksupabase=1 (ver supabaseClient.js), así que no tiene
+// sentido precachearlo en el celular de nadie.
 
 // CDNs externos: mejor esfuerzo. Antes iban en el mismo cache.addAll() que
 // lo local — un solo hipo de red cacheando esm.sh o sheetjs.com (algo común
