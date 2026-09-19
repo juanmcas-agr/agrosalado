@@ -366,6 +366,20 @@ button:active { filter: brightness(0.9); }
   font-size: 0.85em;
 }
 
+/* Botones de acción adentro de una tabla (Editar / Anular en Historial y
+   en Reportes > Trabajo de Manga). Sin esto quedan despatarrados:
+   .boton-anular ya venía compacto para tablas, pero .boton-secundario usa
+   el tamaño de un botón de formulario y además arrastra un margen inferior
+   que desalinea la fila. Acá se igualan los dos. */
+.tabla td button {
+  padding: 6px 10px;
+  font-size: 0.85em;
+  margin-bottom: 0;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+.tabla td button + button { margin-left: 6px; }
+
 /* ─── mensajes / banners ─── */
 .mensaje { font-size: 0.9em; min-height: 1.2em; margin: 4px 0; }
 .mensaje.error { color: #ad1e19; font-weight: bold; }
