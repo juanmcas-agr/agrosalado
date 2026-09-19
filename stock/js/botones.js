@@ -63,6 +63,15 @@ export function obtenerSeleccionMultiple(id) {
   return Array.from(document.getElementById(id).querySelectorAll('.boton-opcion.seleccionado')).map((b) => b.dataset.value);
 }
 
+// Deja marcados exactamente los valores de la lista (usado al precargar un
+// formulario para editar algo ya guardado).
+export function establecerSeleccionMultiple(id, valores) {
+  const elegidos = new Set(valores || []);
+  document.getElementById(id).querySelectorAll('.boton-opcion').forEach((b) => {
+    b.classList.toggle('seleccionado', elegidos.has(b.dataset.value));
+  });
+}
+
 // Botón individual on/off (ej. las secciones "SANIDAD"/"REPRODUCCION"/
 // "MANEJO DE RODEO" de Trabajo de Manga, que despliegan sub-campos) —
 // mismo look que los grupos de botones, más consistente que un checkbox

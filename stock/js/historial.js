@@ -4,7 +4,7 @@ import { getEstado } from './auth.js';
 import { exportarHistorial, exportarTrabajosManga } from './export.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
 import { cargarTitulares } from './titulares.js';
-import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
+import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado, puedeAnularManga, anularTrabajoManga } from './trabajoMangaDetalle.js';
 
 const VENTANA_ANULACION_HORAS = 48;
 
@@ -242,33 +242,9 @@ function exportar() {
 // usuario, ni administrativo — a diferencia de movimientos, acá no hay
 // "Editar" porque trabajos_manga no tiene ese concepto) ───
 
-function puedeAnularManga(fila) {
-  const { perfil } = getEstado();
-  return !!perfil && perfil.rol === 'owner' && !fila.anulado;
-}
-
-async function anularTrabajoManga(id) {
-  if (!navigator.onLine) {
-    alert('Necesitás conexión a internet para anular un trabajo de manga.');
-    return;
-  }
-  const motivo = prompt('Motivo de la anulación:');
-  if (motivo === null) return;
-  const { error } = await supabase
-    .from('trabajos_manga')
-    .update({
-      anulado: true,
-      anulado_por: getEstado().session.user.id,
-      anulado_at: new Date().toISOString(),
-      anulado_motivo: motivo || null,
-    })
-    .eq('id', id);
-  if (error) {
-    alert(`No se pudo anular: ${error.message}`);
-    return;
-  }
-  await cargarHistorialManga();
-}
+// puedeAnularManga y anularTrabajoManga viven en trabajoMangaDetalle.js:
+// los comparte con Reportes > Trabajo de Manga, que ofrece las mismas
+// acciones sobre el mismo listado.
 
 function poblarSelectRodeoHistorialManga() {
   const select = el('hist-manga-filtro-rodeo');
@@ -308,7 +284,9 @@ function renderFilasManga(trabajos) {
       const btnAnular = document.createElement('button');
       btnAnular.textContent = 'Anular';
       btnAnular.className = 'boton-anular';
-      btnAnular.addEventListener('click', () => anularTrabajoManga(t.id));
+      btnAnular.addEventListener('click', async () => {
+        if (await anularTrabajoManga(t.id)) await cargarHistorialManga();
+      });
       tr.lastElementChild.appendChild(btnAnular);
     }
     tbody.appendChild(tr);

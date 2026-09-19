@@ -7,6 +7,46 @@
 import { supabase } from './supabaseClient.js';
 import { CATEGORIAS } from './config.js';
 import { obtenerTitularesCache } from './titulares.js';
+import { getEstado } from './auth.js';
+
+// Anular y editar un trabajo de manga: solo owner. Editar es más fuerte de
+// lo que parece — permite cambiar la cantidad trabajada, que para el resto
+// de los roles tiene que pasar sí o sí por el circuito de "rectificación
+// pendiente de aprobación" (ver editarCantidadTrabajada en trabajoManga.js).
+// Si se abriera a más roles, ese control quedaría sin efecto.
+export function puedeAnularManga(fila) {
+  const { perfil } = getEstado();
+  return !!perfil && perfil.rol === 'owner' && !fila.anulado;
+}
+
+export function puedeEditarManga(fila) {
+  const { perfil } = getEstado();
+  return !!perfil && perfil.rol === 'owner' && !fila.anulado;
+}
+
+// Devuelve true si se anuló, false si se canceló o falló (ya avisa).
+export async function anularTrabajoManga(id) {
+  if (!navigator.onLine) {
+    alert('Necesitás conexión a internet para anular un trabajo de manga.');
+    return false;
+  }
+  const motivo = prompt('Motivo de la anulación:');
+  if (motivo === null) return false;
+  const { error } = await supabase
+    .from('trabajos_manga')
+    .update({
+      anulado: true,
+      anulado_por: getEstado().session.user.id,
+      anulado_at: new Date().toISOString(),
+      anulado_motivo: motivo || null,
+    })
+    .eq('id', id);
+  if (error) {
+    alert(`No se pudo anular: ${error.message}`);
+    return false;
+  }
+  return true;
+}
 
 let catalogos = { drogas: {}, vacunas: {}, otras: {}, toros: {} };
 
@@ -127,6 +167,17 @@ export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuario
   return data.map((t) => ({
     ...t,
     categoriaNombre: nombreCategoriaManga(t.categoria_id),
+    // Datos crudos de las tablas hijas, además del texto armado: los usan
+    // el filtro por propietario y la precarga del formulario al editar
+    // (Reportes > Trabajo de Manga). Ya están todos traídos acá arriba, así
+    // que exponerlos no cuesta una consulta más.
+    propietariosIds: (porPropietario[t.id] || []).map((p) => p.titular_id),
+    sanidad: porSanidad[t.id]?.[0] || null,
+    vacunasIds: (porVacunas[t.id] || []).map((v) => v.vacuna_id),
+    otrasSanidadesIds: (porOtras[t.id] || []).map((o) => o.sanidad_id),
+    reproduccion: porReproduccion[t.id]?.[0] || null,
+    torosIds: (porToros[t.id] || []).map((x) => x.toro_id),
+    manejo: porManejo[t.id]?.[0] || null,
     propietariosTexto: (porPropietario[t.id] || [])
       .map((p) => obtenerTitularesCache().find((x) => x.id === p.titular_id)?.nombre || p.titular_id)
       .join(', '),

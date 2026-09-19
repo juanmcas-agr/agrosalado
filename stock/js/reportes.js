@@ -7,8 +7,11 @@
 import { supabase } from './supabaseClient.js';
 import { ESTABLECIMIENTOS, CATEGORIAS } from './config.js';
 import { cargarRodeos, obtenerRodeosCache } from './rodeos.js';
-import { cargarTitulares } from './titulares.js';
-import { cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado } from './trabajoMangaDetalle.js';
+import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
+import {
+  cargarCatalogosSanidad, obtenerTrabajosConDetalle, esRectificado,
+  puedeAnularManga, puedeEditarManga, anularTrabajoManga,
+} from './trabajoMangaDetalle.js';
 import { INDICES, ordenIndices, fechaGatilloDelAnio, ventanaDestete, hoyArtISO } from './indicesConfig.js';
 import { revisarRecordatorioIndices } from './indices.js';
 
@@ -45,29 +48,59 @@ function diasEntre(desdeIso, hastaIso) {
 
 // ─── Trabajo de Manga ───────────────────────────────────────────────────
 
-function poblarSelectRodeoReportes() {
-  const select = el('rep-manga-rodeo');
+function poblarSelect(idSelect, opciones, textoTodos) {
+  const select = el(idSelect);
   const valorPrevio = select.value;
-  select.innerHTML = '<option value="">Todos los rodeos</option>';
-  for (const r of obtenerRodeosCache()) {
+  select.innerHTML = '';
+  const vacia = document.createElement('option');
+  vacia.value = '';
+  vacia.textContent = textoTodos;
+  select.appendChild(vacia);
+  for (const o of opciones) {
     const opt = document.createElement('option');
-    opt.value = r.id;
-    opt.textContent = r.codigo;
+    opt.value = o.id;
+    opt.textContent = o.nombre;
     select.appendChild(opt);
   }
-  if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+  if (valorPrevio && [...select.options].some((x) => x.value === valorPrevio)) select.value = valorPrevio;
 }
+
+// Los rodeos se acotan al establecimiento elegido: la lista completa mezcla
+// los de los cuatro campos y es incómoda de recorrer.
+function poblarSelectRodeoReportes() {
+  const establecimientoId = el('rep-manga-establecimiento')?.value || '';
+  const rodeos = obtenerRodeosCache()
+    .filter((r) => !establecimientoId || r.establecimiento_id === establecimientoId)
+    .map((r) => ({ id: r.id, nombre: r.codigo }));
+  poblarSelect('rep-manga-rodeo', rodeos, 'Todos los rodeos');
+}
+
+function poblarFiltrosManga() {
+  poblarSelect('rep-manga-establecimiento', ESTABLECIMIENTOS, 'Todos los establecimientos');
+  poblarSelectRodeoReportes();
+  poblarSelect('rep-manga-categoria', CATEGORIAS, 'Todas las categorías');
+  poblarSelect('rep-manga-propietario', obtenerTitularesCache(), 'Todos los propietarios');
+}
+
+async function poblarSelectUsuariosManga() {
+  const { data, error } = await supabase.from('perfiles').select('user_id, nombre_completo').order('nombre_completo');
+  if (error || !data) return;
+  poblarSelect('rep-manga-usuario', data.map((u) => ({ id: u.user_id, nombre: u.nombre_completo })), 'Todos los usuarios');
+}
+
+let ultimosTrabajos = [];
 
 function renderTrabajosManga(trabajos) {
   const tbody = el('rep-manga-tabla').querySelector('tbody');
   tbody.innerHTML = '';
   if (!trabajos.length) {
-    tbody.innerHTML = '<tr><td colspan="8">Sin trabajos de manga en el rango elegido.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10">Sin trabajos de manga con esos filtros.</td></tr>';
     return;
   }
   for (const t of trabajos) {
     const tr = document.createElement('tr');
-    if (esRectificado(t)) tr.classList.add('rectificado');
+    if (t.anulado) tr.classList.add('anulado');
+    else if (esRectificado(t)) tr.classList.add('rectificado');
     tr.innerHTML = `
       <td>${t.codigo}</td>
       <td>${t.fecha}</td>
@@ -77,9 +110,37 @@ function renderTrabajosManga(trabajos) {
       <td>${t.propietariosTexto}</td>
       <td>${t.detalleTexto}</td>
       <td>${t.usuario_nombre || ''}</td>
+      <td>${t.anulado ? `Anulado (${t.anulado_motivo || 'sin motivo'})` : ''}</td>
+      <td class="no-imprimir"></td>
     `;
+    const acciones = tr.lastElementChild;
+    if (puedeEditarManga(t)) {
+      const btnEditar = document.createElement('button');
+      btnEditar.type = 'button';
+      btnEditar.textContent = 'Editar';
+      btnEditar.className = 'boton-secundario';
+      btnEditar.addEventListener('click', () => pedirEdicionManga(t));
+      acciones.appendChild(btnEditar);
+    }
+    if (puedeAnularManga(t)) {
+      const btnAnular = document.createElement('button');
+      btnAnular.type = 'button';
+      btnAnular.textContent = 'Anular';
+      btnAnular.className = 'boton-anular';
+      btnAnular.addEventListener('click', async () => {
+        if (await anularTrabajoManga(t.id)) await cargarTrabajosManga();
+      });
+      acciones.appendChild(btnAnular);
+    }
     tbody.appendChild(tr);
   }
+}
+
+// Manda a editar a la pantalla Trabajo de Manga (que ya tiene el formulario
+// entero) en vez de duplicarlo acá — vía evento, para no armar un import
+// circular entre reportes.js y trabajoManga.js.
+function pedirEdicionManga(trabajo) {
+  document.dispatchEvent(new CustomEvent('hacienda:editar-trabajo-manga', { detail: trabajo }));
 }
 
 export async function cargarTrabajosManga() {
@@ -89,9 +150,24 @@ export async function cargarTrabajosManga() {
   const desde = el('rep-manga-desde').value;
   const hasta = el('rep-manga-hasta').value;
   const rodeoId = el('rep-manga-rodeo').value;
+  const usuarioId = el('rep-manga-usuario').value;
+  const establecimientoId = el('rep-manga-establecimiento').value;
+  const categoriaId = el('rep-manga-categoria').value;
+  const propietarioId = el('rep-manga-propietario').value;
 
   try {
-    const trabajos = await obtenerTrabajosConDetalle({ desde, hasta, rodeoId });
+    let trabajos = await obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuarioId });
+    // Establecimiento, categoría y propietario se filtran acá: el primero
+    // sale del rodeo (no es una columna del trabajo) y el último vive en
+    // una tabla hija, así que no se pueden pedir a la base sin complicar
+    // la consulta compartida con Historial.
+    if (establecimientoId) {
+      const deEse = new Set(obtenerRodeosCache().filter((r) => r.establecimiento_id === establecimientoId).map((r) => r.id));
+      trabajos = trabajos.filter((t) => deEse.has(t.rodeo_id));
+    }
+    if (categoriaId) trabajos = trabajos.filter((t) => t.categoria_id === categoriaId);
+    if (propietarioId) trabajos = trabajos.filter((t) => (t.propietariosIds || []).includes(propietarioId));
+    ultimosTrabajos = trabajos;
     renderTrabajosManga(trabajos);
   } catch (error) {
     mensaje.textContent = `No se pudo cargar (¿sin conexión?): ${error.message}`;
@@ -727,6 +803,10 @@ export async function initReportes() {
   });
   el('rep-manga-filtrar').addEventListener('click', cargarTrabajosManga);
   el('rep-manga-imprimir').addEventListener('click', imprimirReporte);
+  // Elegir establecimiento acota la lista de rodeos; si el rodeo que estaba
+  // elegido no es de ese campo, poblarSelectRodeoReportes lo deja en
+  // "Todos los rodeos" solo (no lo encuentra entre las opciones nuevas).
+  el('rep-manga-establecimiento').addEventListener('change', poblarSelectRodeoReportes);
   el('rep-feedlot-actualizar').addEventListener('click', cargarFeedLot);
   el('rep-feedlot-imprimir').addEventListener('click', imprimirReporte);
   el('rep-rodeo-ver').addEventListener('click', cargarHistoriaRodeo);
@@ -754,7 +834,8 @@ export async function initReportes() {
   // ANTES de mostrar la primera sub-sección — si no, la primera carga de
   // datos corre con nombres sin resolver.
   await Promise.all([cargarRodeos(), cargarTitulares(), cargarCatalogosSanidad()]);
-  poblarSelectRodeoReportes();
+  poblarFiltrosManga();
+  poblarSelectUsuariosManga();
   poblarSelectRodeoHistoria();
   mostrarSubseccion('manga');
 }
@@ -764,7 +845,14 @@ export async function initReportes() {
 // haber quedado en otra al salir de la pestaña).
 export async function refrescarReportes() {
   const activa = document.querySelector('.reportes-tab.activo')?.dataset.subseccion || 'manga';
-  if (activa === 'manga') await cargarTrabajosManga();
+  if (activa === 'manga') {
+    // Los filtros se arman desde los caches de rodeos y titulares, que
+    // pueden haber cambiado desde que se abrió la app (un rodeo nuevo, un
+    // capitalizador recién creado). Se repueblan al entrar, igual que hace
+    // Cargar movimiento con los rodeos.
+    poblarFiltrosManga();
+    await cargarTrabajosManga();
+  }
   if (activa === 'feedlot') await cargarFeedLot();
   if (activa === 'rodeo') await cargarHistoriaRodeo();
   if (activa === 'indices') await cargarIndices();

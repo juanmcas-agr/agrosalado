@@ -10,7 +10,7 @@ import { CATEGORIAS, ESTABLECIMIENTOS } from './config.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
 import { cargarRodeos, rodeosDeEstablecimiento, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
-import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
+import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, establecerSeleccionMultiple, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
 
 function el(id) {
   return document.getElementById(id);
@@ -443,7 +443,10 @@ async function ejecutarDestete(trabajoMangaId, manejo, contexto) {
   }
 }
 
-async function guardarManejo(trabajoMangaId, manejo, contexto) {
+// ejecutarDesteteTambien va en false al editar un trabajo ya cargado: el
+// destete original ya generó sus movimientos de stock y no se rehace (ver
+// bloquearDesteteSiCorresponde).
+async function guardarManejo(trabajoMangaId, manejo, contexto, { ejecutarDesteteTambien = true } = {}) {
   const { error: errorManejo } = await supabase
     .from('trabajo_manga_manejo')
     .insert({
@@ -469,9 +472,30 @@ async function guardarManejo(trabajoMangaId, manejo, contexto) {
     if (error) throw error;
   }
 
-  if (manejo.destete) {
+  if (manejo.destete && ejecutarDesteteTambien) {
     await ejecutarDestete(trabajoMangaId, manejo, contexto);
   }
+}
+
+// Al editar hay que reemplazar las filas hijas, no acumularlas: se borran
+// las que había y se vuelven a insertar con lo que quedó en el formulario.
+// El manejo se saltea cuando el trabajo tenía un destete (esa fila guarda
+// las cantidades destetadas, que no se tocan).
+async function borrarHijosDelTrabajo(trabajoId, { incluirManejo }) {
+  const tablas = [
+    'trabajo_manga_propietarios', 'trabajo_manga_sanidad', 'trabajo_manga_vacunas',
+    'trabajo_manga_otras_sanidades', 'trabajo_manga_reproduccion', 'trabajo_manga_inseminacion_toros',
+  ];
+  if (incluirManejo) tablas.push('trabajo_manga_manejo');
+  for (const tabla of tablas) {
+    const { error } = await supabase.from(tabla).delete().eq('trabajo_manga_id', trabajoId);
+    if (error) return error;
+  }
+  if (incluirManejo) {
+    const { error } = await supabase.from('rodeo_pesadas_historial').delete().eq('trabajo_manga_id', trabajoId);
+    if (error) return error;
+  }
+  return null;
 }
 
 function activarBloquesManejo() {
@@ -814,6 +838,129 @@ function mostrarMensaje(texto, tipo) {
   contenedor.className = tipo; // 'error' | 'ok' | 'advertencia'
 }
 
+// ─── Editar un trabajo ya cargado (desde Reportes > Trabajo de Manga) ───
+// Se reusa este formulario entero en vez de armar uno aparte allá. A
+// diferencia de los movimientos (que se corrigen creando uno nuevo y
+// marcando el viejo como reemplazado), acá se actualiza la misma fila: el
+// código T-000xxx tiene que seguir siendo el mismo porque las
+// rectificaciones pendientes y las pesadas apuntan a él.
+let editandoTrabajoId = null;
+// Si el trabajo original tenía un destete, esa sección queda bloqueada:
+// generó movimientos reales de stock que no guardan referencia al trabajo,
+// así que no hay forma segura de deshacerlos ni rehacerlos desde acá.
+let editandoTeniaDestete = false;
+
+// Pone un botón-interruptor (SANIDAD/REPRODUCCION/MANEJO) en el estado
+// pedido usando su propio click, para que corra el handler que muestra u
+// oculta el bloque en vez de duplicar esa lógica.
+function ponerToggle(idBoton, activo) {
+  if (estaActivo(idBoton) !== Boolean(activo)) el(idBoton).click();
+}
+
+function ponerCheckbox(idCheck, valor) {
+  const check = el(idCheck);
+  check.checked = Boolean(valor);
+  check.dispatchEvent(new Event('change'));
+}
+
+function ponerSeleccionCatalogo(clave, idLista, ids) {
+  seleccionMultipleCatalogo[clave] = new Set(ids || []);
+  renderChips(idLista, clave);
+}
+
+async function precargarParaEditarManga(trabajo) {
+  resetFormulario();
+  editandoTrabajoId = trabajo.id;
+  editandoTeniaDestete = Boolean(trabajo.manejo?.destete);
+
+  el('manga-fecha').value = trabajo.fecha;
+
+  // El rodeo determina establecimiento y categoría (ver
+  // actualizarCategoriaSegunRodeo), así que primero se elige el
+  // establecimiento para poblar la lista, y recién después el rodeo.
+  const rodeo = obtenerRodeosCache().find((r) => r.id === trabajo.rodeo_id);
+  if (rodeo) establecerSeleccion('manga-establecimiento', rodeo.establecimiento_id);
+  poblarSelectRodeoManga();
+  el('manga-rodeo').value = trabajo.rodeo_id;
+  actualizarCategoriaSegunRodeo();
+  establecerSeleccion('manga-categoria', trabajo.categoria_id);
+
+  establecerSeleccionMultiple('manga-propietarios', trabajo.propietariosIds);
+  el('manga-cantidad').value = trabajo.cantidad_trabajada;
+  el('manga-observaciones').value = trabajo.observaciones || '';
+
+  const s = trabajo.sanidad;
+  if (s) {
+    ponerToggle('manga-check-sanidad', true);
+    ponerCheckbox('manga-desparasitada', s.desparasitada);
+    if (s.droga_id) el('manga-droga').value = s.droga_id;
+    el('manga-cobre').checked = Boolean(s.cobre);
+    el('manga-aftosa').checked = Boolean(s.aftosa);
+    el('manga-brucelosis').checked = Boolean(s.brucelosis);
+    el('manga-carbunclo').checked = Boolean(s.carbunclo);
+    ponerCheckbox('manga-check-vacunas', trabajo.vacunasIds?.length);
+    ponerSeleccionCatalogo('vacunas', 'manga-vacunas', trabajo.vacunasIds);
+    ponerCheckbox('manga-check-otras', trabajo.otrasSanidadesIds?.length);
+    ponerSeleccionCatalogo('otras', 'manga-otras', trabajo.otrasSanidadesIds);
+  }
+
+  const r = trabajo.reproduccion;
+  if (r) {
+    ponerToggle('manga-check-reproduccion', true);
+    el('manga-estado-corporal').value = r.estado_corporal ?? '';
+    ponerCheckbox('manga-check-inseminacion', r.inseminacion);
+    ponerSeleccionCatalogo('toros', 'manga-toros', trabajo.torosIds);
+    el('manga-tacto').checked = Boolean(r.tacto);
+    el('manga-raspaje').checked = Boolean(r.raspaje);
+    el('manga-ecografia').checked = Boolean(r.ecografia);
+    el('manga-resincronizacion').checked = Boolean(r.resincronizacion);
+  }
+
+  const m = trabajo.manejo;
+  if (m) {
+    ponerToggle('manga-check-manejo', true);
+    el('manga-aparte').checked = Boolean(m.aparte);
+    el('manga-capada').checked = Boolean(m.capada);
+    el('manga-pesada-control').value = m.pesada_control_kilos ?? '';
+    ponerCheckbox('manga-check-destete', m.destete);
+    if (m.destete) {
+      el('manga-destete-machos').value = m.destete_machos_cantidad ?? '';
+      el('manga-destete-kilos-ternero').value = m.destete_kilos_ternero ?? '';
+      el('manga-destete-hembras').value = m.destete_hembras_cantidad ?? '';
+      el('manga-destete-kilos-ternera').value = m.destete_kilos_ternera ?? '';
+    }
+  }
+  bloquearDesteteSiCorresponde();
+
+  el('manga-editando-texto').textContent = `Estás editando el trabajo ${trabajo.codigo} (${trabajo.fecha}).`;
+  el('manga-editando-aviso').classList.remove('oculto');
+  el('manga-submit').textContent = 'Guardar corrección';
+  location.hash = 'manga';
+  el('manga-form').scrollIntoView({ block: 'start' });
+}
+
+// Deshabilita los campos del destete (y el checkbox que lo activa) cuando
+// se está editando un trabajo que ya lo había ejecutado.
+function bloquearDesteteSiCorresponde() {
+  const bloquear = editandoTrabajoId !== null && editandoTeniaDestete;
+  el('manga-destete-bloqueado').classList.toggle('oculto', !bloquear);
+  const campos = [
+    'manga-check-destete', 'manga-destete-machos', 'manga-destete-kilos-ternero',
+    'manga-destete-rodeo-novillito', 'manga-destete-hembras', 'manga-destete-kilos-ternera',
+    'manga-destete-rodeo-vaquillona',
+  ];
+  for (const id of campos) el(id).disabled = bloquear;
+}
+
+function cancelarEdicionManga() {
+  editandoTrabajoId = null;
+  editandoTeniaDestete = false;
+  el('manga-editando-aviso').classList.add('oculto');
+  el('manga-submit').textContent = 'Guardar trabajo de manga';
+  bloquearDesteteSiCorresponde();
+  resetFormulario();
+}
+
 function resetFormulario() {
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('manga-establecimiento');
@@ -850,7 +997,13 @@ async function onSubmit(evento) {
   }
 
   const manejo = leerManejo();
-  if (manejo && manejo.destete) {
+  // Al corregir un trabajo que ya tenía destete no se revalida nada de eso:
+  // el destete no se rehace (sus movimientos ya están hechos) y además los
+  // rodeos destino no quedaron guardados en ningún lado — solo existían en
+  // el formulario el día que se cargó, así que este control sería
+  // imposible de cumplir y dejaría el trabajo sin poder corregirse nunca.
+  const revalidarDestete = manejo?.destete && !(editandoTrabajoId && editandoTeniaDestete);
+  if (revalidarDestete) {
     if (propietarios.length !== 1) { mostrarMensaje('Para Destete, elegí un solo propietario (los animales destetados pasan a nombre de uno solo).', 'error'); return; }
     const machos = manejo.destete_machos_cantidad || 0;
     const hembras = manejo.destete_hembras_cantidad || 0;
@@ -876,7 +1029,9 @@ async function onSubmit(evento) {
   }
   const diferenciaPendiente = cantidad !== stockActual;
 
-  if (manejo && manejo.destete) {
+  // Mismo criterio: si el destete no se vuelve a ejecutar, no tiene sentido
+  // exigir que hoy haya terneros al pie suficientes (ya se destetaron).
+  if (revalidarDestete) {
     try {
       if (manejo.destete_machos_cantidad > 0) {
         const stockTernero = await stockDelRodeoPorCategoria(rodeoId, 'ternero_al_pie');
@@ -901,21 +1056,43 @@ async function onSubmit(evento) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { mostrarMensaje('No hay sesión activa.', 'error'); return; }
 
-  const { data: trabajo, error: errorTrabajo } = await supabase
-    .from('trabajos_manga')
-    .insert({
-      fecha,
-      rodeo_id: rodeoId,
-      categoria_id: categoriaId,
-      cantidad_trabajada: cantidad,
-      stock_al_momento: stockActual,
-      diferencia_pendiente: diferenciaPendiente,
-      usuario_id: session.user.id,
-      observaciones,
-    })
-    .select()
-    .single();
-  if (errorTrabajo) { mostrarMensaje('No se pudo guardar: ' + errorTrabajo.message, 'error'); return; }
+  const datosTrabajo = {
+    fecha,
+    rodeo_id: rodeoId,
+    categoria_id: categoriaId,
+    cantidad_trabajada: cantidad,
+    stock_al_momento: stockActual,
+    diferencia_pendiente: diferenciaPendiente,
+    observaciones,
+  };
+
+  let trabajo;
+  if (editandoTrabajoId) {
+    // Se actualiza la misma fila (no se crea una nueva como con los
+    // movimientos): el código T-000xxx tiene que seguir siendo el mismo
+    // porque las rectificaciones y las pesadas apuntan a él.
+    const { data, error } = await supabase
+      .from('trabajos_manga')
+      .update({ ...datosTrabajo, editado_por: session.user.id, editado_at: new Date().toISOString() })
+      .eq('id', editandoTrabajoId)
+      .select()
+      .single();
+    if (error) { mostrarMensaje('No se pudo guardar la corrección: ' + error.message, 'error'); return; }
+    trabajo = data;
+    const errorLimpieza = await borrarHijosDelTrabajo(editandoTrabajoId, { incluirManejo: !editandoTeniaDestete });
+    if (errorLimpieza) {
+      mostrarMensaje('No se pudieron reemplazar los datos viejos del trabajo: ' + errorLimpieza.message, 'error');
+      return;
+    }
+  } else {
+    const { data, error } = await supabase
+      .from('trabajos_manga')
+      .insert({ ...datosTrabajo, usuario_id: session.user.id })
+      .select()
+      .single();
+    if (error) { mostrarMensaje('No se pudo guardar: ' + error.message, 'error'); return; }
+    trabajo = data;
+  }
 
   const { error: errorProp } = await supabase
     .from('trabajo_manga_propietarios')
@@ -942,15 +1119,23 @@ async function onSubmit(evento) {
     }
   }
 
-  if (manejo) {
+  // Si el trabajo que se está editando tenía un destete, su fila de manejo
+  // no se borró ni se reescribe: quedaría sin las cantidades destetadas, y
+  // esos movimientos de stock ya están hechos.
+  if (manejo && !(editandoTrabajoId && editandoTeniaDestete)) {
     try {
-      await guardarManejo(trabajo.id, manejo, { rodeoOrigenId: rodeoId, fecha, titularId: propietarios[0], usuarioId: session.user.id });
+      await guardarManejo(
+        trabajo.id, manejo,
+        { rodeoOrigenId: rodeoId, fecha, titularId: propietarios[0], usuarioId: session.user.id },
+        { ejecutarDesteteTambien: !editandoTrabajoId }
+      );
     } catch (error) {
       mostrarMensaje('Se guardó el trabajo, pero no se pudo guardar el manejo de rodeo: ' + error.message, 'advertencia');
       return;
     }
   }
 
+  const eraEdicion = Boolean(editandoTrabajoId);
   if (diferenciaPendiente) {
     mostrarMensaje(
       `⚠️ Guardado, pero la cantidad trabajada (${cantidad}) no coincide con el stock del rodeo (${stockActual}). ` +
@@ -958,9 +1143,12 @@ async function onSubmit(evento) {
       'advertencia'
     );
   } else {
-    mostrarMensaje('✅ Trabajo de manga guardado.', 'ok');
+    mostrarMensaje(eraEdicion ? `✅ Trabajo ${trabajo.codigo} corregido.` : '✅ Trabajo de manga guardado.', 'ok');
   }
-  resetFormulario();
+  // cancelarEdicionManga limpia el formulario Y sale del modo edición; en
+  // una carga normal alcanza con limpiarlo.
+  if (eraEdicion) cancelarEdicionManga();
+  else resetFormulario();
   refrescarDiferenciasPendientes();
 }
 
@@ -982,6 +1170,10 @@ export async function initTrabajoManga() {
   inicializarSelectorRodeoDestino('novillito', 'ternero');
   inicializarSelectorRodeoDestino('vaquillona', 'ternera');
   el('manga-form').addEventListener('submit', onSubmit);
+  el('manga-editando-cancelar').addEventListener('click', cancelarEdicionManga);
+  // Lo dispara Reportes > Trabajo de Manga al tocar "Editar" — vía evento
+  // para no armar un import circular entre los dos módulos.
+  document.addEventListener('hacienda:editar-trabajo-manga', (evento) => precargarParaEditarManga(evento.detail));
   refrescarDiferenciasPendientes();
 
   poblarSelectConsultaManga();

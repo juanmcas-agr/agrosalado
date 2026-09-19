@@ -7,6 +7,8 @@
 // datos falsos más de una vez.
 //
 // QUÉ SIMULA (fiel a supabase/schema.sql):
+//   · La vista historial_trabajos_manga: se calcula desde trabajos_manga,
+//     así que se siembra esa tabla y no la vista.
 //   · La vista stock_actual: SIEMPRE se calcula a partir de movimientos,
 //     igual que en la base (movimiento_lineas → agrupado por
 //     establecimiento+categoría+titular+rodeo, ignorando anulados y
@@ -23,6 +25,8 @@
 //   · validar_movimiento(): las reglas de forma por tipo de movimiento.
 //   · Los joins de las vistas historial_* (se pueden sembrar a mano en la
 //     tabla correspondiente si una prueba las necesita).
+
+import { CATEGORIAS } from '../config.js';
 
 const TITULAR_POR_DEFECTO = 'agro_salado';
 
@@ -116,6 +120,23 @@ function stockActualDe(TABLAS) {
   }));
 }
 
+// La vista historial_trabajos_manga: se calcula desde trabajos_manga, como
+// en la base. Si se sembrara aparte, una anulación o una corrección
+// actualizarían la tabla pero el listado seguiría mostrando lo viejo, y la
+// prueba daría un falso negativo.
+function historialTrabajosMangaDe(TABLAS) {
+  const nombreDe = (userId) => TABLAS.perfiles.find((p) => p.user_id === userId)?.nombre_completo || null;
+  return TABLAS.trabajos_manga
+    .map((t) => ({
+      ...t,
+      rodeo: TABLAS.rodeos.find((r) => r.id === t.rodeo_id)?.codigo || null,
+      categoria_nombre: CATEGORIAS.find((c) => c.id === t.categoria_id)?.nombre || t.categoria_id,
+      usuario_nombre: nombreDe(t.usuario_id),
+      editado_por_nombre: nombreDe(t.editado_por),
+    }))
+    .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+}
+
 // ─── triggers de movimientos ────────────────────────────────────────────
 
 function stockDelBolsillo(TABLAS, est, cat, tit, rodeoId, excluirId) {
@@ -152,8 +173,25 @@ function clonar(filas) {
   return JSON.parse(JSON.stringify(filas));
 }
 
+// Semilla para pruebas que necesitan los datos ANTES de que arranque la
+// app: los grupos de botones (propietarios) y los catálogos (drogas,
+// vacunas, toros) se arman UNA sola vez al iniciar, así que sembrar desde
+// la consola después ya llega tarde. Desde la consola:
+//   sessionStorage.setItem('__mock_seed', JSON.stringify(tablas)); location.reload();
+// Se borra sola al usarse, para que la próxima recarga arranque limpia.
+function leerSemilla() {
+  try {
+    const crudo = sessionStorage.getItem('__mock_seed');
+    if (!crudo) return null;
+    sessionStorage.removeItem('__mock_seed');
+    return { ...tablasVacias(), ...JSON.parse(crudo) };
+  } catch {
+    return null;
+  }
+}
+
 export function activarMockSupabase(supabase, tablas) {
-  const TABLAS = tablas || tablasVacias();
+  const TABLAS = tablas || leerSemilla() || tablasVacias();
 
   // Inyección de fallas, para probar los caminos de error sin tener que
   // desenchufar nada. Desde la consola:
@@ -170,8 +208,12 @@ export function activarMockSupabase(supabase, tablas) {
   supabase.rpc = async () => ({ data: ++secuencia, error: null });
 
   supabase.from = (tabla) => {
-    if (tabla !== 'stock_actual') TABLAS[tabla] = TABLAS[tabla] || [];
-    let filas = tabla === 'stock_actual' ? stockActualDe(TABLAS) : [...TABLAS[tabla]];
+    const esVista = tabla === 'stock_actual' || tabla === 'historial_trabajos_manga';
+    if (!esVista) TABLAS[tabla] = TABLAS[tabla] || [];
+    let filas;
+    if (tabla === 'stock_actual') filas = stockActualDe(TABLAS);
+    else if (tabla === 'historial_trabajos_manga') filas = historialTrabajosMangaDe(TABLAS);
+    else filas = [...TABLAS[tabla]];
     let modo = 'select';
     let payload = null;
 
@@ -262,8 +304,11 @@ export function activarMockSupabase(supabase, tablas) {
           return;
         }
         if (modo === 'delete') {
-          const aBorrar = new Set(filas.map((f) => f.id));
-          TABLAS[tabla] = TABLAS[tabla].filter((f) => !aBorrar.has(f.id));
+          // Por referencia y no por id: varias tablas hijas (por ejemplo
+          // trabajo_manga_propietarios) tienen clave compuesta y no tienen
+          // columna id — filtrando por id se borraría la tabla entera.
+          const aBorrar = new Set(filas);
+          TABLAS[tabla] = TABLAS[tabla].filter((f) => !aBorrar.has(f));
           resolve({ data: clonar(filas), error: null });
           return;
         }

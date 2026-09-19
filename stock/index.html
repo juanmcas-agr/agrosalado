@@ -220,6 +220,11 @@
         <div id="manga-rectificaciones-lista"></div>
       </div>
 
+      <div id="manga-editando-aviso" class="mensaje advertencia oculto" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <span id="manga-editando-texto"></span>
+        <button type="button" id="manga-editando-cancelar" class="boton-secundario" style="width:auto;flex-shrink:0;">Cancelar edición</button>
+      </div>
+
       <form id="manga-form" class="formulario">
         <label>Fecha
           <input id="manga-fecha" type="date" required>
@@ -365,6 +370,7 @@
           </label>
           <div id="manga-bloque-destete" class="campo-grupo oculto">
             <p class="ayuda">Los machos y las hembras destetados pasan cada uno a su propio rodeo (categoría Ternero / Ternera).</p>
+            <p id="manga-destete-bloqueado" class="mensaje advertencia oculto">Este trabajo ya generó los movimientos del destete, y esos movimientos no se pueden rehacer desde acá. Podés corregir todo lo demás; si lo que está mal es el destete, anulá el trabajo y cargalo de nuevo.</p>
 
             <label>Machos (cantidad)
               <input id="manga-destete-machos" type="number" min="0" step="1">
@@ -410,7 +416,7 @@
           <textarea id="manga-observaciones" rows="2"></textarea>
         </label>
 
-        <button type="submit" class="full">Guardar trabajo de manga</button>
+        <button type="submit" id="manga-submit" class="full">Guardar trabajo de manga</button>
         <div id="manga-mensaje" class="mensaje full"></div>
       </form>
 
@@ -549,7 +555,11 @@
         <div class="filtros">
           <label>Desde <input id="rep-manga-desde" type="date"></label>
           <label>Hasta <input id="rep-manga-hasta" type="date"></label>
+          <select id="rep-manga-establecimiento"><option value="">Todos los establecimientos</option></select>
           <select id="rep-manga-rodeo"><option value="">Todos los rodeos</option></select>
+          <select id="rep-manga-categoria"><option value="">Todas las categorías</option></select>
+          <select id="rep-manga-propietario"><option value="">Todos los propietarios</option></select>
+          <select id="rep-manga-usuario"><option value="">Todos los usuarios</option></select>
           <button type="button" id="rep-manga-filtrar" class="boton-secundario">Filtrar</button>
           <button type="button" id="rep-manga-imprimir" class="boton-secundario">Imprimir / PDF</button>
         </div>
@@ -562,6 +572,7 @@
                 <tr>
                   <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categoría</th><th>Cantidad</th>
                   <th>Propietario(s)</th><th>Detalle</th><th>Cargado por</th>
+                  <th>Estado</th><th class="no-imprimir"></th>
                 </tr>
               </thead>
               <tbody></tbody>

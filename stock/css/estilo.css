@@ -654,4 +654,7 @@ button:active { filter: brightness(0.9); }
   .imprimible, .imprimible * { visibility: visible; }
   .imprimible { position: absolute; left: 0; top: 0; width: 100%; }
   .solo-imprimir { display: block !important; }
+  /* Los botones de acción (Editar/Anular) están adentro de la tabla
+     imprimible, pero en el papel no sirven para nada. */
+  .no-imprimir, .no-imprimir * { display: none !important; }
 }

@@ -280,7 +280,12 @@ create table trabajos_manga (
   anulado boolean not null default false,
   anulado_por uuid references auth.users(id),
   anulado_at timestamptz,
-  anulado_motivo text
+  anulado_motivo text,
+  -- Rastro de una corrección hecha desde Reportes > Trabajo de Manga (solo
+  -- owner, ver migración 043). usuario_id NO cambia: es quien hizo el
+  -- trabajo en la manga, no quien lo corrigió después.
+  editado_por uuid references auth.users(id),
+  editado_at timestamptz
 );
 
 create index on trabajos_manga (rodeo_id);
@@ -304,6 +309,12 @@ create policy trabajos_manga_update on trabajos_manga for update to authenticate
 create policy trabajo_manga_propietarios_select on trabajo_manga_propietarios for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_propietarios_insert on trabajo_manga_propietarios for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+-- Los "_delete" de las tablas hijas de trabajos_manga (ver migración 043)
+-- existen para poder EDITAR un trabajo ya cargado: editar reemplaza esas
+-- filas, y sin borrado el DELETE no falla, simplemente no borra nada.
+-- Solo owner, igual que anular.
+create policy trabajo_manga_propietarios_delete on trabajo_manga_propietarios for delete to authenticated
+  using (rol_actual() = 'owner');
 
 -- Rectificar la cantidad trabajada de una diferencia pendiente requiere
 -- aprobación del owner cuando lo propone otro rol (encargado/
@@ -435,14 +446,20 @@ create policy catalogo_otras_sanidades_insert on catalogo_otras_sanidades for in
 create policy trabajo_manga_sanidad_select on trabajo_manga_sanidad for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_sanidad_insert on trabajo_manga_sanidad for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy trabajo_manga_sanidad_delete on trabajo_manga_sanidad for delete to authenticated
+  using (rol_actual() = 'owner');
 
 create policy trabajo_manga_vacunas_select on trabajo_manga_vacunas for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_vacunas_insert on trabajo_manga_vacunas for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy trabajo_manga_vacunas_delete on trabajo_manga_vacunas for delete to authenticated
+  using (rol_actual() = 'owner');
 
 create policy trabajo_manga_otras_sanidades_select on trabajo_manga_otras_sanidades for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_otras_sanidades_insert on trabajo_manga_otras_sanidades for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy trabajo_manga_otras_sanidades_delete on trabajo_manga_otras_sanidades for delete to authenticated
+  using (rol_actual() = 'owner');
 
 -- ─── Trabajo de Manga: Reproducción ─────────────────────────────────────
 create table catalogo_toros (id text primary key, nombre text not null, activo boolean not null default true);
@@ -476,10 +493,14 @@ create policy catalogo_toros_insert on catalogo_toros for insert to authenticate
 create policy trabajo_manga_reproduccion_select on trabajo_manga_reproduccion for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_reproduccion_insert on trabajo_manga_reproduccion for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy trabajo_manga_reproduccion_delete on trabajo_manga_reproduccion for delete to authenticated
+  using (rol_actual() = 'owner');
 
 create policy trabajo_manga_inseminacion_toros_select on trabajo_manga_inseminacion_toros for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_inseminacion_toros_insert on trabajo_manga_inseminacion_toros for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy trabajo_manga_inseminacion_toros_delete on trabajo_manga_inseminacion_toros for delete to authenticated
+  using (rol_actual() = 'owner');
 
 -- ─── Trabajo de Manga: Manejo de rodeo ──────────────────────────────────
 -- 1-a-1 con trabajos_manga: solo existe si el checkbox "Manejo de rodeo"
@@ -517,10 +538,14 @@ alter table rodeo_pesadas_historial enable row level security;
 create policy trabajo_manga_manejo_select on trabajo_manga_manejo for select to authenticated using (rol_actual() is not null);
 create policy trabajo_manga_manejo_insert on trabajo_manga_manejo for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy trabajo_manga_manejo_delete on trabajo_manga_manejo for delete to authenticated
+  using (rol_actual() = 'owner');
 
 create policy rodeo_pesadas_historial_select on rodeo_pesadas_historial for select to authenticated using (rol_actual() is not null);
 create policy rodeo_pesadas_historial_insert on rodeo_pesadas_historial for insert to authenticated
   with check (rol_actual() in ('encargado', 'administrativo', 'owner', 'puestero'));
+create policy rodeo_pesadas_historial_delete on rodeo_pesadas_historial for delete to authenticated
+  using (rol_actual() = 'owner');
 
 -- ─── Perfiles (roles de usuario) ────────────────────────────────────────
 
@@ -1029,11 +1054,13 @@ create view historial_trabajos_manga with (security_invoker = true) as
     t.usuario_id, p.nombre_completo as usuario_nombre,
     t.observaciones, t.creado_at,
     t.resuelto_por_movimiento_id, mv.codigo as resuelto_por_movimiento_codigo, t.resuelto_at,
-    t.anulado, t.anulado_por, t.anulado_at, t.anulado_motivo
+    t.anulado, t.anulado_por, t.anulado_at, t.anulado_motivo,
+    t.editado_por, t.editado_at, pe.nombre_completo as editado_por_nombre
   from trabajos_manga t
   left join rodeos r on r.id = t.rodeo_id
   left join categorias c on c.id = t.categoria_id
   left join perfiles p on p.user_id = t.usuario_id
+  left join perfiles pe on pe.user_id = t.editado_por
   left join movimientos mv on mv.id = t.resuelto_por_movimiento_id
   order by t.fecha desc, t.creado_at desc;
 
