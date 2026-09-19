@@ -9,16 +9,25 @@ import { CATEGORIAS } from './config.js';
 import { obtenerTitularesCache } from './titulares.js';
 import { getEstado } from './auth.js';
 
-// Anular y editar un trabajo de manga: solo owner. Editar es más fuerte de
-// lo que parece — permite cambiar la cantidad trabajada, que para el resto
-// de los roles tiene que pasar sí o sí por el circuito de "rectificación
-// pendiente de aprobación" (ver editarCantidadTrabajada en trabajoManga.js).
-// Si se abriera a más roles, ese control quedaría sin efecto.
+// Anular también lo puede hacer un encargado (pedido de Juan): es quien
+// carga los trabajos en la manga, y tiene que poder deshacer un error
+// propio sin depender de un owner. Queda registrado con motivo, autor y
+// fecha, así que no se pierde nada. Se suma administrativo por coherencia
+// con los movimientos, donde ese rol ya puede anular (ver puedeModificar en
+// historial.js).
+const ROLES_ANULAR_MANGA = ['encargado', 'administrativo', 'owner'];
+
 export function puedeAnularManga(fila) {
   const { perfil } = getEstado();
-  return !!perfil && perfil.rol === 'owner' && !fila.anulado;
+  return !!perfil && ROLES_ANULAR_MANGA.includes(perfil.rol) && !fila.anulado;
 }
 
+// Editar, en cambio, sigue siendo solo de owner: permite cambiar la
+// cantidad trabajada de una, y para los demás roles eso tiene que pasar sí
+// o sí por el circuito de "rectificación pendiente de aprobación" (ver
+// editarCantidadTrabajada en trabajoManga.js). Abrirlo dejaría ese control
+// sin efecto. Un encargado que se equivocó anula y vuelve a cargar: queda
+// el rastro de las dos cosas.
 export function puedeEditarManga(fila) {
   const { perfil } = getEstado();
   return !!perfil && perfil.rol === 'owner' && !fila.anulado;
