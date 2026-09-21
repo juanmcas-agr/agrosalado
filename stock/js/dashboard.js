@@ -306,8 +306,24 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   const trTotal = document.createElement('tr');
   trTotal.classList.add('fila-total');
   trTotal.innerHTML =
-    `<td><strong>Total</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
+    `<td><strong>Total (sin Feed Lot)</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
   tbody.appendChild(trTotal);
+
+  // Al sacar Feed Lot de esta tabla, su total dejó de estar acá y los
+  // números ya no cierran contra la tarjeta de arriba ni contra "Por
+  // categoría". En vez de dejar esa diferencia sin explicación, se dice
+  // cuánto hay en Feed Lot y cuánto da la suma de las dos cosas.
+  const enFeedLot = rowsFiltradas
+    .filter((r) => r.establecimiento === 'feed_lot')
+    .reduce((acc, r) => acc + r.cabezas, 0);
+  if (enFeedLot !== 0) {
+    const trFeedLot = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = CATEGORIAS.length + 2;
+    td.innerHTML = `<span class="ayuda">En Feed Lot hay <strong>${enFeedLot}</strong> cabeza(s) más, que se ven abajo abiertas por corral. Total con Feed Lot: <strong>${totalGeneral + enFeedLot}</strong>.</span>`;
+    trFeedLot.appendChild(td);
+    tbody.appendChild(trFeedLot);
+  }
 }
 
 // ─── Feed Lot por corral ────────────────────────────────────────────────
@@ -485,25 +501,15 @@ function leerVista(idGrupo, idCapSelect) {
 
 let ultimasFilasStock = [];
 
-function renderTablaCategoria() {
-  const { vista, titularElegido } = leerVista('dash-categoria-vista', 'dash-categoria-cap-select');
-  renderGlobal(filtrarPorVista(ultimasFilasStock, vista, titularElegido));
-}
-
-function renderTablaEstablecimiento() {
-  const { vista, titularElegido } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
+// Los tres cuadros comparten el mismo selector de titularidad: elegir por
+// separado en cada uno era repetir tres veces la misma decisión.
+function renderTablasFiltradas() {
+  const { vista, titularElegido } = leerVista('dash-vista', 'dash-vista-cap-select');
   const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido);
-  renderPorEstablecimiento(construirMatriz(rows), construirMatrizKilos(rows), rows);
-}
 
-// Selector de titularidad propio: se mira el Feed Lot por separado del
-// resto (ej. "qué tiene Doña Julia en cada corral") sin tener que cambiar
-// la vista de la tabla de arriba.
-function renderTablaCorrales() {
-  const { vista, titularElegido } = leerVista('dash-corral-vista', 'dash-corral-cap-select');
-  const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido)
-    .filter((r) => r.establecimiento === 'feed_lot');
-  renderPorCorral(rows);
+  renderGlobal(rows);
+  renderPorEstablecimiento(construirMatriz(rows), construirMatrizKilos(rows), rows);
+  renderPorCorral(rows.filter((r) => r.establecimiento === 'feed_lot'));
 }
 
 function formatearFechaDMY(fecha) {
@@ -546,9 +552,7 @@ export async function refrescarDashboard() {
   renderEstado({ offline, fetchedAt, fecha });
   renderStockNegativo(rows);
   renderResumenTitularidad(rows);
-  renderTablaCategoria();
-  renderTablaEstablecimiento();
-  renderTablaCorrales();
+  renderTablasFiltradas();
   renderRodeosEstablecimiento();
 }
 
@@ -589,7 +593,7 @@ function filasDetalleParaExcel(establecimientoId) {
 function exportarStock() {
   const fecha = el('dash-fecha').value || hoyISO();
   const establecimientoId = el('dash-exportar-establecimiento').value || null;
-  const { vista, titularElegido } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
+  const { vista, titularElegido } = leerVista('dash-vista', 'dash-vista-cap-select');
   const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido);
   const detalle = filasDetalleParaExcel(establecimientoId);
 
@@ -610,9 +614,7 @@ function exportarStock() {
 
 export async function initDashboard() {
   await Promise.all([cargarTitulares(), cargarRodeos()]);
-  inicializarSelectorVista('dash-categoria-vista', 'dash-categoria-cap-wrap', 'dash-categoria-cap-select', renderTablaCategoria);
-  inicializarSelectorVista('dash-establecimiento-vista', 'dash-establecimiento-cap-wrap', 'dash-establecimiento-cap-select', renderTablaEstablecimiento);
-  inicializarSelectorVista('dash-corral-vista', 'dash-corral-cap-wrap', 'dash-corral-cap-select', renderTablaCorrales);
+  inicializarSelectorVista('dash-vista', 'dash-vista-cap-wrap', 'dash-vista-cap-select', renderTablasFiltradas);
   poblarSelectExportarEstablecimiento();
   poblarSelectRodeosEstablecimiento();
   el('dash-fecha').value = hoyISO();

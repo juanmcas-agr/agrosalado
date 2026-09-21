@@ -455,22 +455,22 @@
         <div class="destacado"><span>Total general</span><strong id="dash-total-general">0</strong></div>
       </div>
 
-      <h3>Por categoría (todos los establecimientos)</h3>
-      <div id="dash-categoria-vista"></div>
-      <div id="dash-categoria-cap-wrap" class="oculto" style="margin:8px 0;">
-        <select id="dash-categoria-cap-select"></select>
+      <!-- Un solo selector de titularidad para los tres cuadros de abajo:
+           elegir por separado en cada uno era repetir lo mismo tres veces. -->
+      <h3>Ver el stock de</h3>
+      <div id="dash-vista"></div>
+      <div id="dash-vista-cap-wrap" class="oculto" style="margin:8px 0;">
+        <select id="dash-vista-cap-select"></select>
       </div>
+
+      <h3>Por categoría (todos los establecimientos)</h3>
       <table id="dash-global-tabla" class="tabla">
         <thead><tr><th>Categoría</th><th>Cabezas</th><th>Kg prom.</th></tr></thead>
         <tbody></tbody>
       </table>
 
       <h3>Por establecimiento</h3>
-      <p class="ayuda">Tocá un establecimiento para ver sus rodeos.</p>
-      <div id="dash-establecimiento-vista"></div>
-      <div id="dash-establecimiento-cap-wrap" class="oculto" style="margin:8px 0;">
-        <select id="dash-establecimiento-cap-select"></select>
-      </div>
+      <p class="ayuda">Tocá un establecimiento para ver sus rodeos. Feed Lot va aparte, en el cuadro de abajo.</p>
       <div class="tabla-scroll">
         <table id="dash-establecimientos-tabla" class="tabla">
           <thead></thead>
@@ -480,10 +480,6 @@
 
       <h3>Feed Lot por corral</h3>
       <p class="ayuda">Tocá un corral para ver de quién es la hacienda que tiene adentro.</p>
-      <div id="dash-corral-vista"></div>
-      <div id="dash-corral-cap-wrap" class="oculto" style="margin:8px 0;">
-        <select id="dash-corral-cap-select"></select>
-      </div>
       <div class="tabla-scroll">
         <table id="dash-corrales-tabla" class="tabla">
           <thead></thead>
