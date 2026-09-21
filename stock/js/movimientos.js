@@ -245,14 +245,8 @@ async function actualizarTitularesOrigenDisponibles() {
 
   const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
   if (!cfg || !cfg.campos.includes('titular_origen')) { habilitarTodo(); return; }
-  // Si el lado origen va por Feed Lot, el selector de Rodeo está oculto
-  // (ver actualizarRequeridoRodeo) — el rodeo real sale de resolver el
-  // corral elegido, igual que en onSubmit.
-  const { origen } = establecimientosResueltos(cfg);
-  const rodeoId = origen === 'feed_lot'
-    ? rodeoDelCorral(obtenerSeleccion('mov-feedlot-corral-origen'))?.id
-    : el(RODEO_ORIGEN_IDS.select).value;
-  if (!rodeoId || rodeoId === '__nuevo__' || !navigator.onLine) {
+  const rodeoId = rodeoOrigenActual(cfg)?.id;
+  if (!rodeoId || !navigator.onLine) {
     habilitarTodo();
     return;
   }
@@ -294,6 +288,20 @@ async function actualizarTitularesOrigenDisponibles() {
 // duplica del origen (ver duplicar*EnDestino en config.js).
 function campoRelevante(cfg, base) {
   return cfg.campos.includes(`${base}_origen`) ? 'origen' : 'destino';
+}
+
+// El rodeo del lado ORIGEN, venga de donde venga: si ese lado es Feed Lot
+// el selector de Rodeo está oculto y el rodeo sale del corral elegido (ver
+// actualizarRequeridoRodeo); si no, del selector de Rodeo de siempre.
+// Devuelve el rodeo entero (no solo el id) porque quien lo llama suele
+// necesitar el código o el corral para armar un mensaje.
+function rodeoOrigenActual(cfg) {
+  if (establecimientosResueltos(cfg).origen === 'feed_lot') {
+    return rodeoDelCorral(obtenerSeleccion('mov-feedlot-corral-origen')) || null;
+  }
+  const id = el(RODEO_ORIGEN_IDS.select).value;
+  if (!id || id === '__nuevo__') return null;
+  return obtenerRodeosCache().find((r) => r.id === id) || null;
 }
 
 // ─── Feed Lot: se organiza por CORRAL, no por Rodeo ─────────────────────
@@ -394,6 +402,29 @@ function poblarSelectRodeo(ids, excluirId) {
       opt.textContent = r.codigo;
       select.appendChild(opt);
     }
+
+    // Además, del lado ORIGEN, los rodeos que todavía figuran con la
+    // categoría ANTERIOR de la cadena: el caso del lote que engordó y cuyo
+    // Cambio de categoría nadie cargó todavía (se trasladan "novillos" de
+    // un rodeo que sigue anotado como novillitos). Sin esto el selector
+    // queda vacío y no hay forma de seguir. Al elegirlos aparece el aviso
+    // de cambio de categoría express (ver
+    // actualizarAvisoCambioCategoriaExpress), que resuelve la diferencia
+    // sin salir de la pantalla. Se excluye Cambio de categoría: ahí
+    // mezclar rodeos de la categoría anterior induce a error.
+    const anteriorId = tipo !== 'cambio_categoria' && ids === RODEO_ORIGEN_IDS && ladoRodeoPrincipal(cfg) === 'origen'
+      ? categoriaAnterior(categoriaId)
+      : null;
+    if (anteriorId) {
+      const nombreAnterior = CATEGORIAS.find((c) => c.id === anteriorId)?.nombre || anteriorId;
+      for (const r of rodeosDe(establecimientoId, anteriorId)) {
+        if (excluirId && r.id === excluirId) continue;
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = `${r.codigo} — hoy figura como ${nombreAnterior}`;
+        select.appendChild(opt);
+      }
+    }
   }
   // Un puestero no da de alta rodeos — solo puede elegir entre los que ya existen.
   if (getEstado().perfil?.rol !== 'puestero') {
@@ -430,6 +461,11 @@ function inicializarSelectorRodeo(ids) {
     if (ids === RODEO_ORIGEN_IDS) {
       poblarSelectRodeo(RODEO_DESTINO_IDS, el(ids.select).value);
       actualizarTitularesOrigenDisponibles();
+      // El rodeo de origen define de qué stock se está sacando, así que
+      // cambiarlo rehace tanto el cartel de disponible como el aviso de
+      // cambio de categoría (que antes solo dependía del corral).
+      actualizarAvisoCambioCategoriaExpress();
+      actualizarStockDisponibleTexto();
     }
   });
 
@@ -634,20 +670,22 @@ function titularOrigenActual(tipo, cfg) {
 let tokenAvisoExpress = 0;
 async function actualizarAvisoCambioCategoriaExpress() {
   const idPropio = ++tokenAvisoExpress;
-  const aviso = el('mov-feedlot-cambio-cat-aviso');
+  const aviso = el('mov-cambio-cat-aviso');
   const ocultar = () => aviso.classList.add('oculto');
 
   const tipo = obtenerSeleccion('mov-tipo');
   const cfg = TIPOS_MOVIMIENTO[tipo];
-  if (!cfg || cfg.clase !== 'salida') { ocultar(); return; }
-  if (establecimientosResueltos(cfg).origen !== 'feed_lot') { ocultar(); return; }
+  // Aplica a cualquier tipo que saque cabezas de una categoría en el
+  // origen: Venta, Mortandad, Traslado, Cambio de rodeo, Cambio de
+  // titularidad, Salida de hotelería. Se excluye el propio Cambio de
+  // categoría, donde ofrecer un cambio de categoría no tendría sentido.
+  if (!cfg || tipo === 'cambio_categoria' || !cfg.campos.includes('categoria_origen')) { ocultar(); return; }
 
-  const corral = obtenerSeleccion('mov-feedlot-corral-origen');
   const categoriaDeseada = obtenerSeleccion('mov-categoria-origen');
   const titular = titularOrigenActual(tipo, cfg);
   const categoriaAnteriorId = categoriaAnterior(categoriaDeseada);
-  const rodeo = rodeoDelCorral(corral);
-  if (!corral || !categoriaDeseada || !titular || !categoriaAnteriorId || !rodeo || !navigator.onLine) {
+  const rodeo = rodeoOrigenActual(cfg);
+  if (!categoriaDeseada || !titular || !categoriaAnteriorId || !rodeo || !navigator.onLine) {
     ocultar();
     return;
   }
@@ -669,9 +707,26 @@ async function actualizarAvisoCambioCategoriaExpress() {
 
   const nombreAnterior = CATEGORIAS.find((c) => c.id === categoriaAnteriorId)?.nombre || categoriaAnteriorId;
   const nombreDeseada = CATEGORIAS.find((c) => c.id === categoriaDeseada)?.nombre || categoriaDeseada;
-  el('mov-feedlot-cambio-cat-texto').textContent =
-    `⚠️ No hay ${nombreDeseada} de ese titular en el Corral ${corral}, pero hay ${anterior.cabezas} cabeza(s) de ${nombreAnterior} — ¿ya engordaron? Cambialas de categoría acá y seguí.`;
+  const donde = rodeo.establecimiento_id === 'feed_lot' && rodeo.corral
+    ? `el Corral ${rodeo.corral}`
+    : `"${rodeo.codigo}"`;
+  el('mov-cambio-cat-texto').textContent =
+    `⚠️ No hay ${nombreDeseada} de ese titular en ${donde}, pero sí hay ${anterior.cabezas} cabeza(s) de ${nombreAnterior}. ¿Ya engordaron? Pasá las que correspondan y seguí con el movimiento.`;
+  el('mov-cambio-cat-label').textContent =
+    `¿Cuántas pasar de ${nombreAnterior} a ${nombreDeseada}? (hay ${anterior.cabezas})`;
+
+  // Se propone la cantidad del movimiento que se está cargando, que es el
+  // caso normal (se trasladan 30 y hay que recategorizar esas 30), pero
+  // queda editable: puede que hayan engordado más de las que se mueven.
+  const input = el('mov-cambio-cat-cantidad');
+  input.max = anterior.cabezas;
+  const delMovimiento = Number(el('mov-cabezas').value);
+  input.value = Number.isInteger(delMovimiento) && delMovimiento > 0 && delMovimiento <= anterior.cabezas
+    ? delMovimiento
+    : '';
+
   aviso.dataset.rodeoId = rodeo.id;
+  aviso.dataset.establecimiento = rodeo.establecimiento_id;
   aviso.dataset.categoriaOrigen = categoriaAnteriorId;
   aviso.dataset.categoriaDestino = categoriaDeseada;
   aviso.dataset.titular = titular;
@@ -685,14 +740,22 @@ async function actualizarAvisoCambioCategoriaExpress() {
 // conexión) y deja el formulario listo para completar la salida original
 // ya con stock disponible en la categoría pedida.
 async function ejecutarCambioCategoriaExpress() {
-  const aviso = el('mov-feedlot-cambio-cat-aviso');
-  const { rodeoId, categoriaOrigen, categoriaDestino, titular, cabezas, kilos } = aviso.dataset;
+  const aviso = el('mov-cambio-cat-aviso');
+  const { rodeoId, establecimiento, categoriaOrigen, categoriaDestino, titular, cabezas, kilos } = aviso.dataset;
   if (!rodeoId || !categoriaDestino) return;
   if (!navigator.onLine) {
     mostrarMensaje('Necesitás conexión a internet para cambiar la categoría.', 'error');
     return;
   }
-  const boton = el('mov-feedlot-cambio-cat-boton');
+
+  const disponible = Number(cabezas);
+  const aCambiar = Number(el('mov-cambio-cat-cantidad').value);
+  if (!Number.isInteger(aCambiar) || aCambiar <= 0 || aCambiar > disponible) {
+    mostrarMensaje(`Poné cuántas cabezas pasar de categoría: un número entero entre 1 y ${disponible}.`, 'error');
+    return;
+  }
+
+  const boton = el('mov-cambio-cat-boton');
   boton.disabled = true;
   boton.textContent = 'Cambiando…';
   try {
@@ -700,17 +763,19 @@ async function ejecutarCambioCategoriaExpress() {
       id: crypto.randomUUID(),
       tipo_movimiento: 'cambio_categoria',
       fecha: el('mov-fecha').value || new Date().toISOString().slice(0, 10),
-      establecimiento_origen: 'feed_lot',
-      establecimiento_destino: 'feed_lot',
+      // Un cambio de categoría no mueve de establecimiento: origen y
+      // destino son el mismo, el del rodeo donde están los animales.
+      establecimiento_origen: establecimiento,
+      establecimiento_destino: establecimiento,
       categoria_origen: categoriaOrigen,
       categoria_destino: categoriaDestino,
       titular_origen: titular,
       titular_destino: titular,
-      cantidad_cabezas: Number(cabezas),
+      cantidad_cabezas: aCambiar,
       kilos_promedio: Number(kilos),
       usuario_id: getEstado().session.user.id,
       rodeo_id: rodeoId,
-      observaciones: 'Cambio de categoría express (desde una salida en Feed Lot) — el corral ya tenía la categoría siguiente.',
+      observaciones: 'Cambio de categoría express (cargado al hacer otro movimiento) — ya habían pasado a la categoría siguiente.',
     });
     if (error) throw error;
     mostrarToast('✅ Categoría actualizada — ya podés continuar.');
@@ -739,13 +804,11 @@ async function actualizarStockDisponibleTexto() {
   const tipo = obtenerSeleccion('mov-tipo');
   const cfg = TIPOS_MOVIMIENTO[tipo];
   if (!cfg || !cfg.campos.includes('categoria_origen')) { ocultar(); return; }
-  if (establecimientosResueltos(cfg).origen !== 'feed_lot') { ocultar(); return; }
 
-  const corral = obtenerSeleccion('mov-feedlot-corral-origen');
   const categoriaId = obtenerSeleccion('mov-categoria-origen');
   const titular = titularOrigenActual(tipo, cfg);
-  const rodeo = rodeoDelCorral(corral);
-  if (!corral || !categoriaId || !titular || !rodeo || !navigator.onLine) { ocultar(); return; }
+  const rodeo = rodeoOrigenActual(cfg);
+  if (!categoriaId || !titular || !rodeo || !navigator.onLine) { ocultar(); return; }
 
   let cabezas;
   try {
@@ -757,7 +820,10 @@ async function actualizarStockDisponibleTexto() {
   if (idPropio !== tokenStockDisponible) return; // el usuario ya cambió algo mientras esperábamos
 
   const nombreCategoria = CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
-  texto.textContent = `Stock disponible de ${nombreCategoria} de este titular en el Corral ${corral}: ${cabezas} cabeza(s).`;
+  const donde = rodeo.establecimiento_id === 'feed_lot' && rodeo.corral
+    ? `el Corral ${rodeo.corral}`
+    : `"${rodeo.codigo}"`;
+  texto.textContent = `Stock disponible de ${nombreCategoria} de este titular en ${donde}: ${cabezas} cabeza(s).`;
   texto.classList.remove('oculto');
 }
 
@@ -1347,7 +1413,7 @@ export async function initMovimientos() {
     actualizarAvisoCambioCategoriaExpress();
     actualizarStockDisponibleTexto();
   });
-  el('mov-feedlot-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
+  el('mov-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
   ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
   el('mov-form').addEventListener('submit', onSubmit);
