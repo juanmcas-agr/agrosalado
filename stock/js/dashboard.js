@@ -262,7 +262,10 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   const totalesPorCategoria = {};
   for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
 
-  for (const e of ESTABLECIMIENTOS) {
+  // Feed Lot sale de esta tabla: tiene su propio cuadro abierto por corral
+  // más abajo, que es como se mira en la práctica (no interesa "cuánto hay
+  // en Feed Lot" sino qué hay en cada corral).
+  for (const e of ESTABLECIMIENTOS.filter((x) => x.id !== 'feed_lot')) {
     const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
     for (const c of CATEGORIAS) totalesPorCategoria[c.id] += matriz[e.id][c.id];
 
@@ -297,6 +300,87 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
     tr.addEventListener('click', () => trRodeos.classList.toggle('oculto'));
     tbody.appendChild(tr);
     tbody.appendChild(trRodeos);
+  }
+
+  const totalGeneral = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
+  const trTotal = document.createElement('tr');
+  trTotal.classList.add('fila-total');
+  trTotal.innerHTML =
+    `<td><strong>Total</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
+  tbody.appendChild(trTotal);
+}
+
+// ─── Feed Lot por corral ────────────────────────────────────────────────
+// Los 4 corrales son fijos (migración 039) y se listan SIEMPRE, aunque
+// estén vacíos: que un corral figure en cero es información, no un dato que
+// falta. Por eso se recorre la lista fija y no los rodeos que tengan stock.
+const CORRALES_FEED_LOT = ['1', '2', '3', '4'];
+
+function nombreTitular(titularId) {
+  return obtenerTitularesCache().find((t) => t.id === titularId)?.nombre || titularId;
+}
+
+// De quién es la hacienda que hay en un corral, con el desglose por
+// categoría de cada uno — es lo que se despliega al tocar la fila.
+function titularesDelCorral(rowsDelCorral) {
+  const acumulado = {};
+  for (const r of rowsDelCorral) {
+    if (r.cabezas <= 0) continue;
+    if (!acumulado[r.titular]) acumulado[r.titular] = { titular: r.titular, categorias: [], total: 0 };
+    acumulado[r.titular].categorias.push({ categoriaId: r.categoria, cabezas: r.cabezas });
+    acumulado[r.titular].total += r.cabezas;
+  }
+  return Object.values(acumulado).sort((a, b) => b.total - a.total);
+}
+
+function renderPorCorral(rows) {
+  const tabla = el('dash-corrales-tabla');
+  tabla.querySelector('thead').innerHTML =
+    `<tr><th>Corral</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
+
+  const tbody = tabla.querySelector('tbody');
+  tbody.innerHTML = '';
+  const totalesPorCategoria = {};
+  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
+
+  for (const corral of CORRALES_FEED_LOT) {
+    const rodeo = obtenerRodeosCache().find((r) => r.establecimiento_id === 'feed_lot' && r.corral === corral);
+    const delCorral = rodeo ? rows.filter((r) => r.rodeo_id === rodeo.id) : [];
+
+    const porCategoria = {};
+    for (const c of CATEGORIAS) porCategoria[c.id] = 0;
+    for (const r of delCorral) {
+      if (porCategoria[r.categoria] === undefined) porCategoria[r.categoria] = 0;
+      porCategoria[r.categoria] += r.cabezas;
+    }
+    const totalFila = CATEGORIAS.reduce((acc, c) => acc + porCategoria[c.id], 0);
+    for (const c of CATEGORIAS) totalesPorCategoria[c.id] += porCategoria[c.id];
+
+    const tr = document.createElement('tr');
+    tr.className = 'fila-clickeable';
+    tr.innerHTML =
+      `<td>Corral ${corral}</td>` +
+      CATEGORIAS.map((c) => `<td>${porCategoria[c.id]}</td>`).join('') +
+      `<td><strong>${totalFila}</strong></td>`;
+
+    const trDetalle = document.createElement('tr');
+    trDetalle.className = 'fila-rodeos oculto';
+    const td = document.createElement('td');
+    td.colSpan = CATEGORIAS.length + 2;
+    const titulares = titularesDelCorral(delCorral);
+    td.innerHTML = titulares.length
+      ? `<strong>Por titular:</strong> ` + titulares.map((t) => {
+          const detalle = t.categorias
+            .map(({ categoriaId, cabezas }) => `${CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId}: ${cabezas}`)
+            .join(', ');
+          return `${nombreTitular(t.titular)} (${detalle})`;
+        }).join(' · ')
+      : 'Corral vacío.';
+    trDetalle.appendChild(td);
+
+    tr.addEventListener('click', () => trDetalle.classList.toggle('oculto'));
+    tbody.appendChild(tr);
+    tbody.appendChild(trDetalle);
   }
 
   const totalGeneral = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
@@ -412,6 +496,16 @@ function renderTablaEstablecimiento() {
   renderPorEstablecimiento(construirMatriz(rows), construirMatrizKilos(rows), rows);
 }
 
+// Selector de titularidad propio: se mira el Feed Lot por separado del
+// resto (ej. "qué tiene Doña Julia en cada corral") sin tener que cambiar
+// la vista de la tabla de arriba.
+function renderTablaCorrales() {
+  const { vista, titularElegido } = leerVista('dash-corral-vista', 'dash-corral-cap-select');
+  const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido)
+    .filter((r) => r.establecimiento === 'feed_lot');
+  renderPorCorral(rows);
+}
+
 function formatearFechaDMY(fecha) {
   const [y, m, d] = fecha.split('-');
   return `${d}/${m}/${y}`;
@@ -454,6 +548,7 @@ export async function refrescarDashboard() {
   renderResumenTitularidad(rows);
   renderTablaCategoria();
   renderTablaEstablecimiento();
+  renderTablaCorrales();
   renderRodeosEstablecimiento();
 }
 
@@ -517,6 +612,7 @@ export async function initDashboard() {
   await Promise.all([cargarTitulares(), cargarRodeos()]);
   inicializarSelectorVista('dash-categoria-vista', 'dash-categoria-cap-wrap', 'dash-categoria-cap-select', renderTablaCategoria);
   inicializarSelectorVista('dash-establecimiento-vista', 'dash-establecimiento-cap-wrap', 'dash-establecimiento-cap-select', renderTablaEstablecimiento);
+  inicializarSelectorVista('dash-corral-vista', 'dash-corral-cap-wrap', 'dash-corral-cap-select', renderTablaCorrales);
   poblarSelectExportarEstablecimiento();
   poblarSelectRodeosEstablecimiento();
   el('dash-fecha').value = hoyISO();
