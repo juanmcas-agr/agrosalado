@@ -228,6 +228,15 @@ function renderResumenTitularidad(rows) {
   el('dash-total-general').textContent = totalGeneral;
 }
 
+// Las categorías que no tienen nada se esconden: con 10 categorías y la
+// mayoría en cero, las tablas quedaban llenas de columnas y filas vacías
+// que solo hacían ruido y las volvían más anchas que la pantalla.
+function categoriasConStock(rows) {
+  const hay = new Set();
+  for (const r of rows) if (r.cabezas !== 0) hay.add(r.categoria);
+  return CATEGORIAS.filter((c) => hay.has(c.id));
+}
+
 function renderGlobal(rows) {
   const totales = {};
   for (const c of CATEGORIAS) totales[c.id] = 0;
@@ -236,7 +245,12 @@ function renderGlobal(rows) {
 
   const tbody = el('dash-global-tabla').querySelector('tbody');
   tbody.innerHTML = '';
-  for (const c of CATEGORIAS) {
+  const visibles = CATEGORIAS.filter((c) => totales[c.id] !== 0);
+  if (!visibles.length) {
+    tbody.innerHTML = '<tr><td colspan="3">Sin stock para esta selección.</td></tr>';
+    return;
+  }
+  for (const c of visibles) {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${c.nombre}</td><td>${totales[c.id]}</td><td class="kilos-cell">${formatearKilos(kilos[c.id])}</td>`;
     tbody.appendChild(tr);
@@ -254,32 +268,35 @@ function renderGlobal(rows) {
 // cada establecimiento con la misma vista activa.
 function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   const tabla = el('dash-establecimientos-tabla');
+  // Solo las categorías con algo EN ESTA TABLA (Feed Lot va aparte, así que
+  // sus categorías no deben abrir columna acá).
+  const visibles = categoriasConStock(rowsFiltradas.filter((r) => r.establecimiento !== 'feed_lot'));
   tabla.querySelector('thead').innerHTML =
-    `<tr><th>Establecimiento</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
+    `<tr><th>Establecimiento</th>${visibles.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
 
   const tbody = tabla.querySelector('tbody');
   tbody.innerHTML = '';
   const totalesPorCategoria = {};
-  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
+  for (const c of visibles) totalesPorCategoria[c.id] = 0;
 
   // Feed Lot sale de esta tabla: tiene su propio cuadro abierto por corral
   // más abajo, que es como se mira en la práctica (no interesa "cuánto hay
   // en Feed Lot" sino qué hay en cada corral).
   for (const e of ESTABLECIMIENTOS.filter((x) => x.id !== 'feed_lot')) {
-    const totalFila = CATEGORIAS.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
-    for (const c of CATEGORIAS) totalesPorCategoria[c.id] += matriz[e.id][c.id];
+    const totalFila = visibles.reduce((acc, c) => acc + matriz[e.id][c.id], 0);
+    for (const c of visibles) totalesPorCategoria[c.id] += matriz[e.id][c.id];
 
     const tr = document.createElement('tr');
     tr.className = 'fila-clickeable';
     tr.innerHTML =
       `<td>${e.nombre}</td>` +
-      CATEGORIAS.map((c) => `<td>${matriz[e.id][c.id]}${matrizKilos[e.id][c.id] != null ? `<br><span class="kilos-cell">${formatearKilos(matrizKilos[e.id][c.id])}</span>` : ''}</td>`).join('') +
+      visibles.map((c) => `<td>${matriz[e.id][c.id]}${matrizKilos[e.id][c.id] != null ? `<br><span class="kilos-cell">${formatearKilos(matrizKilos[e.id][c.id])}</span>` : ''}</td>`).join('') +
       `<td><strong>${totalFila}</strong></td>`;
 
     const trRodeos = document.createElement('tr');
     trRodeos.className = 'fila-rodeos oculto';
     const tdRodeos = document.createElement('td');
-    tdRodeos.colSpan = CATEGORIAS.length + 2;
+    tdRodeos.colSpan = visibles.length + 2;
     const rodeos = rodeosPorEstablecimiento(rowsFiltradas, e.id);
     tdRodeos.innerHTML = rodeos.length
       ? `<strong>${rodeos.length} rodeo(s):</strong> ` + rodeos.map((r) => {
@@ -306,7 +323,7 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   const trTotal = document.createElement('tr');
   trTotal.classList.add('fila-total');
   trTotal.innerHTML =
-    `<td><strong>Total (sin Feed Lot)</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
+    `<td><strong>Total (sin Feed Lot)</strong></td>${visibles.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
   tbody.appendChild(trTotal);
 
   // Al sacar Feed Lot de esta tabla, su total dejó de estar acá y los
@@ -319,7 +336,7 @@ function renderPorEstablecimiento(matriz, matrizKilos, rowsFiltradas) {
   if (enFeedLot !== 0) {
     const trFeedLot = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = CATEGORIAS.length + 2;
+    td.colSpan = visibles.length + 2;
     td.innerHTML = `<span class="ayuda">En Feed Lot hay <strong>${enFeedLot}</strong> cabeza(s) más, que se ven abajo abiertas por corral. Total con Feed Lot: <strong>${totalGeneral + enFeedLot}</strong>.</span>`;
     trFeedLot.appendChild(td);
     tbody.appendChild(trFeedLot);
@@ -351,38 +368,42 @@ function titularesDelCorral(rowsDelCorral) {
 
 function renderPorCorral(rows) {
   const tabla = el('dash-corrales-tabla');
+  // Igual que en la tabla de establecimientos: solo columnas con algo.
+  // Si Feed Lot está vacío no queda ninguna, y se muestran los 4 corrales
+  // en cero igual (que estén vacíos es el dato).
+  const visibles = categoriasConStock(rows);
   tabla.querySelector('thead').innerHTML =
-    `<tr><th>Corral</th>${CATEGORIAS.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
+    `<tr><th>Corral</th>${visibles.map((c) => `<th>${c.nombre}</th>`).join('')}<th>Total</th></tr>`;
 
   const tbody = tabla.querySelector('tbody');
   tbody.innerHTML = '';
   const totalesPorCategoria = {};
-  for (const c of CATEGORIAS) totalesPorCategoria[c.id] = 0;
+  for (const c of visibles) totalesPorCategoria[c.id] = 0;
 
   for (const corral of CORRALES_FEED_LOT) {
     const rodeo = obtenerRodeosCache().find((r) => r.establecimiento_id === 'feed_lot' && r.corral === corral);
     const delCorral = rodeo ? rows.filter((r) => r.rodeo_id === rodeo.id) : [];
 
     const porCategoria = {};
-    for (const c of CATEGORIAS) porCategoria[c.id] = 0;
+    for (const c of visibles) porCategoria[c.id] = 0;
     for (const r of delCorral) {
       if (porCategoria[r.categoria] === undefined) porCategoria[r.categoria] = 0;
       porCategoria[r.categoria] += r.cabezas;
     }
-    const totalFila = CATEGORIAS.reduce((acc, c) => acc + porCategoria[c.id], 0);
-    for (const c of CATEGORIAS) totalesPorCategoria[c.id] += porCategoria[c.id];
+    const totalFila = visibles.reduce((acc, c) => acc + (porCategoria[c.id] || 0), 0);
+    for (const c of visibles) totalesPorCategoria[c.id] += porCategoria[c.id] || 0;
 
     const tr = document.createElement('tr');
     tr.className = 'fila-clickeable';
     tr.innerHTML =
       `<td>Corral ${corral}</td>` +
-      CATEGORIAS.map((c) => `<td>${porCategoria[c.id]}</td>`).join('') +
+      visibles.map((c) => `<td>${porCategoria[c.id] || 0}</td>`).join('') +
       `<td><strong>${totalFila}</strong></td>`;
 
     const trDetalle = document.createElement('tr');
     trDetalle.className = 'fila-rodeos oculto';
     const td = document.createElement('td');
-    td.colSpan = CATEGORIAS.length + 2;
+    td.colSpan = visibles.length + 2;
     const titulares = titularesDelCorral(delCorral);
     td.innerHTML = titulares.length
       ? `<strong>Por titular:</strong> ` + titulares.map((t) => {
@@ -403,7 +424,7 @@ function renderPorCorral(rows) {
   const trTotal = document.createElement('tr');
   trTotal.classList.add('fila-total');
   trTotal.innerHTML =
-    `<td><strong>Total</strong></td>${CATEGORIAS.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
+    `<td><strong>Total</strong></td>${visibles.map((c) => `<td><strong>${totalesPorCategoria[c.id]}</strong></td>`).join('')}<td><strong>${totalGeneral}</strong></td>`;
   tbody.appendChild(trTotal);
 }
 
