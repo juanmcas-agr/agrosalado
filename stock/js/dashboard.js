@@ -15,13 +15,27 @@ function esCapitalizador(titularId) {
   return t ? t.tipo === 'capitalizador' : titularId !== 'agro_salado' && titularId !== 'dona_julia';
 }
 
+// Hotelería: hacienda de un tercero que NO es socio (titulares.tipo =
+// 'cliente'), que solo está pensionada en Feed Lot. No es ni del grupo ni
+// de un capitalizador, así que antes no caía en ningún balde: no se veía en
+// ninguna vista salvo "Total" y quedaba afuera del Total general.
+function esCliente(titularId) {
+  return obtenerTitularesCache().find((x) => x.id === titularId)?.tipo === 'cliente';
+}
+
 // Filtra las filas de stock_actual según la "vista" de titularidad elegida.
-function filtrarPorVista(rows, vista, capitalizadorId) {
+// titularElegido: el del desplegable que acompaña a "Capitalizadores" y a
+// "Hotelería" para ver uno solo en vez de la suma de todos.
+function filtrarPorVista(rows, vista, titularElegido) {
   if (vista === 'agro_salado') return rows.filter((r) => r.titular === 'agro_salado');
   if (vista === 'dona_julia') return rows.filter((r) => r.titular === 'dona_julia');
   if (vista === 'capitalizadores') {
-    if (capitalizadorId) return rows.filter((r) => r.titular === capitalizadorId);
+    if (titularElegido) return rows.filter((r) => r.titular === titularElegido);
     return rows.filter((r) => esCapitalizador(r.titular));
+  }
+  if (vista === 'hoteleria') {
+    if (titularElegido) return rows.filter((r) => r.titular === titularElegido);
+    return rows.filter((r) => esCliente(r.titular));
   }
   if (vista === 'total') return rows; // AS + DJ + todos los capitalizadores, sin filtrar
   return rows.filter((r) => r.titular === 'agro_salado' || r.titular === 'dona_julia'); // 'grupo'
@@ -201,12 +215,16 @@ function renderResumenTitularidad(rows) {
   const totalDona = suma((r) => r.titular === 'dona_julia');
   const totalGrupo = totalAgro + totalDona;
   const totalTerceros = suma((r) => esCapitalizador(r.titular));
-  const totalGeneral = totalGrupo + totalTerceros;
+  const totalHoteleria = suma((r) => esCliente(r.titular));
+  // La hacienda en hotelería no es nuestra, pero está en el campo: si no
+  // entra acá, el Total general no coincide con lo que hay de verdad.
+  const totalGeneral = totalGrupo + totalTerceros + totalHoteleria;
 
   el('dash-total-agro').textContent = totalAgro;
   el('dash-total-dona').textContent = totalDona;
   el('dash-total-grupo').textContent = totalGrupo;
   el('dash-total-terceros').textContent = totalTerceros;
+  el('dash-total-hoteleria').textContent = totalHoteleria;
   el('dash-total-general').textContent = totalGeneral;
 }
 
@@ -335,12 +353,19 @@ function renderRodeosEstablecimiento() {
     : '<tr><td colspan="4">Sin rodeos con stock en este establecimiento.</td></tr>';
 }
 
-// ─── selectores de vista (Grupo / Agro Salado / Doña Julia / Capitalizadores) ───
+// ─── selectores de vista (AS+DJ / Agro Salado / Doña Julia /
+// Capitalizadores / Hotelería / Total) ───
 
-function poblarSelectCapitalizadores(idSelect) {
+// El mismo desplegable sirve para "Capitalizadores" y para "Hotelería": se
+// vuelve a llenar con unos u otros según la vista, en vez de tener dos
+// selects casi idénticos en pantalla.
+const TIPO_TITULAR_POR_VISTA = { capitalizadores: 'capitalizador', hoteleria: 'cliente' };
+
+function poblarSelectTitulares(idSelect, tipo) {
   const select = el(idSelect);
   select.innerHTML = '<option value="">Todos (suma)</option>';
-  for (const c of obtenerTitularesCache().filter((t) => t.tipo === 'capitalizador')) {
+  if (!tipo) return;
+  for (const c of obtenerTitularesCache().filter((t) => t.tipo === tipo)) {
     const opt = document.createElement('option');
     opt.value = c.id;
     opt.textContent = c.nombre;
@@ -354,33 +379,36 @@ function inicializarSelectorVista(idGrupo, idCapWrap, idCapSelect, onCambio) {
     { id: 'agro_salado', nombre: 'Agro Salado' },
     { id: 'dona_julia', nombre: 'Doña Julia' },
     { id: 'capitalizadores', nombre: 'Capitalizadores' },
+    { id: 'hoteleria', nombre: 'Hotelería' },
     { id: 'total', nombre: 'Total' },
   ]);
-  poblarSelectCapitalizadores(idCapSelect);
+  poblarSelectTitulares(idCapSelect, 'capitalizador');
   establecerSeleccion(idGrupo, 'grupo');
 
   el(idGrupo).addEventListener('cambio', () => {
     const vista = obtenerSeleccion(idGrupo);
-    el(idCapWrap).classList.toggle('oculto', vista !== 'capitalizadores');
+    const tipo = TIPO_TITULAR_POR_VISTA[vista];
+    el(idCapWrap).classList.toggle('oculto', !tipo);
+    if (tipo) poblarSelectTitulares(idCapSelect, tipo);
     onCambio();
   });
   el(idCapSelect).addEventListener('change', onCambio);
 }
 
 function leerVista(idGrupo, idCapSelect) {
-  return { vista: obtenerSeleccion(idGrupo), capitalizadorId: el(idCapSelect).value || null };
+  return { vista: obtenerSeleccion(idGrupo), titularElegido: el(idCapSelect).value || null };
 }
 
 let ultimasFilasStock = [];
 
 function renderTablaCategoria() {
-  const { vista, capitalizadorId } = leerVista('dash-categoria-vista', 'dash-categoria-cap-select');
-  renderGlobal(filtrarPorVista(ultimasFilasStock, vista, capitalizadorId));
+  const { vista, titularElegido } = leerVista('dash-categoria-vista', 'dash-categoria-cap-select');
+  renderGlobal(filtrarPorVista(ultimasFilasStock, vista, titularElegido));
 }
 
 function renderTablaEstablecimiento() {
-  const { vista, capitalizadorId } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
-  const rows = filtrarPorVista(ultimasFilasStock, vista, capitalizadorId);
+  const { vista, titularElegido } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
+  const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido);
   renderPorEstablecimiento(construirMatriz(rows), construirMatrizKilos(rows), rows);
 }
 
@@ -466,8 +494,8 @@ function filasDetalleParaExcel(establecimientoId) {
 function exportarStock() {
   const fecha = el('dash-fecha').value || hoyISO();
   const establecimientoId = el('dash-exportar-establecimiento').value || null;
-  const { vista, capitalizadorId } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
-  const rows = filtrarPorVista(ultimasFilasStock, vista, capitalizadorId);
+  const { vista, titularElegido } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
+  const rows = filtrarPorVista(ultimasFilasStock, vista, titularElegido);
   const detalle = filasDetalleParaExcel(establecimientoId);
 
   if (establecimientoId) {
