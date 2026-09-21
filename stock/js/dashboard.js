@@ -432,11 +432,43 @@ export async function refrescarDashboard() {
 // Exporta la misma vista (titularidad + fecha) que está en pantalla: un
 // establecimiento puntual si se eligió uno en el selector de exportación,
 // o todos desagregados + integrados (fila Total) en una sola hoja.
+// Filas de la hoja "Detalle por titular": una por cada combinación real de
+// establecimiento + categoría + titular + rodeo.
+//
+// A propósito NO se filtra por la vista de titularidad que esté elegida en
+// pantalla: el sentido de esta hoja es ver de quién es cada cosa, así que
+// sale completa aunque arriba se esté mirando solo Agro Salado. La hoja de
+// resumen sí respeta la vista, como siempre.
+//
+// Se saltean las filas en cero (ruido) pero NO las negativas: si un rodeo
+// quedó en negativo conviene que aparezca en el Excel, no esconderlo.
+function filasDetalleParaExcel(establecimientoId) {
+  const ordenEst = Object.fromEntries(ESTABLECIMIENTOS.map((e, i) => [e.id, i]));
+  const ordenCat = Object.fromEntries(CATEGORIAS.map((c, i) => [c.id, i]));
+  const nombreTitular = (id) => obtenerTitularesCache().find((t) => t.id === id)?.nombre || id;
+
+  return ultimasFilasStock
+    .filter((r) => r.cabezas !== 0 && (!establecimientoId || r.establecimiento === establecimientoId))
+    .sort((a, b) =>
+      (ordenEst[a.establecimiento] ?? 99) - (ordenEst[b.establecimiento] ?? 99)
+      || (ordenCat[a.categoria] ?? 99) - (ordenCat[b.categoria] ?? 99)
+      || nombreTitular(a.titular).localeCompare(nombreTitular(b.titular)))
+    .map((r) => ({
+      Establecimiento: ESTABLECIMIENTOS.find((e) => e.id === r.establecimiento)?.nombre || r.establecimiento,
+      Categoría: CATEGORIAS.find((c) => c.id === r.categoria)?.nombre || r.categoria,
+      Titular: nombreTitular(r.titular),
+      Rodeo: r.rodeo || obtenerRodeosCache().find((x) => x.id === r.rodeo_id)?.codigo || '',
+      Cabezas: r.cabezas,
+      'Kg prom.': r.kilos_promedio_ponderado ?? '',
+    }));
+}
+
 function exportarStock() {
   const fecha = el('dash-fecha').value || hoyISO();
   const establecimientoId = el('dash-exportar-establecimiento').value || null;
   const { vista, capitalizadorId } = leerVista('dash-establecimiento-vista', 'dash-establecimiento-cap-select');
   const rows = filtrarPorVista(ultimasFilasStock, vista, capitalizadorId);
+  const detalle = filasDetalleParaExcel(establecimientoId);
 
   if (establecimientoId) {
     const nombreEst = ESTABLECIMIENTOS.find((e) => e.id === establecimientoId)?.nombre || establecimientoId;
@@ -445,12 +477,12 @@ function exportarStock() {
     for (const r of rows) {
       if (r.establecimiento === establecimientoId) totales[r.categoria] = (totales[r.categoria] || 0) + r.cabezas;
     }
-    exportarStockEstablecimiento(totales, nombreEst, `stock_${establecimientoId}_${fecha}`);
+    exportarStockEstablecimiento(totales, nombreEst, `stock_${establecimientoId}_${fecha}`, detalle);
     return;
   }
 
   const matriz = construirMatriz(rows);
-  exportarMatrizStock(matriz, `stock_${fecha}`, `Stock al ${fecha}`);
+  exportarMatrizStock(matriz, `stock_${fecha}`, `Stock al ${fecha}`, detalle);
 }
 
 export async function initDashboard() {

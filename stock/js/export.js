@@ -32,14 +32,25 @@ function filasMatrizParaExcel(matriz) {
   return filas;
 }
 
-export function exportarMatrizStock(matriz, nombreBase, tituloHoja) {
+// Segunda hoja del Excel de Stock: una fila por establecimiento +
+// categoría + titular + rodeo. El resumen de la primera hoja cruza
+// establecimientos con categorías pero no dice de QUIÉN es cada cosa ni en
+// qué rodeo está, que es justamente lo que hace falta para repartir o
+// liquidar con un capitalizador.
+function agregarHojaDetalle(wb, filasDetalle) {
+  if (!filasDetalle || !filasDetalle.length) return;
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(filasDetalle), 'Detalle por titular');
+}
+
+export function exportarMatrizStock(matriz, nombreBase, tituloHoja, filasDetalle) {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(filasMatrizParaExcel(matriz));
   XLSX.utils.book_append_sheet(wb, ws, tituloHoja.slice(0, 31));
+  agregarHojaDetalle(wb, filasDetalle);
   XLSX.writeFile(wb, nombreConFecha(nombreBase));
 }
 
-export function exportarStockEstablecimiento(totalesPorCategoria, nombreEstablecimiento, nombreBase) {
+export function exportarStockEstablecimiento(totalesPorCategoria, nombreEstablecimiento, nombreBase, filasDetalle) {
   const filas = CATEGORIAS.map((c) => ({ Categoría: c.nombre, Cabezas: totalesPorCategoria[c.id] || 0 }));
   const total = Object.values(totalesPorCategoria).reduce((a, b) => a + b, 0);
   filas.push({ Categoría: 'Total', Cabezas: total });
@@ -47,6 +58,7 @@ export function exportarStockEstablecimiento(totalesPorCategoria, nombreEstablec
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(filas);
   XLSX.utils.book_append_sheet(wb, ws, nombreEstablecimiento.slice(0, 31));
+  agregarHojaDetalle(wb, filasDetalle);
   XLSX.writeFile(wb, nombreConFecha(nombreBase));
 }
 
