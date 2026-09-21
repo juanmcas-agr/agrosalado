@@ -550,6 +550,11 @@ function poblarGrupos() {
   crearGrupoBotones('mov-categoria-origen', CATEGORIAS);
   crearGrupoBotones('mov-categoria-destino', CATEGORIAS);
   crearGrupoBotones('mov-destino-venta', DESTINO_VENTA);
+  crearGrupoBotones('mov-kilos-modo', [
+    { id: 'promedio', nombre: 'Promedio por cabeza' },
+    { id: 'total', nombre: 'Total del lote' },
+  ]);
+  establecerSeleccion('mov-kilos-modo', 'promedio');
   inicializarTitular('origen');
   inicializarTitular('destino');
   inicializarCliente();
@@ -971,6 +976,118 @@ function activarAccesoRapidoFeedLot() {
   });
 }
 
+// ─── Resumen de lo que se está por guardar ──────────────────────────────
+// Se arma leyendo el formulario igual que al guardar, para que diga
+// exactamente lo que va a entrar (no lo que parece decir la pantalla).
+function nombreDe(lista, id) {
+  return lista.find((x) => x.id === id)?.nombre || id || '';
+}
+
+// El resumen usa innerHTML para poder resaltar en negrita, y varios de los
+// nombres que interpola los carga el usuario (capitalizadores, compradores,
+// rodeos): sin escapar, un nombre con "<" inyectaría HTML en la pantalla.
+function esc(texto) {
+  const d = document.createElement('div');
+  d.textContent = texto ?? '';
+  return d.innerHTML;
+}
+
+function nombreTitularMov(id) {
+  if (!id) return '';
+  return obtenerTitularesCache().find((t) => t.id === id)?.nombre || id;
+}
+
+// Cómo se describe un lado: el corral si es Feed Lot, el rodeo si no.
+function ladoTexto(establecimientoId, corral, rodeoId) {
+  if (!establecimientoId) return '';
+  const est = nombreDe(ESTABLECIMIENTOS, establecimientoId);
+  if (establecimientoId === 'feed_lot' && corral) return `${est} (Corral ${corral})`;
+  const rodeo = obtenerRodeosCache().find((r) => r.id === rodeoId)?.codigo;
+  return rodeo ? `${est} (${rodeo})` : est;
+}
+
+function actualizarResumen() {
+  const contenedor = el('mov-resumen');
+  const tipo = obtenerSeleccion('mov-tipo');
+  const cfg = TIPOS_MOVIMIENTO[tipo];
+  const cabezas = Number(el('mov-cabezas').value);
+  const categoria = obtenerSeleccion(`mov-categoria-${cfg ? campoRelevante(cfg, 'categoria') : 'origen'}`);
+
+  // Hasta que no haya tipo, cabezas y categoría no hay nada que resumir.
+  if (!cfg || !cabezas || !categoria) {
+    contenedor.classList.add('oculto');
+    contenedor.textContent = '';
+    return;
+  }
+
+  const partes = [`<strong>${esc(cfg.nombre)}</strong>`, `${cabezas} ${esc(nombreDe(CATEGORIAS, categoria))}`];
+
+  const titular = cfg.campos.includes('titular_origen')
+    ? obtenerTitular('origen')
+    : (tipo === 'salida_hoteleria' ? obtenerCliente() : (cfg.campos.includes('titular_destino') ? obtenerTitular('destino') : (tipo === 'hoteleria' ? obtenerCliente() : '')));
+  if (titular) partes.push(`de <strong>${esc(nombreTitularMov(titular))}</strong>`);
+
+  const { origen, destino } = establecimientosResueltos(cfg);
+  const desde = ladoTexto(origen, obtenerSeleccion('mov-feedlot-corral-origen'), el('mov-rodeo').value);
+  const hasta = ladoTexto(destino, obtenerSeleccion('mov-feedlot-corral'), el('mov-rodeo-destino').value);
+  if (desde && hasta) partes.push(`${esc(desde)} → ${esc(hasta)}`);
+  else if (desde) partes.push(`desde ${esc(desde)}`);
+  else if (hasta) partes.push(`a ${esc(hasta)}`);
+
+  if (cfg.campos.includes('titular_destino') && cfg.campos.includes('titular_origen')) {
+    const destinoTit = obtenerTitular('destino');
+    if (destinoTit) partes.push(`pasa a <strong>${esc(nombreTitularMov(destinoTit))}</strong>`);
+  }
+  if (cfg.campos.includes('categoria_destino')) {
+    const catDestino = obtenerSeleccion('mov-categoria-destino');
+    if (catDestino && catDestino !== categoria) partes.push(`pasa a <strong>${esc(nombreDe(CATEGORIAS, catDestino))}</strong>`);
+  }
+  if (cfg.campos.includes('comprador')) {
+    const comprador = obtenerComprador();
+    if (comprador) partes.push(`comprador <strong>${esc(nombreDe(obtenerCompradoresCache(), comprador))}</strong>`);
+  }
+
+  const kilos = Number(kilosPromedioDelFormulario());
+  if (kilos > 0) partes.push(`${kilos} kg/cab.`);
+
+  contenedor.innerHTML = `Vas a guardar: ${partes.join(' · ')}`;
+  contenedor.classList.remove('oculto');
+}
+
+// ─── Kilos: promedio por cabeza o total del lote ────────────────────────
+// La base guarda siempre el promedio (movimientos.kilos_promedio). Poder
+// escribir el total es solo para no obligar a dividir a mano en el corral,
+// que es de donde salen los errores de un dígito.
+function modoKilos() {
+  return obtenerSeleccion('mov-kilos-modo') || 'promedio';
+}
+
+function kilosPromedioDelFormulario() {
+  const valor = Number(el('mov-kilos').value);
+  if (!valor) return '';
+  if (modoKilos() !== 'total') return el('mov-kilos').value;
+  const cabezas = Number(el('mov-cabezas').value);
+  if (!cabezas) return '';
+  return Math.round((valor / cabezas) * 100) / 100;
+}
+
+// Muestra la cuenta hecha, para que se vea qué se va a guardar.
+function actualizarAyudaKilos() {
+  const esTotal = modoKilos() === 'total';
+  el('mov-kilos-label').textContent = esTotal ? 'Kilos totales del lote' : 'Kilos promedio por cabeza';
+
+  const ayuda = el('mov-kilos-calculado');
+  if (!esTotal) { ayuda.classList.add('oculto'); return; }
+
+  const total = Number(el('mov-kilos').value);
+  const cabezas = Number(el('mov-cabezas').value);
+  if (!total) { ayuda.classList.add('oculto'); return; }
+  ayuda.textContent = cabezas
+    ? `Se guardan ${kilosPromedioDelFormulario()} kg por cabeza (${total} ÷ ${cabezas}).`
+    : 'Cargá primero la cantidad de cabezas para poder sacar el promedio.';
+  ayuda.classList.remove('oculto');
+}
+
 function leerFormulario() {
   const tipo = obtenerSeleccion('mov-tipo');
   const cfg = TIPOS_MOVIMIENTO[tipo];
@@ -995,7 +1112,9 @@ function leerFormulario() {
     destino_venta: cfg.campos.includes('destino_venta') ? obtenerSeleccion('mov-destino-venta') : null,
     comprador: cfg.campos.includes('comprador') ? obtenerComprador() : null,
     cantidad_cabezas: el('mov-cabezas').value,
-    kilos_promedio: el('mov-kilos').value,
+    // Siempre se guarda el promedio por cabeza; si el usuario cargó el
+    // total del lote (lo que da la balanza), se divide acá.
+    kilos_promedio: kilosPromedioDelFormulario(),
     rodeo_id: principalEnFeedLot ? null : el('mov-rodeo').value,
     rodeo_destino: (cfg.campos.includes('rodeo_destino') && !destinoSecundarioEnFeedLot) ? el('mov-rodeo-destino').value : null,
     observaciones: el('mov-observaciones').value.trim() || null,
@@ -1050,7 +1169,11 @@ function validar(datos) {
   if (!Number.isInteger(cabezas) || cabezas <= 0) errores.push('La cantidad de cabezas debe ser un entero mayor a 0.');
 
   const kilos = Number(datos.kilos_promedio);
-  if (!(kilos > 0)) errores.push('Los kilos promedio deben ser mayores a 0.');
+  // Con el modo "total" el promedio sale de dividir por las cabezas, así
+  // que sin cabezas no hay promedio que guardar — el mensaje lo dice.
+  if (!(kilos > 0) && modoKilos() === 'total' && el('mov-kilos').value) {
+    errores.push('Para cargar los kilos totales hace falta la cantidad de cabezas.');
+  } else if (!(kilos > 0)) errores.push('Los kilos promedio deben ser mayores a 0.');
   else if (kilos < KILOS_MIN_SANIDAD || kilos > KILOS_MAX_SANIDAD) {
     advertencias.push(`${kilos} kg/cabeza es un valor fuera de lo habitual (${KILOS_MIN_SANIDAD}-${KILOS_MAX_SANIDAD} kg). Verificá antes de confirmar.`);
   }
@@ -1123,6 +1246,9 @@ function mostrarToast(texto, duracionMs) {
 function resetFormulario() {
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
+  establecerSeleccion('mov-kilos-modo', 'promedio');
+  actualizarAyudaKilos();
+  actualizarResumen();
   el('mov-observaciones').value = '';
   el('mov-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('mov-establecimiento-origen');
@@ -1173,6 +1299,7 @@ function precargarParaEditar(fila) {
   if (fila.destino_venta) establecerSeleccion('mov-destino-venta', fila.destino_venta);
   el('mov-comprador').value = fila.comprador_id || '';
   el('mov-cabezas').value = fila.cantidad_cabezas;
+  establecerSeleccion('mov-kilos-modo', 'promedio');
   el('mov-kilos').value = fila.kilos_promedio;
   el('mov-fecha').value = fila.fecha;
   el('mov-observaciones').value = fila.observaciones || '';
@@ -1416,6 +1543,17 @@ export async function initMovimientos() {
   el('mov-cambio-cat-boton').addEventListener('click', ejecutarCambioCategoriaExpress);
   ocultarCamposDependientesDeTipo();
   activarAccesoRapidoFeedLot();
+  // El resumen y la ayuda de kilos dependen de casi todo el formulario, así
+  // que en vez de enganchar campo por campo se escucha en el formulario
+  // entero: los clicks de los grupos de botones y los input/change de los
+  // campos burbujean hasta acá, y para cuando llegan el estado ya cambió.
+  const refrescarAyudas = () => { actualizarAyudaKilos(); actualizarResumen(); };
+  el('mov-form').addEventListener('click', (evento) => {
+    if (evento.target.closest('.boton-opcion')) refrescarAyudas();
+  });
+  el('mov-form').addEventListener('input', refrescarAyudas);
+  el('mov-form').addEventListener('change', refrescarAyudas);
+
   el('mov-form').addEventListener('submit', onSubmit);
   el('mov-editando-cancelar').addEventListener('click', cancelarEdicion);
   document.addEventListener('hacienda:editar-movimiento', (evento) => precargarParaEditar(evento.detail));

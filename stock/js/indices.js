@@ -68,8 +68,13 @@ function renderCartel(pendientes) {
     banner.textContent = '';
     return;
   }
-  const nombres = pendientes.map((p) => `${p.nombre} (${p.anio})`).join(', ');
-  banner.textContent = `Índices pendientes de cargar/corroborar: ${nombres}. Tocá para ir a Reportes > Índices.`;
+  // Una sola línea: enumerarlos todos ocupaba seis renglones en un celular,
+  // en todas las pantallas, antes de poder empezar a cargar nada. El
+  // detalle está a un toque de distancia, en Reportes > Índices.
+  const cuantos = pendientes.length;
+  banner.textContent = cuantos === 1
+    ? `1 índice pendiente de cargar/corroborar: ${pendientes[0].nombre} (${pendientes[0].anio}). Tocá para ir.`
+    : `${cuantos} índices pendientes de cargar/corroborar. Tocá para verlos.`;
   banner.classList.remove('oculto');
 }
 

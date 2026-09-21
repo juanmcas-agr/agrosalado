@@ -211,6 +211,30 @@ h3 { font-size: 1em; margin: 14px 0 6px; }
 
 .formulario .full { grid-column: 1 / -1; }
 
+/* Resumen de lo que se está por guardar, y el botón, pegados al pie del
+   formulario. En un celular "Cargar movimiento" mide casi tres pantallas:
+   sin esto hay que bajar hasta el fondo para guardar, y volver a subir para
+   releer qué se eligió. Quedan a la vista mientras se completa. */
+.mov-resumen {
+  background: #fff8e6;
+  border: 1px solid #f0d9a0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.9em;
+  line-height: 1.35;
+  color: #6b4f1d;
+}
+#mov-form #mov-resumen {
+  position: sticky;
+  bottom: 52px;
+  z-index: 11;
+}
+#mov-form #mov-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
+
 .campo-password { position: relative; }
 .campo-password input { padding-right: 46px; }
 .boton-mostrar-clave {

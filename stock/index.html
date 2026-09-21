@@ -141,6 +141,11 @@
           </div>
         </div>
 
+        <div id="mov-feedlot-entrada" class="campo-grupo full oculto">
+          <div class="etiqueta-grupo">🚚 Corral de destino (Feed Lot)</div>
+          <div id="mov-feedlot-corral"></div>
+        </div>
+
         <div data-campo="titular_origen" class="campo-grupo full">
           <div class="etiqueta-grupo">Titularidad de origen</div>
           <div id="mov-titular-origen-tipo"></div>
@@ -182,13 +187,16 @@
           <input id="mov-cabezas" type="number" min="1" step="1" required>
         </label>
 
-        <label>Kilos promedio por cabeza
-          <input id="mov-kilos" type="number" min="1" step="0.1" required>
-        </label>
-
-        <div id="mov-feedlot-entrada" class="campo-grupo full oculto">
-          <div class="etiqueta-grupo">🚚 Corral de destino (Feed Lot)</div>
-          <div id="mov-feedlot-corral"></div>
+        <!-- De la balanza sale el total del lote, no el promedio: poder
+             cargar el total evita tener que dividir a mano en el corral. -->
+        <div class="campo-grupo full">
+          <div class="etiqueta-grupo">Kilos</div>
+          <div id="mov-kilos-modo"></div>
+          <label style="margin-top:8px;">
+            <span id="mov-kilos-label">Kilos promedio por cabeza</span>
+            <input id="mov-kilos" type="number" min="1" step="0.1" required>
+          </label>
+          <div id="mov-kilos-calculado" class="ayuda oculto"></div>
         </div>
 
         <label class="full">
@@ -196,6 +204,11 @@
           <textarea id="mov-observaciones" rows="2"></textarea>
         </label>
 
+        <!-- Resumen en una línea de lo que se está por guardar: un
+             formulario de 20 campos es fácil de completar mal, y un
+             movimiento con el titular o la categoría equivocados pasa todos
+             los controles (tiene stock, no es duplicado). -->
+        <div id="mov-resumen" class="mov-resumen full oculto"></div>
         <button type="submit" id="mov-submit" class="full">Guardar movimiento</button>
         <div id="mov-mensaje" class="mensaje full"></div>
       </form>
