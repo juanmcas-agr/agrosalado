@@ -693,6 +693,29 @@
       cursor: pointer;
     }
 
+    /* ── FLETE: tarjeta de costo por rubro ── */
+    .rubro-costo {
+      display: flex; flex-direction: column; gap: 4px;
+      /* Dos tarjetas por fila en un celular; en la compu entran todas las
+         que den, sin estirarse de más. */
+      flex: 1 1 160px; min-width: 150px; max-width: 240px; padding: 8px;
+      border: 1px solid #e3e3e3; border-radius: 8px; background: #fafafa;
+    }
+    .rubro-costo > strong { font-size: 0.85em; }
+    .rubro-costo label {
+      display: flex; flex-direction: column; font-size: 0.7em; color: #666;
+    }
+    /* 16px o iOS hace zoom solo al tocar el campo y deja la pantalla corrida. */
+    .rubro-costo select, .rubro-costo input {
+      font-size: 16px; padding: 3px 4px; width: 100%; max-width: 100%;
+    }
+    .rubro-costo .rubro-resultado { display: flex; align-items: center; gap: 4px; }
+    .rubro-costo .rubro-resultado input { font-weight: bold; }
+    .rubro-costo .rubro-resultado input[readonly] { background: #eee; }
+    .rubro-costo .rubro-resultado span { font-size: 0.75em; color: #666; white-space: nowrap; }
+    .rubro-costo .rubro-ayuda { font-size: 0.68em; color: #999; }
+    .rubro-costo .rubro-cuenta { font-size: 0.7em; color: #8a5a34; }
+
     /* ── PRINT ── */
     @media print {
       body * { visibility: hidden; }
@@ -1234,8 +1257,12 @@
     </div>
 
     <div style="background:white;border-radius:8px;padding:10px;margin-bottom:12px;">
-      <div style="font-weight:bold;margin-bottom:6px;">⚙️ Costo real de flete por rubro ($/KM)</div>
-      <div id="fleteRubrosForm" style="display:flex;flex-wrap:wrap;gap:10px;"></div>
+      <div style="font-weight:bold;margin-bottom:2px;">⚙️ Costo real de flete por rubro ($/KM)</div>
+      <div style="font-size:0.78em;color:#666;margin-bottom:8px;">
+        No hace falta traer el $/km calculado: en cada rubro elegí cómo lo querés cargar y la cuenta la hace la app.
+        Ej. neumáticos → "Precio y duración": el precio de la cubierta y cada cuántos km se cambia.
+      </div>
+      <div id="fleteRubrosForm" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:10px;"></div>
       <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
         <button type="button" onclick="guardarRubrosFlete()">💾 Guardar rubros</button>
         <span style="font-size:0.85em;">Total: <strong id="fleteRubrosTotalArs">-</strong> /km <span id="fleteRubrosTotalUsd" style="color:#666;"></span></span>
@@ -3065,6 +3092,74 @@
     ];
     let fleteRubros = {};
 
+    // ── Cómo se carga cada rubro ────────────────────────────────────
+    // Antes había que traer el $/km ya hecho a mano ("neumáticos:
+    // 127,50"), que es justo la cuenta que uno no tiene ganas de hacer.
+    // Ahora cada rubro se puede cargar con los datos reales —el precio
+    // de la cubierta y cada cuántos km se cambia, el precio del litro y
+    // el rendimiento, el gasto de un período y los km de ese período— y
+    // la app devuelve el $/km sola.
+    //
+    // Lo que se guarda en la columna de cada rubro sigue siendo SIEMPRE
+    // el $/km final, así que nada de esto cambia cómo se calcula el
+    // costo de un viaje (ver costoFleteDeFila). Los datos de la cuenta
+    // van aparte, a la columna `detalle` (jsonb, migración 044), para
+    // poder reabrirla y corregirla en vez de rehacer todo de nuevo.
+    //
+    // 'directo' y 'pct' no tienen porKm: son los modos de escribir el
+    // número a mano, como era hasta ahora.
+    const CALCULOS_RUBRO = {
+      directo: { etiqueta: 'Escribir $/km', campos: [] },
+      pct: { etiqueta: '% de la tarifa', campos: [] },
+      unidad: {
+        etiqueta: 'Precio y duración',
+        ayuda: 'Ej: 12 cubiertas de $850.000 que duran 80.000 km.',
+        campos: [['cantidad', 'Cantidad', 1], ['precio', 'Precio de c/u ($)', ''], ['vida_km', 'Duran (km)', '']],
+        porKm: (d) => (numRubro(d.cantidad) * numRubro(d.precio)) / numRubro(d.vida_km),
+        cuenta: (d) => `${numRubro(d.cantidad)} × ${formatoNumero(numRubro(d.precio))} ÷ ${kmTexto(d.vida_km)} km`,
+      },
+      consumo: {
+        etiqueta: 'Precio y consumo',
+        ayuda: 'Ej: gasoil a $1.300 el litro rindiendo 2,5 km por litro.',
+        campos: [['precio_litro', 'Precio del litro ($)', ''], ['km_litro', 'Rinde (km por litro)', '']],
+        porKm: (d) => numRubro(d.precio_litro) / numRubro(d.km_litro),
+        cuenta: (d) => `${formatoNumero(numRubro(d.precio_litro))} ÷ ${numRubro(d.km_litro)} km por litro`,
+      },
+      periodo: {
+        etiqueta: 'Gasto por período',
+        ayuda: 'Ej: $4.000.000 en el año haciendo 120.000 km en ese año.',
+        campos: [['monto', 'Gasto del período ($)', ''], ['km_periodo', 'Km de ese período', '']],
+        porKm: (d) => numRubro(d.monto) / numRubro(d.km_periodo),
+        cuenta: (d) => `${formatoNumero(numRubro(d.monto))} ÷ ${kmTexto(d.km_periodo)} km`,
+      },
+    };
+
+    // Qué maneras de cargar tiene sentido ofrecer en cada rubro — todos
+    // pueden seguir cargándose a mano ('directo'), que es como quedan los
+    // registros guardados antes de que existiera la calculadora.
+    const CALCULOS_POR_RUBRO = {
+      mano_obra: ['pct', 'directo', 'periodo'],
+      combustibles: ['directo', 'consumo', 'periodo'],
+      neumaticos: ['directo', 'unidad', 'periodo'],
+      mantenimiento: ['directo', 'periodo', 'unidad'],
+      material_rodante: ['directo', 'unidad', 'periodo'],
+      patentes_registros: ['directo', 'periodo'],
+      seguros: ['directo', 'periodo'],
+      gastos_generales: ['directo', 'periodo'],
+      costos_financieros: ['directo', 'periodo'],
+    };
+
+    // { neumaticos: { modo: 'unidad', cantidad: 12, precio: 850000, vida_km: 80000 }, ... }
+    let fleteRubrosDetalle = {};
+
+    function numRubro(v) {
+      const n = parseFloat(v);
+      return isFinite(n) ? n : 0;
+    }
+    function kmTexto(v) {
+      return numRubro(v).toLocaleString('es-AR');
+    }
+
     function totalRubrosFijosPorKm() {
       return RUBROS_FLETE_FIJOS.reduce((suma, [clave]) => suma + (Number(fleteRubros[clave]) || 0), 0);
     }
@@ -3084,41 +3179,135 @@
       if (errorFilas) { console.error('No se pudieron cargar las simulaciones de flete:', errorFilas); return; }
       fleteFilas = filas || [];
       if (!errorRubros && historialRubros && historialRubros.length) fleteRubros = historialRubros[0];
+      sincronizarDetalleRubros();
       renderConfigRubrosFlete();
       renderFlete();
     }
 
-    function renderConfigRubrosFlete() {
-      const cont = document.getElementById('fleteRubrosForm');
-      const manoObraModo = fleteRubros.mano_obra_modo || 'pct';
-      const manoObraValor = fleteRubros.mano_obra ?? 16;
-      const manoObraHtml = `
-        <label style="display:flex;flex-direction:column;font-size:0.75em;">
-          Mano de obra
-          <select id="fleteManoObraModo" style="margin-bottom:2px;" onchange="document.getElementById('fleteManoObraSufijo').textContent = this.value === 'pct' ? '% de la tarifa' : '$/km';">
-            <option value="pct" ${manoObraModo === 'pct' ? 'selected' : ''}>% de la tarifa pagada</option>
-            <option value="fijo" ${manoObraModo === 'fijo' ? 'selected' : ''}>Valor fijo</option>
-          </select>
-          <div style="display:flex;align-items:center;gap:4px;">
-            <input type="number" step="0.01" id="fleteRubro_mano_obra" value="${manoObraValor}" style="width:70px;">
-            <span id="fleteManoObraSufijo" style="font-size:0.85em;color:#666;">${manoObraModo === 'pct' ? '% de la tarifa' : '$/km'}</span>
-          </div>
-        </label>`;
-      const restoHtml = RUBROS_FLETE_FIJOS.map(([clave, etiqueta]) => `
-        <label style="display:flex;flex-direction:column;font-size:0.75em;">
-          ${etiqueta}
-          <input type="number" step="0.01" id="fleteRubro_${clave}" value="${fleteRubros[clave] || 0}" style="width:100px;">
-        </label>
-      `).join('');
-      cont.innerHTML = manoObraHtml + restoHtml;
+    // Los registros guardados antes de la calculadora no traen `detalle`:
+    // se toman como "escribir $/km directo", que es exactamente lo que
+    // eran. Solo se llama al cargar y al guardar — NO en cada render, o
+    // pisaría lo que se está tocando en pantalla.
+    function sincronizarDetalleRubros() {
+      // Copia propia (una por rubro, no solo el objeto de arriba): si no,
+      // lo que se toca en pantalla mutaria tambien el ultimo registro
+      // guardado, que es de donde se leen los $/km ya confirmados.
+      fleteRubrosDetalle = {};
+      for (const [clave, datos] of Object.entries(fleteRubros.detalle || {})) {
+        fleteRubrosDetalle[clave] = { ...datos };
+      }
+      if (!fleteRubrosDetalle.mano_obra) {
+        fleteRubrosDetalle.mano_obra = {
+          modo: (fleteRubros.mano_obra_modo || 'pct') === 'pct' ? 'pct' : 'directo',
+        };
+      }
+    }
 
-      const totalFijo = totalRubrosFijosPorKm();
-      const notaManoObra = manoObraModo === 'fijo'
-        ? formatoNumero(totalFijo + manoObraValor)
-        : `${formatoNumero(totalFijo)} + mano de obra: ${manoObraValor}% de la tarifa de cada viaje`;
-      document.getElementById('fleteRubrosTotalArs').textContent = notaManoObra;
+    // $/km que sale de la calculadora del rubro; null si el rubro se
+    // carga a mano o si le falta algún dato (km en 0 daría Infinity, que
+    // no tiene por qué ensuciar el total).
+    function porKmCalculado(clave) {
+      const det = fleteRubrosDetalle[clave] || {};
+      const calc = CALCULOS_RUBRO[det.modo];
+      if (!calc || !calc.porKm) return null;
+      const valor = calc.porKm(det);
+      return isFinite(valor) ? +valor.toFixed(2) : null;
+    }
+
+    function textoCuenta(clave) {
+      const det = fleteRubrosDetalle[clave] || {};
+      const calc = CALCULOS_RUBRO[det.modo];
+      if (!calc || !calc.porKm) return '';
+      const porKm = porKmCalculado(clave);
+      if (porKm === null) return 'Faltan datos para la cuenta.';
+      return `${calc.cuenta(det)} = ${formatoNumero(porKm)} /km`;
+    }
+
+    // Todo lo que se interpola acá es texto fijo del código o un número
+    // (numRubro fuerza Number), nunca texto cargado por el usuario.
+    function valorGuardadoDeRubro(clave) {
+      if (clave === 'mano_obra') return fleteRubros.mano_obra ?? 16;
+      return Number(fleteRubros[clave]) || 0;
+    }
+
+    function htmlRubroCosto(clave, etiqueta) {
+      const det = fleteRubrosDetalle[clave] || {};
+      const modo = CALCULOS_RUBRO[det.modo] ? det.modo : 'directo';
+      const calc = CALCULOS_RUBRO[modo];
+      const esCalculado = !!calc.porKm;
+      const opciones = (CALCULOS_POR_RUBRO[clave] || ['directo']).map((k) =>
+        `<option value="${k}" ${modo === k ? 'selected' : ''}>${CALCULOS_RUBRO[k].etiqueta}</option>`).join('');
+      const campos = !esCalculado ? '' : calc.campos.map(([campo, titulo, porDefecto]) => {
+        const v = det[campo];
+        const valor = (v === '' || v === null || v === undefined) ? porDefecto : numRubro(v);
+        return `<label>${titulo}
+            <input type="number" step="0.01" value="${valor}"
+                   oninput="actualizarCalculoRubro('${clave}', '${campo}', this.value)">
+          </label>`;
+      }).join('');
+      const ayuda = esCalculado ? `<div class="rubro-ayuda">${calc.ayuda}</div>` : '';
+      const valorResultado = esCalculado ? (porKmCalculado(clave) ?? 0) : (Number(valorGuardadoDeRubro(clave)) || 0);
+      const sufijo = modo === 'pct' ? '% de la tarifa' : '$/km';
+      return `
+        <div class="rubro-costo" id="fleteCard_${clave}">
+          <strong>${etiqueta}</strong>
+          <select onchange="cambiarModoCalculoRubro('${clave}', this.value)">${opciones}</select>
+          ${campos}${ayuda}
+          <div class="rubro-resultado">
+            <input type="number" step="0.01" id="fleteRubro_${clave}" value="${valorResultado}"
+                   ${esCalculado ? 'readonly' : ''} oninput="actualizarTotalRubros()">
+            <span>${sufijo}</span>
+          </div>
+          <div class="rubro-cuenta" id="fleteCuenta_${clave}">${textoCuenta(clave)}</div>
+        </div>`;
+    }
+
+    function renderConfigRubrosFlete() {
+      document.getElementById('fleteRubrosForm').innerHTML =
+        htmlRubroCosto('mano_obra', 'Mano de obra') +
+        RUBROS_FLETE_FIJOS.map(([clave, etiqueta]) => htmlRubroCosto(clave, etiqueta)).join('');
+      actualizarTotalRubros();
+    }
+
+    // Redibuja SOLO la tarjeta que cambio de modo. Redibujar el formulario
+    // entero borraba lo que se hubiera escrito a mano en los otros rubros y
+    // todavia no estuviera guardado (el resto de las tarjetas se vuelve a
+    // dibujar desde el ultimo registro guardado, no desde la pantalla).
+    function cambiarModoCalculoRubro(clave, modo) {
+      fleteRubrosDetalle[clave] = { ...(fleteRubrosDetalle[clave] || {}), modo };
+      const etiqueta = clave === 'mano_obra'
+        ? 'Mano de obra'
+        : (RUBROS_FLETE_FIJOS.find(([c]) => c === clave) || [])[1];
+      document.getElementById('fleteCard_' + clave).outerHTML = htmlRubroCosto(clave, etiqueta);
+      actualizarTotalRubros();
+    }
+
+    // Se escribe en un campo de la calculadora: se actualiza el $/km del
+    // rubro y el total, sin volver a dibujar el formulario (redibujarlo
+    // haría perder el foco en medio de un número).
+    function actualizarCalculoRubro(clave, campo, valor) {
+      const det = fleteRubrosDetalle[clave] || (fleteRubrosDetalle[clave] = {});
+      det[campo] = valor === '' ? '' : numRubro(valor);
+      const porKm = porKmCalculado(clave);
+      document.getElementById('fleteRubro_' + clave).value = porKm === null ? 0 : porKm;
+      document.getElementById('fleteCuenta_' + clave).textContent = textoCuenta(clave);
+      actualizarTotalRubros();
+    }
+
+    // Lee lo que hay en pantalla (no el último registro guardado), así el
+    // total se mueve mientras se corrige un rubro y se ve el efecto antes
+    // de guardar.
+    function actualizarTotalRubros() {
+      const totalFijo = +RUBROS_FLETE_FIJOS
+        .reduce((suma, [clave]) => suma + (parseFloat(document.getElementById('fleteRubro_' + clave).value) || 0), 0)
+        .toFixed(2);
+      const manoObra = parseFloat(document.getElementById('fleteRubro_mano_obra').value) || 0;
+      const esPct = (fleteRubrosDetalle.mano_obra || {}).modo === 'pct';
+      document.getElementById('fleteRubrosTotalArs').textContent = esPct
+        ? `${formatoNumero(totalFijo)} + mano de obra: ${manoObra}% de la tarifa de cada viaje`
+        : formatoNumero(+(totalFijo + manoObra).toFixed(2));
       document.getElementById('fleteRubrosTotalUsd').textContent = fleteRubros.total_usd
-        ? `(rubros fijos: USD ${fleteRubros.total_usd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /km al TC ${fleteRubros.dolar_bna})`
+        ? `(último guardado: USD ${fleteRubros.total_usd.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /km al TC ${fleteRubros.dolar_bna})`
         : '';
     }
 
@@ -3141,8 +3330,12 @@
       for (const [clave] of RUBROS_FLETE_FIJOS) {
         nuevo[clave] = parseFloat(document.getElementById('fleteRubro_' + clave).value) || 0;
       }
-      nuevo.mano_obra_modo = document.getElementById('fleteManoObraModo').value;
+      // El modo de mano de obra ahora sale de su calculadora: 'pct' es el
+      // único que no es un $/km, todo el resto (escrito a mano o calculado)
+      // entra como 'fijo', que es lo que montoManoObra() espera.
+      nuevo.mano_obra_modo = (fleteRubrosDetalle.mano_obra || {}).modo === 'pct' ? 'pct' : 'fijo';
       nuevo.mano_obra = parseFloat(document.getElementById('fleteRubro_mano_obra').value) || 0;
+      nuevo.detalle = JSON.parse(JSON.stringify(fleteRubrosDetalle));
       // total_ars es solo la suma de los rubros de $/km fijo — si mano de
       // obra está en modo "% de la tarifa", no es un $/km fijo y no se
       // puede sumar acá (se calcula por viaje, ver montoManoObra()).
@@ -3152,9 +3345,19 @@
       nuevo.dolar_bna = dolar;
       nuevo.total_usd = dolar ? +(nuevo.total_ars / dolar).toFixed(4) : null;
 
-      const { error } = await window.supabaseClient.from('flete_costos_rubro_historial').insert(nuevo);
+      let { error } = await window.supabaseClient.from('flete_costos_rubro_historial').insert(nuevo);
+      // Si todavía no se corrió la migración 044 no existe la columna
+      // `detalle`: guardo igual los $/km —que es lo que usa el simulador—
+      // y aviso que las cuentas de cada rubro no van a quedar guardadas.
+      if (error && (error.message || '').includes('detalle')) {
+        const sinDetalle = { ...nuevo };
+        delete sinDetalle.detalle;
+        ({ error } = await window.supabaseClient.from('flete_costos_rubro_historial').insert(sinDetalle));
+        if (!error) alert('Guardé los $/km, pero falta correr la migración 044: los datos de cada calculadora no se van a recordar.');
+      }
       if (error) { alert('No se pudo guardar: ' + error.message); return; }
       fleteRubros = nuevo;
+      sincronizarDetalleRubros();
       renderConfigRubrosFlete();
       renderFlete(); // recalcula las filas que estén en modo 'rubros'
     }

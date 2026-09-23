@@ -1622,6 +1622,12 @@ create table flete_costos_rubro_historial (
   total_ars numeric not null,
   dolar_bna numeric,
   total_usd numeric,
+  -- Cómo se calculó el $/km de cada rubro (migración 044): una entrada por
+  -- rubro con el modo y los datos de la cuenta, ej.
+  -- {"neumaticos": {"modo": "unidad", "cantidad": 12, "precio": 850000, "vida_km": 80000}}.
+  -- El $/km resultante sigue viviendo en la columna del rubro; esto es
+  -- solo para poder reabrir la cuenta y corregir un número.
+  detalle jsonb not null default '{}'::jsonb,
   creado_at timestamptz not null default now()
 );
 
