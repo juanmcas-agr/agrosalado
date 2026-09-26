@@ -7,8 +7,7 @@ import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
 import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
-import { cargarRodeos, rodeosDe, rodeosDeEstablecimiento, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, stockDetalleRodeoCategoriaYTitular, titularesDelRodeo, rodeoDelCorral, cargarComposicionRodeos, hayComposicionCargada, composicionDelRodeo, cabezasDelRodeoEnCategoria } from './rodeos.js';
-import { refrescarDiferenciasPendientes } from './trabajoManga.js';
+import { cargarRodeos, rodeosDeEstablecimiento, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, stockDetalleRodeoCategoriaYTitular, stockDetalladoDelRodeo, rodeoDelCorral, cargarComposicionRodeos, hayComposicionCargada, composicionDelRodeo, cabezasDelRodeoEnCategoria } from './rodeos.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
 // Id del movimiento que se está corrigiendo, o null en carga normal — ver
@@ -251,14 +250,29 @@ async function actualizarTitularesOrigenDisponibles() {
     return;
   }
 
+  // Solo los titulares que tienen stock DE ESA CATEGORÍA en ese rodeo:
+  // que un rodeo tenga vacas de Agro Salado no significa que también
+  // tenga sus novillos. Si todavía no se eligió categoría, alcanza con
+  // que tengan algo adentro. Se incluye la categoría anterior de la
+  // cadena para no tapar el cambio de categoría express (el lote que
+  // engordó y cuyo cambio nadie cargó todavía).
+  const categoriaId = cfg.campos.includes('categoria_origen') ? obtenerSeleccion('mov-categoria-origen') : '';
+  const anteriorId = categoriaId && obtenerSeleccion('mov-tipo') !== 'cambio_categoria'
+    ? categoriaAnterior(categoriaId)
+    : null;
+
   let disponibles;
   try {
-    disponibles = await titularesDelRodeo(rodeoId);
+    const detalle = await stockDetalladoDelRodeo(rodeoId);
+    disponibles = new Set(detalle
+      .filter((f) => !categoriaId || f.categoriaId === categoriaId || f.categoriaId === anteriorId)
+      .map((f) => f.titularId));
   } catch (error) {
     console.warn('No se pudo verificar qué titulares tiene ese rodeo:', error);
     habilitarTodo();
     return;
   }
+  if (!disponibles.size) { habilitarTodo(); return; }
 
   grupo.querySelectorAll('.boton-opcion').forEach((boton) => {
     const valor = boton.dataset.value;
@@ -412,33 +426,28 @@ function nombreCategoria(categoriaId) {
 // nadie cargó): al elegirlos aparece el aviso de cambio de categoría
 // express, que resuelve la diferencia sin salir de la pantalla. Se excluye
 // Cambio de categoría: ahí mezclar la categoría anterior induce a error.
-function rodeosParaElegir(cfg, ids, establecimientoId, categoriaId) {
-  const tipo = obtenerSeleccion('mov-tipo');
-  const esLadoQueSaca = ids === RODEO_ORIGEN_IDS && ladoRodeoPrincipal(cfg) === 'origen';
-  if (!esLadoQueSaca || !hayComposicionCargada()) {
-    return rodeosDe(establecimientoId, categoriaId).map((rodeo) => ({ rodeo, nota: null }));
-  }
-
+function rodeosParaElegir(cfg, ids, establecimientoId) {
   const delEstablecimiento = rodeosDeEstablecimiento(establecimientoId);
-  const conLaCategoria = delEstablecimiento.filter((r) => cabezasDelRodeoEnCategoria(r.id, categoriaId) > 0);
-
-  const anteriorId = tipo !== 'cambio_categoria' ? categoriaAnterior(categoriaId) : null;
-  const soloConLaAnterior = anteriorId
-    ? delEstablecimiento.filter((r) => cabezasDelRodeoEnCategoria(r.id, categoriaId) === 0
-        && cabezasDelRodeoEnCategoria(r.id, anteriorId) > 0)
-    : [];
-
-  return [
-    ...conLaCategoria.map((rodeo) => ({ rodeo, nota: null })),
-    ...soloConLaAnterior.map((rodeo) => ({ rodeo, nota: `falta pasarlos a ${nombreCategoria(categoriaId)}` })),
-  ];
+  const esLadoQueSaca = ids === RODEO_ORIGEN_IDS && ladoRodeoPrincipal(cfg) === 'origen';
+  // El lado que RECIBE animales ofrece todos los rodeos del
+  // establecimiento: un rodeo ya no es "de una categoría" (migración
+  // 045), así que los terneros al pie pueden entrar al rodeo de las
+  // vacas sin tener que crear uno aparte. Sin composición cargada
+  // (offline) el lado que saca hace lo mismo — mejor ofrecer de más que
+  // dejar el selector vacío.
+  if (!esLadoQueSaca || !hayComposicionCargada()) {
+    return delEstablecimiento.map((rodeo) => ({ rodeo, nota: null }));
+  }
+  // Del lado que saca, los que tienen algo adentro: de un rodeo vacío no
+  // se puede sacar nada, y ofrecerlo solo hace perder el viaje.
+  return delEstablecimiento
+    .filter((rodeo) => composicionDelRodeo(rodeo.id).length > 0)
+    .map((rodeo) => ({ rodeo, nota: null }));
 }
 
 function poblarSelectRodeo(ids, excluirId) {
-  const tipo = obtenerSeleccion('mov-tipo');
-  const cfg = TIPOS_MOVIMIENTO[tipo];
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
   if (!cfg) return;
-  const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
   const establecimientoId = establecimientoParaRodeo(cfg, ids);
 
   const select = el(ids.select);
@@ -449,8 +458,10 @@ function poblarSelectRodeo(ids, excluirId) {
   opcionVacia.textContent = 'Elegir...';
   select.appendChild(opcionVacia);
 
-  if (categoriaId && establecimientoId) {
-    for (const { rodeo, nota } of rodeosParaElegir(cfg, ids, establecimientoId, categoriaId)) {
+  // El rodeo ya no depende de la categoría: se elige primero el rodeo y
+  // después qué sale de ahí (ver actualizarCategoriasOrigenDisponibles).
+  if (establecimientoId) {
+    for (const { rodeo, nota } of rodeosParaElegir(cfg, ids, establecimientoId)) {
       if (excluirId && rodeo.id === excluirId) continue;
       const opt = document.createElement('option');
       opt.value = rodeo.id;
@@ -467,6 +478,25 @@ function poblarSelectRodeo(ids, excluirId) {
   }
 
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
+}
+
+// Lo que hay adentro del rodeo (o corral) del que se van a sacar los
+// animales, arriba de la categoría — que es donde hace falta saberlo.
+// Sale de la composición cacheada, la misma que arma los selectores.
+function actualizarStockDelRodeoTexto() {
+  const contenedor = el('mov-rodeo-stock');
+  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  const rodeo = cfg && ladoRodeoPrincipal(cfg) === 'origen' ? rodeoOrigenActual(cfg) : null;
+  if (!rodeo || !hayComposicionCargada()) {
+    contenedor.classList.add('oculto');
+    contenedor.textContent = '';
+    return;
+  }
+  const composicion = composicionDelRodeo(rodeo.id);
+  contenedor.textContent = composicion.length
+    ? `En ${rodeo.codigo} hay: ${composicion.map((c) => `${nombreCategoria(c.categoriaId)} ${c.cabezas}`).join(' · ')}.`
+    : `${rodeo.codigo} no tiene stock.`;
+  contenedor.classList.remove('oculto');
 }
 
 // El rodeo destino nunca puede ser el mismo que el de origen — se re-arma
@@ -492,10 +522,12 @@ function inicializarSelectorRodeo(ids) {
     if (esNuevo) el(ids.fecha).value = new Date().toISOString().slice(0, 10);
     if (ids === RODEO_ORIGEN_IDS) {
       poblarSelectRodeo(RODEO_DESTINO_IDS, el(ids.select).value);
+      // El rodeo de origen define TODO lo que viene abajo: qué hay
+      // adentro, qué categorías se pueden sacar, qué titulares tienen
+      // hacienda ahí y cuánto de eso queda.
+      actualizarStockDelRodeoTexto();
+      actualizarCategoriasOrigenDisponibles();
       actualizarTitularesOrigenDisponibles();
-      // El rodeo de origen define de qué stock se está sacando, así que
-      // cambiarlo rehace tanto el cartel de disponible como el aviso de
-      // cambio de categoría (que antes solo dependía del corral).
       actualizarAvisoCambioCategoriaExpress();
       actualizarStockDisponibleTexto();
     }
@@ -505,16 +537,14 @@ function inicializarSelectorRodeo(ids) {
     const nombre = el(ids.nombre).value.trim();
     if (!nombre) { alert('Ingresá un nombre para el rodeo.'); return; }
     const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
-    const categoriaId = obtenerSeleccion(`mov-categoria-${campoRelevante(cfg, 'categoria')}`);
     const establecimientoId = establecimientoParaRodeo(cfg, ids);
-    if (!categoriaId || !establecimientoId) {
-      alert('Elegí primero categoría y establecimiento para poder crear el rodeo.');
+    if (!establecimientoId) {
+      alert('Elegí primero el establecimiento para poder crear el rodeo.');
       return;
     }
     try {
       const nuevo = await crearRodeo({
         nombre,
-        categoriaId,
         establecimientoId,
         fechaCreacion: el(ids.fecha).value || undefined,
         usuarioId: getEstado().session.user.id,
@@ -599,6 +629,12 @@ function poblarGrupos() {
     { id: '1', nombre: 'Corral 1' }, { id: '2', nombre: 'Corral 2' },
     { id: '3', nombre: 'Corral 3' }, { id: '4', nombre: 'Corral 4' },
   ]);
+  // En Feed Lot el corral ES el rodeo del que se saca, así que elegirlo
+  // tiene que refrescar lo mismo que elegir un rodeo.
+  el('mov-feedlot-corral-origen').addEventListener('cambio', () => {
+    actualizarStockDelRodeoTexto();
+    actualizarCategoriasOrigenDisponibles();
+  });
 }
 
 // ─── Consulta rápida de movimientos por establecimiento ────────────────
@@ -908,11 +944,32 @@ function opcionesCategoriaOrigen(tipo) {
 // actualizarEstablecimientosDestinoDisponibles/actualizarTitularesOrigenDisponibles,
 // para no perder una selección válida solo por tocar el establecimiento.
 function actualizarCategoriasOrigenDisponibles() {
-  const cfg = TIPOS_MOVIMIENTO[obtenerSeleccion('mov-tipo')];
+  const tipo = obtenerSeleccion('mov-tipo');
+  const cfg = TIPOS_MOVIMIENTO[tipo];
   const bloquear = Boolean(cfg) && establecimientosResueltos(cfg).destino === 'feed_lot';
   const grupo = el('mov-categoria-origen');
+
+  // Además: del lado que saca, solo se ofrecen las categorías que ese
+  // rodeo tiene de verdad. Se suma la categoría SIGUIENTE a cada una que
+  // sí tiene (el lote que engordó y cuyo cambio de categoría nadie cargó
+  // todavía): al elegirla aparece el aviso de cambio de categoría
+  // express, que lo resuelve sin salir de la pantalla. En Cambio de
+  // categoría eso no aplica: ahí mezclar induce a error.
+  const rodeo = cfg && ladoRodeoPrincipal(cfg) === 'origen' ? rodeoOrigenActual(cfg) : null;
+  const filtrarPorStock = Boolean(rodeo) && hayComposicionCargada();
+  const conStock = new Set();
+  if (filtrarPorStock) {
+    for (const c of composicionDelRodeo(rodeo.id)) {
+      conStock.add(c.categoriaId);
+      if (tipo !== 'cambio_categoria' && SIGUIENTE_CATEGORIA[c.categoriaId]) {
+        conStock.add(SIGUIENTE_CATEGORIA[c.categoriaId]);
+      }
+    }
+  }
+
   grupo.querySelectorAll('.boton-opcion').forEach((boton) => {
-    const deshabilitar = bloquear && CATEGORIAS_AL_PIE.includes(boton.dataset.value);
+    const sinStock = filtrarPorStock && !conStock.has(boton.dataset.value);
+    const deshabilitar = sinStock || (bloquear && CATEGORIAS_AL_PIE.includes(boton.dataset.value));
     boton.disabled = deshabilitar;
     boton.classList.toggle('deshabilitado', deshabilitar);
     if (deshabilitar && boton.classList.contains('seleccionado')) {
@@ -1575,11 +1632,6 @@ async function onSubmit(evento) {
   // queda mostrando el stock nuevo sin salir de la pantalla; si todavía
   // está en la cola, se pone al día al volver a entrar.
   cargarComposicionRodeos().then(actualizarSelectsRodeo);
-  // Best-effort: si este movimiento resolvió una diferencia pendiente, la
-  // saca de la lista apenas se pueda — si todavía no sincronizó (offline
-  // o de camino), se termina de reflejar solo cuando el trigger de la
-  // base la resuelva y se recargue la pantalla.
-  refrescarDiferenciasPendientes();
 }
 
 // La llama el router cada vez que se entra a Cargar movimiento. Antes
@@ -1601,6 +1653,8 @@ export async function initMovimientos() {
   for (const id of ['mov-categoria-origen', 'mov-categoria-destino', 'mov-establecimiento-origen', 'mov-establecimiento-destino']) {
     el(id).addEventListener('cambio', () => {
       actualizarSelectsRodeo(); actualizarBloquesCorral(); actualizarRequeridoRodeoDestino(); actualizarRequeridoRodeo();
+      actualizarStockDelRodeoTexto();
+      actualizarCategoriasOrigenDisponibles();
       actualizarTitularesOrigenDisponibles();
       actualizarAvisoCambioCategoriaExpress();
       actualizarStockDisponibleTexto();

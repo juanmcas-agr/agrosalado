@@ -22,12 +22,10 @@ export function puedeAnularManga(fila) {
   return !!perfil && ROLES_ANULAR_MANGA.includes(perfil.rol) && !fila.anulado;
 }
 
-// Editar, en cambio, sigue siendo solo de owner: permite cambiar la
-// cantidad trabajada de una, y para los demás roles eso tiene que pasar sí
-// o sí por el circuito de "rectificación pendiente de aprobación" (ver
-// editarCantidadTrabajada en trabajoManga.js). Abrirlo dejaría ese control
-// sin efecto. Un encargado que se equivocó anula y vuelve a cargar: queda
-// el rastro de las dos cosas.
+// Editar sigue siendo solo de owner: reescribe un trabajo ya cargado (y
+// sus cantidades) sin dejar el rastro que sí deja anular y volver a
+// cargar. Un encargado que se equivocó anula y carga de nuevo: quedan las
+// dos cosas registradas.
 export function puedeEditarManga(fila) {
   const { perfil } = getEstado();
   return !!perfil && perfil.rol === 'owner' && !fila.anulado;
@@ -79,12 +77,23 @@ export function nombreCategoriaManga(categoriaId) {
   return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
 }
 
-// true si la cantidad trabajada se corrigió a mano (RECTIFICAR CANTIDAD
-// en la lista de diferencias pendientes) — a diferencia de resolverse
-// con un movimiento real, que deja resuelto_por_movimiento_id apuntando
-// a ese movimiento.
+// Trabajos viejos, de cuando existían las diferencias pendientes: la
+// cantidad se había corregido a mano en vez de resolverse con un
+// movimiento real. Se sigue mostrando para no perder ese dato del
+// historial; en los trabajos nuevos siempre da false (migración 045).
 export function esRectificado(t) {
   return !!t.resuelto_at && !t.resuelto_por_movimiento_id;
+}
+
+// "40 Vaca, 38 Ternero al pie" — o, si se encerraron más de las que se
+// trabajaron, "40 de 45 Vaca".
+export function textoCategoriasManga(categorias) {
+  if (!categorias || !categorias.length) return '';
+  return categorias
+    .map((c) => (c.trabajadas === c.encerradas
+      ? `${c.trabajadas} ${nombreCategoriaManga(c.categoria_id)}`
+      : `${c.trabajadas} de ${c.encerradas} ${nombreCategoriaManga(c.categoria_id)}`))
+    .join(', ');
 }
 
 function agruparPor(campo, filas) {
@@ -155,8 +164,9 @@ export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuario
   if (!data.length) return [];
 
   const ids = data.map((t) => t.id);
-  const [propietarios, sanidad, vacunas, otras, reproduccion, toros, manejo] = await Promise.all([
+  const [propietarios, categorias, sanidad, vacunas, otras, reproduccion, toros, manejo] = await Promise.all([
     supabase.from('trabajo_manga_propietarios').select('trabajo_manga_id, titular_id').in('trabajo_manga_id', ids),
+    supabase.from('trabajo_manga_categorias').select('*').in('trabajo_manga_id', ids),
     supabase.from('trabajo_manga_sanidad').select('*').in('trabajo_manga_id', ids),
     supabase.from('trabajo_manga_vacunas').select('trabajo_manga_id, vacuna_id').in('trabajo_manga_id', ids),
     supabase.from('trabajo_manga_otras_sanidades').select('trabajo_manga_id, sanidad_id').in('trabajo_manga_id', ids),
@@ -166,6 +176,7 @@ export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuario
   ]);
 
   const porPropietario = agruparPor('trabajo_manga_id', propietarios.data);
+  const porCategorias = agruparPor('trabajo_manga_id', categorias.data);
   const porSanidad = agruparPor('trabajo_manga_id', sanidad.data);
   const porVacunas = agruparPor('trabajo_manga_id', vacunas.data);
   const porOtras = agruparPor('trabajo_manga_id', otras.data);
@@ -173,8 +184,20 @@ export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuario
   const porToros = agruparPor('trabajo_manga_id', toros.data);
   const porManejo = agruparPor('trabajo_manga_id', manejo.data);
 
-  return data.map((t) => ({
+  return data.map((t) => {
+    // Trabajos viejos (anteriores a la migración 045): una sola categoría
+    // en la fila madre y sin filas hijas. Se los normaliza a la forma
+    // nueva para que el resto de la app tenga un solo caso que manejar.
+    const suyas = porCategorias[t.id] || [];
+    const categoriasNormalizadas = suyas.length
+      ? suyas
+      : (t.categoria_id
+        ? [{ categoria_id: t.categoria_id, encerradas: t.cantidad_trabajada, trabajadas: t.cantidad_trabajada }]
+        : []);
+    return {
     ...t,
+    categorias: categoriasNormalizadas,
+    categoriasTexto: textoCategoriasManga(categoriasNormalizadas) || '—',
     categoriaNombre: nombreCategoriaManga(t.categoria_id),
     // Datos crudos de las tablas hijas, además del texto armado: los usan
     // el filtro por propietario y la precarga del formulario al editar
@@ -195,5 +218,6 @@ export async function obtenerTrabajosConDetalle({ desde, hasta, rodeoId, usuario
       describirReproduccion(porReproduccion[t.id]?.[0], porToros[t.id] || []),
       describirManejo(porManejo[t.id]?.[0]),
     ].filter(Boolean).join(' | ') || '—',
-  }));
+    };
+  });
 }

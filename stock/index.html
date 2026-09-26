@@ -68,11 +68,6 @@
         <button type="button" id="mov-editando-cancelar" class="boton-secundario" style="width:auto;flex-shrink:0;">Cancelar edición</button>
       </div>
 
-      <div id="mov-pendientes-bloque" class="campo-grupo full oculto">
-        <div class="etiqueta-grupo">⚠️ Diferencias pendientes de resolver</div>
-        <div id="mov-pendientes-lista"></div>
-      </div>
-
       <form id="mov-form" class="formulario">
         <div class="campo-grupo full">
           <div class="etiqueta-grupo">Tipo de movimiento</div>
@@ -98,22 +93,12 @@
           <div id="mov-establecimiento-destino"></div>
         </div>
 
-        <div data-campo="categoria_origen" class="campo-grupo full">
-          <div class="etiqueta-grupo">Categoría de origen</div>
-          <div id="mov-categoria-origen"></div>
-        </div>
-
-        <div data-campo="categoria_destino" class="campo-grupo full">
-          <div class="etiqueta-grupo">Categoría de destino</div>
-          <div id="mov-categoria-destino"></div>
-        </div>
-
         <div data-campo="rodeo" class="campo-grupo full">
           <div class="etiqueta-grupo">Rodeo</div>
           <select id="mov-rodeo" required></select>
           <div id="mov-rodeo-nuevo-wrap" class="oculto" style="margin-top:8px;">
             <label>Nombre del rodeo nuevo
-              <input id="mov-rodeo-nuevo-nombre" type="text" placeholder="Ej: Vaquillona San Miguel">
+              <input id="mov-rodeo-nuevo-nombre" type="text" placeholder="Ej: Rodeo de vacas">
             </label>
             <label>Fecha de creación
               <input id="mov-rodeo-nuevo-fecha" type="date">
@@ -127,12 +112,26 @@
           <div id="mov-feedlot-corral-origen"></div>
         </div>
 
+        <!-- Lo que hay adentro del rodeo/corral elegido. Va antes de la
+             categoría a propósito: es lo que dice qué se puede sacar. -->
+        <div id="mov-rodeo-stock" class="ayuda oculto"></div>
+
+        <div data-campo="categoria_origen" class="campo-grupo full">
+          <div class="etiqueta-grupo">Categoría de origen</div>
+          <div id="mov-categoria-origen"></div>
+        </div>
+
+        <div data-campo="categoria_destino" class="campo-grupo full">
+          <div class="etiqueta-grupo">Categoría de destino</div>
+          <div id="mov-categoria-destino"></div>
+        </div>
+
         <div data-campo="rodeo_destino" class="campo-grupo full">
           <div class="etiqueta-grupo">Rodeo destino</div>
           <select id="mov-rodeo-destino" required></select>
           <div id="mov-rodeo-destino-nuevo-wrap" class="oculto" style="margin-top:8px;">
             <label>Nombre del rodeo nuevo
-              <input id="mov-rodeo-destino-nuevo-nombre" type="text" placeholder="Ej: Vaquillona San Miguel">
+              <input id="mov-rodeo-destino-nuevo-nombre" type="text" placeholder="Ej: Rodeo de vacas">
             </label>
             <label>Fecha de creación
               <input id="mov-rodeo-destino-nuevo-fecha" type="date">
@@ -242,16 +241,6 @@
     <section id="pantalla-manga" data-screen="manga" class="oculto">
       <h2>🐮 Trabajo de Manga</h2>
 
-      <div id="manga-pendientes-bloque" class="campo-grupo full oculto">
-        <div class="etiqueta-grupo">⚠️ Diferencias pendientes de resolver</div>
-        <div id="manga-pendientes-lista"></div>
-      </div>
-
-      <div id="manga-rectificaciones-bloque" class="campo-grupo full oculto">
-        <div class="etiqueta-grupo">📝 Rectificaciones pendientes de aprobar</div>
-        <div id="manga-rectificaciones-lista"></div>
-      </div>
-
       <div id="manga-editando-aviso" class="mensaje advertencia oculto" style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
         <span id="manga-editando-texto"></span>
         <button type="button" id="manga-editando-cancelar" class="boton-secundario" style="width:auto;flex-shrink:0;">Cancelar edición</button>
@@ -274,19 +263,30 @@
           </select>
         </div>
 
-        <div class="campo-grupo full">
-          <div class="etiqueta-grupo">Categoría</div>
-          <div id="manga-categoria"></div>
+        <!-- Lo que hay adentro del rodeo elegido, abierto por categoría y
+             titular. Es la referencia de todo lo que sigue: quiénes se
+             pueden elegir como propietarios y qué categorías se pueden
+             cargar salen de acá. -->
+        <div id="manga-stock-bloque" class="campo-grupo full oculto">
+          <div class="etiqueta-grupo">📋 Lo que hay en este rodeo</div>
+          <div id="manga-stock-detalle"></div>
         </div>
 
         <div class="campo-grupo full">
           <div class="etiqueta-grupo">Propietario(s)</div>
           <div id="manga-propietarios"></div>
+          <div id="manga-propietarios-ayuda" class="ayuda oculto"></div>
         </div>
 
-        <label>Cantidad trabajada
-          <input id="manga-cantidad" type="number" min="1" step="1" required>
-        </label>
+        <!-- Una fila por categoría con stock: cuántas se encerraron y, de
+             esas, cuántas se trabajaron. La diferencia entre las dos es un
+             dato del trabajo, no una alerta que alguien tenga que ir a
+             resolver después (ver migración 045). -->
+        <div class="campo-grupo full">
+          <div class="etiqueta-grupo">Encerradas y trabajadas</div>
+          <div id="manga-categorias"></div>
+          <div id="manga-categorias-vacio" class="ayuda">Elegí primero el rodeo.</div>
+        </div>
 
         <button type="button" id="manga-check-sanidad" class="full boton-opcion boton-seccion">SANIDAD</button>
 
@@ -574,7 +574,7 @@
         <table id="hist-manga-tabla" class="tabla">
           <thead>
             <tr>
-              <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categoría</th><th>Cantidad</th>
+              <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categorías</th><th>Encerradas</th><th>Trabajadas</th>
               <th>Propietario(s)</th><th>Detalle</th><th>Cargado por</th><th>Estado</th><th></th>
             </tr>
           </thead>
@@ -612,7 +612,7 @@
             <table id="rep-manga-tabla" class="tabla">
               <thead>
                 <tr>
-                  <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categoría</th><th>Cantidad</th>
+                  <th>Código</th><th>Fecha</th><th>Rodeo</th><th>Categorías</th><th>Encerradas</th><th>Trabajadas</th>
                   <th>Propietario(s)</th><th>Detalle</th><th>Cargado por</th>
                   <th>Estado</th><th class="no-imprimir"></th>
                 </tr>

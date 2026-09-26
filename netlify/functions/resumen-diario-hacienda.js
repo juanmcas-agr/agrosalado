@@ -1,6 +1,5 @@
-// Resumen diario de novedades de Hacienda (movimientos cargados/anulados
-// y trabajos de manga cargados en el día, más alertas de diferencias
-// pendientes/resueltas): corre solo, una vez por día a las 23:30 hora
+// Resumen diario de novedades de Hacienda (movimientos y trabajos de
+// manga cargados o anulados en el día): corre solo, una vez por día a las 23:30 hora
 // Argentina, vía Netlify Scheduled Functions (ver el cron en netlify.toml).
 // No se dispara por cada carga/anulación individual — junta todo el día
 // en un solo mail para no saturar de avisos.
@@ -85,11 +84,17 @@ function describirMovimiento(m) {
 }
 
 function describirTrabajo(t) {
+  // categoria_nombre solo viene en los trabajos viejos (hasta la
+  // migración 045 un trabajo era de una sola categoría); en los nuevos el
+  // detalle por categoría vive en trabajo_manga_categorias y acá alcanza
+  // con los totales.
+  const cantidades = t.cantidad_encerrada != null && t.cantidad_encerrada !== t.cantidad_trabajada
+    ? `${t.cantidad_trabajada} de ${t.cantidad_encerrada} cab. trabajadas`
+    : `${t.cantidad_trabajada} cab. trabajadas`;
   return [
-    `${t.codigo} — ${t.categoria_nombre || t.categoria_id}`,
+    t.categoria_nombre ? `${t.codigo} — ${t.categoria_nombre}` : t.codigo,
     `rodeo: ${t.rodeo || t.rodeo_id}`,
-    `${t.cantidad_trabajada} cab. trabajadas`,
-    t.diferencia_pendiente ? '⚠️ diferencia pendiente' : null,
+    cantidades,
   ].filter(Boolean).join(' — ');
 }
 
@@ -104,18 +109,19 @@ exports.handler = async function () {
   const d = encodeURIComponent(desde);
   const h = encodeURIComponent(hasta);
 
-  const [cargados, anulados, trabajosCargados, trabajosAnulados, diferenciasPendientes, diferenciasResueltasHoy, rectificacionesPendientes] = await Promise.all([
+  // Las alertas de diferencia pendiente y las rectificaciones se fueron
+  // con la migración 045: la diferencia entre lo encerrado y lo trabajado
+  // ahora es un dato del propio trabajo, no algo que quede pendiente de
+  // resolver. Este mail dejó de consultarlas — si no, seguiría avisando
+  // para siempre de los pendientes viejos, que ya nadie resuelve.
+  const [cargados, anulados, trabajosCargados, trabajosAnulados] = await Promise.all([
     consultarSupabase(`historial_movimientos?created_at=gte.${d}&created_at=lte.${h}&order=created_at.asc`),
     consultarSupabase(`historial_movimientos?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
     consultarSupabase(`historial_trabajos_manga?creado_at=gte.${d}&creado_at=lte.${h}&order=creado_at.asc`),
     consultarSupabase(`historial_trabajos_manga?anulado=eq.true&anulado_at=gte.${d}&anulado_at=lte.${h}&order=anulado_at.asc`),
-    consultarSupabase(`historial_trabajos_manga?diferencia_pendiente=eq.true&anulado=eq.false&order=fecha.asc`),
-    consultarSupabase(`historial_trabajos_manga?resuelto_at=gte.${d}&resuelto_at=lte.${h}&order=resuelto_at.asc`),
-    consultarSupabase(`rectificaciones_pendientes_detalle?estado=eq.pendiente&order=propuesto_at.asc`),
   ]);
 
-  const hayNovedadesHoy = cargados.length || anulados.length || trabajosCargados.length || trabajosAnulados.length || diferenciasResueltasHoy.length;
-  if (!hayNovedadesHoy && !diferenciasPendientes.length && !rectificacionesPendientes.length) {
+  if (!cargados.length && !anulados.length && !trabajosCargados.length && !trabajosAnulados.length) {
     return { statusCode: 200, body: 'Sin novedades hoy, no se manda mail.' };
   }
 
@@ -161,28 +167,6 @@ exports.handler = async function () {
     for (const t of trabajosAnulados) {
       const anuladoPor = nombresPorId[t.anulado_por] || '-';
       partes.push(`<li>${describirTrabajo(t)} — anulado por ${anuladoPor} (motivo: ${t.anulado_motivo || 'sin motivo'})</li>`);
-    }
-    partes.push('</ul>');
-  }
-
-  if (diferenciasPendientes.length || diferenciasResueltasHoy.length) {
-    partes.push('<p><strong>⚠️ ALERTAS de stock:</strong></p><ul>');
-    for (const t of diferenciasPendientes) {
-      partes.push(`<li>${t.codigo} (rodeo ${t.rodeo || t.rodeo_id}, ${t.fecha}): sigue <strong>pendiente de resolver</strong> — se trabajaron ${t.cantidad_trabajada} y no coincidía con el stock.</li>`);
-    }
-    for (const t of diferenciasResueltasHoy) {
-      const como = t.resuelto_por_movimiento_codigo
-        ? `se resolvió con el movimiento ${t.resuelto_por_movimiento_codigo}`
-        : `se rectificó la cantidad trabajada a mano (ahora: ${t.cantidad_trabajada})`;
-      partes.push(`<li>${t.codigo} (rodeo ${t.rodeo || t.rodeo_id}): <strong>resuelto hoy</strong> — ${como}.</li>`);
-    }
-    partes.push('</ul>');
-  }
-
-  if (rectificacionesPendientes.length) {
-    partes.push('<p><strong>📝 Rectificaciones pendientes de aprobar (owner):</strong></p><ul>');
-    for (const r of rectificacionesPendientes) {
-      partes.push(`<li>${r.codigo} (rodeo ${r.rodeo || r.rodeo_id}): ${r.propuesto_nombre || '-'} propone cambiar ${r.cantidad_anterior} → ${r.cantidad_propuesta}.</li>`);
     }
     partes.push('</ul>');
   }

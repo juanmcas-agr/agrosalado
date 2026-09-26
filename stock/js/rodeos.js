@@ -1,6 +1,12 @@
 // Rodeos: grupos de animales que se trackean como unidad (nacen, engordan,
 // se mueven de establecimiento, van a feed lot, se venden). Mismo patrón
 // que titulares.js (cache local + alta on-the-fly desde el formulario).
+//
+// Un rodeo es un GRUPO EN UN ESTABLECIMIENTO, nada más: no tiene
+// categoría (migración 045). Adentro puede haber vacas y terneros al pie
+// a la vez, y de hecho es lo normal — la categoría se lee siempre del
+// stock (vista stock_actual, agrupada por establecimiento + categoría +
+// titular + rodeo), nunca de una etiqueta del rodeo.
 import { supabase } from './supabaseClient.js';
 
 let cache = [];
@@ -66,27 +72,11 @@ export function cabezasDelRodeoEnCategoria(rodeoId, categoriaId) {
   return composicionDelRodeo(rodeoId).find((c) => c.categoriaId === categoriaId)?.cabezas || 0;
 }
 
-// Nota: los rodeos de Feed Lot (los 4 corrales fijos) nunca aparecen acá
-// con una categoria_id útil para filtrar — ver rodeoDelCorral() más abajo,
-// que es como se resuelve un rodeo en Feed Lot (por corral, no por
-// categoría/establecimiento como el resto).
-export function rodeosDe(establecimientoId, categoriaId) {
-  return cache.filter((r) => r.establecimiento_id === establecimientoId && r.categoria_id === categoriaId);
-}
-
-// Para el rodeo destino de Destete (Trabajo de Manga > Manejo de rodeo):
-// no se elige establecimiento por separado ahí, así que alcanza con
-// filtrar por categoría.
-export function rodeosDeCategoria(categoriaId) {
-  return cache.filter((r) => r.categoria_id === categoriaId);
-}
-
-// Para el selector principal de Trabajo de Manga: el rodeo se elige
-// primero (solo filtrado por establecimiento) y la categoría se deriva
-// del rodeo elegido, no al revés — un rodeo ya tiene una única categoría
-// fija en un momento dado. Excepción: los 4 corrales fijos de Feed Lot no
-// tienen una categoría fija (pueden tener varias a la vez), ver
-// trabajoManga.js.
+// La única forma de filtrar rodeos es por dónde están. Antes había además
+// rodeosDe(establecimiento, categoría) y rodeosDeCategoria(categoría),
+// que filtraban por la etiqueta del rodeo — se fueron con la migración
+// 045, junto con la etiqueta. Para saber si un rodeo tiene lo que buscás,
+// se mira el stock (ver la composición más arriba).
 export function rodeosDeEstablecimiento(establecimientoId) {
   return cache.filter((r) => r.establecimiento_id === establecimientoId);
 }
@@ -99,53 +89,49 @@ export function rodeoDelCorral(corral) {
   return cache.find((r) => r.establecimiento_id === 'feed_lot' && r.corral === corral);
 }
 
-// El código (ej. "Vaquillona San Miguel 202601") se arma acá, no en la
-// base: año + secuencia salen de siguiente_secuencia_rodeo(), que es
-// atómica (RPC con función security definer) para que dos altas
-// simultáneas no puedan pisarse el mismo número. La secuencia es por
-// (año, nombre) — no un contador global compartido por todos los
-// rodeos del año — así "San Miguel" cuenta 01, 02, 03... indepen-
-// dientemente de "San Juan" 01, 02, 03...
-export async function crearRodeo({ nombre, categoriaId, establecimientoId, fechaCreacion, usuarioId }) {
-  const fecha = fechaCreacion || new Date().toISOString().slice(0, 10);
-  const anio = Number(fecha.slice(0, 4));
-  const { data: secuencia, error: errorSecuencia } = await supabase.rpc('siguiente_secuencia_rodeo', { p_anio: anio, p_nombre: nombre });
-  if (errorSecuencia) throw errorSecuencia;
-  const codigo = `${nombre} ${anio}${String(secuencia).padStart(2, '0')}`;
+// El rodeo se llama como lo escribiste y listo. Hasta la migración 045 el
+// código se armaba solo, pegándole el año y un correlativo atrás
+// ("Vaquillona San Miguel 202601"): esa numeración existía porque hacía
+// falta un rodeo por categoría y había que distinguirlos entre sí. Ya no:
+// un rodeo es un grupo, se le pone el nombre con el que se lo llama en el
+// campo. Los rodeos viejos conservan el código que tienen hasta que se
+// los renombre desde Configuración.
+//
+// El nombre tiene que ser único (lo pide la base): dos rodeos con el
+// mismo nombre serían imposibles de distinguir en los selectores.
+function errorDeNombreRepetido(error, nombre) {
+  return error?.code === '23505'
+    ? new Error(`Ya existe un rodeo llamado "${nombre}". Poné otro nombre.`)
+    : error;
+}
 
+export async function crearRodeo({ nombre, establecimientoId, fechaCreacion, usuarioId }) {
+  const codigo = nombre.trim();
   const { data, error } = await supabase
     .from('rodeos')
     .insert({
-      nombre,
-      anio,
-      secuencia,
+      nombre: codigo,
       codigo,
-      categoria_id: categoriaId,
       establecimiento_id: establecimientoId,
-      fecha_creacion: fecha,
+      fecha_creacion: fechaCreacion || new Date().toISOString().slice(0, 10),
       creado_por: usuarioId,
     })
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw errorDeNombreRepetido(error, codigo);
   cache = [...cache, data];
   return data;
 }
 
-// Renombrar un rodeo: el código se re-arma con el nombre nuevo pero el
-// mismo año/secuencia (esos no cambian nunca, son la identidad real del
-// rodeo — el nombre es solo la parte "humana" del código).
 export async function renombrarRodeo(id, nuevoNombre) {
-  const rodeo = cache.find((r) => r.id === id);
-  if (!rodeo) throw new Error('Rodeo no encontrado — recargá la página e intentá de nuevo.');
-  const nuevoCodigo = `${nuevoNombre} ${rodeo.anio}${String(rodeo.secuencia).padStart(2, '0')}`;
+  const codigo = nuevoNombre.trim();
   const { data, error } = await supabase
     .from('rodeos')
-    .update({ nombre: nuevoNombre, codigo: nuevoCodigo })
+    .update({ nombre: codigo, codigo })
     .eq('id', id)
     .select()
     .single();
-  if (error) throw error;
+  if (error) throw errorDeNombreRepetido(error, codigo);
   cache = cache.map((r) => (r.id === id ? data : r));
   return data;
 }
@@ -221,15 +207,20 @@ export async function stockDetalleRodeoCategoriaYTitular(rodeoId, categoriaId, t
   return { cabezas, kilosPromedioPonderado };
 }
 
-// Titulares con cabezas reales en un rodeo (para no dejar elegir, al
-// cargar un movimiento de salida/interna, una titularidad que ese rodeo
-// ni siquiera tiene).
-export async function titularesDelRodeo(rodeoId) {
-  const { data, error } = await supabase.from('stock_actual').select('titular, cabezas').eq('rodeo_id', rodeoId);
+// Todo lo que hay adentro de un rodeo, en vivo y abierto por categoría y
+// titular. Es lo que arma el cuadro de stock de Trabajo de Manga y lo que
+// decide qué titulares y qué categorías se pueden elegir ahí: no se pide
+// a la caché de composición (que es una foto para dibujar selectores) sino
+// a la base, porque de acá salen las cantidades que se van a cargar.
+export async function stockDetalladoDelRodeo(rodeoId) {
+  const { data, error } = await supabase
+    .from('stock_actual')
+    .select('categoria, titular, cabezas')
+    .eq('rodeo_id', rodeoId);
   if (error) throw error;
-  const conStock = new Set();
-  for (const r of data) if (Number(r.cabezas) > 0) conStock.add(r.titular);
-  return conStock;
+  return data
+    .map((f) => ({ categoriaId: f.categoria, titularId: f.titular, cabezas: Number(f.cabezas) || 0 }))
+    .filter((f) => f.cabezas > 0);
 }
 
 // Nota: ya no hace falta "registrar entrada/salida de feed lot" — el

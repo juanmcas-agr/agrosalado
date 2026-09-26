@@ -14,8 +14,9 @@
 //     establecimiento+categoría+titular+rodeo, ignorando anulados y
 //     reemplazados). Por eso no se siembra stock a mano: se usa
 //     sembrarStock(), que carga una apertura como lo haría la app.
-//   · trg_actualizar_rodeo_tras_movimiento (categoría/establecimiento del
-//     rodeo tras un cambio_categoria/traslado).
+//   · trg_actualizar_rodeo_tras_movimiento (el establecimiento del rodeo
+//     tras un traslado; desde la migración 045 el rodeo ya no tiene
+//     categoría, así que el trigger no toca nada más).
 //   · trg_validar_stock_no_negativo (migración 042): rechaza la salida que
 //     dejaría el bolsillo abajo de cero.
 //
@@ -40,6 +41,8 @@ export function tablasVacias() {
     compradores_hacienda: [],
     movimientos: [],
     trabajos_manga: [],
+    trabajo_manga_propietarios: [],
+    trabajo_manga_categorias: [],
     feed_lot_ciclos: [],
     rodeo_secuencias: [],
     rodeo_pesadas_historial: [],
@@ -130,6 +133,7 @@ function historialTrabajosMangaDe(TABLAS) {
     .map((t) => ({
       ...t,
       rodeo: TABLAS.rodeos.find((r) => r.id === t.rodeo_id)?.codigo || null,
+      establecimiento_id: TABLAS.rodeos.find((r) => r.id === t.rodeo_id)?.establecimiento_id || null,
       categoria_nombre: CATEGORIAS.find((c) => c.id === t.categoria_id)?.nombre || t.categoria_id,
       usuario_nombre: nombreDe(t.usuario_id),
       editado_por_nombre: nombreDe(t.editado_por),
@@ -162,8 +166,6 @@ function actualizarRodeoTrasMovimiento(TABLAS, mov) {
   if (!rodeo || mov.rodeo_destino_id) return;
   if (mov.tipo_movimiento === 'traslado') {
     rodeo.establecimiento_id = mov.establecimiento_destino;
-  } else if (mov.tipo_movimiento === 'cambio_categoria' && mov.establecimiento_origen !== 'feed_lot') {
-    rodeo.categoria_id = mov.categoria_destino;
   }
 }
 

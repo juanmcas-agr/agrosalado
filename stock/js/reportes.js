@@ -105,8 +105,9 @@ function renderTrabajosManga(trabajos) {
       <td>${t.codigo}</td>
       <td>${t.fecha}</td>
       <td>${t.rodeo || ''}</td>
-      <td>${t.categoriaNombre}</td>
-      <td>${t.cantidad_trabajada}${t.diferencia_pendiente ? ' ⚠️' : ''}${esRectificado(t) ? ' ✏️' : ''}</td>
+      <td>${t.categoriasTexto}</td>
+      <td>${t.cantidad_encerrada ?? t.cantidad_trabajada}</td>
+      <td>${t.cantidad_trabajada}${esRectificado(t) ? ' ✏️' : ''}</td>
       <td>${t.propietariosTexto}</td>
       <td>${t.detalleTexto}</td>
       <td>${t.usuario_nombre || ''}</td>
@@ -165,7 +166,9 @@ export async function cargarTrabajosManga() {
       const deEse = new Set(obtenerRodeosCache().filter((r) => r.establecimiento_id === establecimientoId).map((r) => r.id));
       trabajos = trabajos.filter((t) => deEse.has(t.rodeo_id));
     }
-    if (categoriaId) trabajos = trabajos.filter((t) => t.categoria_id === categoriaId);
+    // La categoría ya no es una columna del trabajo: un trabajo puede
+    // tener varias (ver migración 045), normalizadas en t.categorias.
+    if (categoriaId) trabajos = trabajos.filter((t) => (t.categorias || []).some((c) => c.categoria_id === categoriaId));
     if (propietarioId) trabajos = trabajos.filter((t) => (t.propietariosIds || []).includes(propietarioId));
     ultimosTrabajos = trabajos;
     renderTrabajosManga(trabajos);

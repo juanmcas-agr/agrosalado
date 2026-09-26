@@ -272,8 +272,9 @@ function renderFilasManga(trabajos) {
       <td>${t.codigo}</td>
       <td>${t.fecha}</td>
       <td>${t.rodeo || ''}</td>
-      <td>${t.categoriaNombre}</td>
-      <td>${t.cantidad_trabajada}${t.diferencia_pendiente ? ' ⚠️' : ''}${esRectificado(t) ? ' ✏️' : ''}</td>
+      <td>${t.categoriasTexto}</td>
+      <td>${t.cantidad_encerrada ?? t.cantidad_trabajada}</td>
+      <td>${t.cantidad_trabajada}${esRectificado(t) ? ' ✏️' : ''}</td>
       <td>${t.propietariosTexto}</td>
       <td>${t.detalleTexto}</td>
       <td>${t.usuario_nombre || ''}</td>

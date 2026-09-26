@@ -696,3 +696,22 @@ button:active { filter: brightness(0.9); }
      imprimible, pero en el papel no sirven para nada. */
   .no-imprimir, .no-imprimir * { display: none !important; }
 }
+
+/* ── Trabajo de Manga: lo que hay en el rodeo, y encerradas/trabajadas ── */
+.manga-stock-fila {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px;
+  padding: 4px 0; border-bottom: 1px solid #eee; font-size: 0.9em;
+}
+.manga-stock-fila:last-child { border-bottom: none; }
+.manga-stock-titulares { font-size: 0.85em; color: #666; }
+.manga-categoria-fila {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px;
+  padding: 6px 0; border-bottom: 1px solid #eee;
+}
+.manga-categoria-fila:last-child { border-bottom: none; }
+.manga-categoria-nombre { flex: 1 1 100%; font-size: 0.9em; font-weight: bold; }
+.manga-categoria-fila label {
+  flex: 1 1 100px; display: flex; flex-direction: column;
+  font-size: 0.75em; color: #666; margin: 0;
+}
+.manga-categoria-fila input { font-size: 16px; }

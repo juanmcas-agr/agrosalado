@@ -1,15 +1,22 @@
 // Trabajo de Manga: bitácora de sanidad/reproducción/manejo sobre un
 // rodeo — NO es un movimiento de stock (salvo Destete, que además dispara
-// movimientos reales de cambio_categoria — ver M11). Esta base (M8) cubre
-// solo fecha/propietario(s)/rodeo/categoría/cantidad trabajada, con
-// alerta si la cantidad no coincide con el stock real del rodeo (no
-// bloquea: se resuelve sola cuando el stock vuelve a coincidir tras un
-// movimiento real, vía trigger resolver_diferencia_manga en la base).
+// movimientos reales de cambio_categoria — ver M11).
+//
+// Se carga de arriba hacia abajo: establecimiento → rodeo → lo que hay
+// adentro de ese rodeo → quiénes de esos titulares entraron a la manga →
+// cuántas se encerraron y, de esas, cuántas se trabajaron, por categoría.
+//
+// Hasta la migración 045 esto era distinto: un trabajo era de UNA
+// categoría y anotaba UNA cantidad trabajada, que se comparaba contra el
+// stock del rodeo; si no coincidía quedaba una "diferencia pendiente"
+// que alguien tenía que ir a resolver después (y si el ingreso se
+// cargaba después del trabajo, saltaban todas juntas). Ahora la
+// diferencia no es una alerta: es un dato del propio trabajo.
 import { supabase } from './supabaseClient.js';
 import { CATEGORIAS, ESTABLECIMIENTOS } from './config.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache } from './titulares.js';
-import { cargarRodeos, rodeosDeEstablecimiento, rodeosDeCategoria, obtenerRodeosCache, crearRodeo, stockDelRodeo, stockDelRodeoPorCategoria } from './rodeos.js';
+import { cargarRodeos, rodeosDeEstablecimiento, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoria, stockDetalladoDelRodeo, composicionDelRodeo, hayComposicionCargada, cargarComposicionRodeos } from './rodeos.js';
 import { crearGrupoBotones, crearGrupoBotonesMultiple, obtenerSeleccion, obtenerSeleccionMultiple, establecerSeleccion, establecerSeleccionMultiple, limpiarSeleccion, inicializarBotonToggle, estaActivo, desactivarBoton } from './botones.js';
 
 function el(id) {
@@ -146,37 +153,187 @@ function poblarSelectRodeoManga() {
     for (const r of rodeosDeEstablecimiento(establecimientoId)) {
       const opt = document.createElement('option');
       opt.value = r.id;
-      opt.textContent = r.codigo;
+      // Igual que en Cargar movimiento: el nombre del rodeo no dice qué
+      // tiene adentro, así que lo dice la opción.
+      const composicion = hayComposicionCargada() ? composicionDelRodeo(r.id) : [];
+      opt.textContent = hayComposicionCargada()
+        ? `${r.codigo} — ${composicion.length ? composicion.map((c) => `${nombreCategoria(c.categoriaId)} ${c.cabezas}`).join(' · ') : 'sin stock'}`
+        : r.codigo;
       select.appendChild(opt);
     }
   }
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
-  actualizarCategoriaSegunRodeo();
 }
 
-// La categoría se deriva del rodeo elegido y se nublan (deshabilitan) las
-// demás opciones, para que no se pueda cargar con una categoría que no
-// corresponde a ese rodeo. Excepción: los 4 corrales fijos de Feed Lot
-// (rodeo.categoria_id null, ver rodeoDelCorral en rodeos.js) pueden tener
-// varias categorías a la vez — ahí no hay nada que derivar, se deja igual
-// que sin rodeo elegido (todo habilitado, a elegir a mano).
-function actualizarCategoriaSegunRodeo() {
-  const rodeo = obtenerRodeosCache().find((r) => r.id === el('manga-rodeo').value);
-  const grupo = el('manga-categoria');
-  if (rodeo && rodeo.categoria_id) {
-    establecerSeleccion('manga-categoria', rodeo.categoria_id);
-    grupo.querySelectorAll('.boton-opcion').forEach((b) => {
-      const activo = b.dataset.value === rodeo.categoria_id;
-      b.disabled = !activo;
-      b.classList.toggle('deshabilitado', !activo);
-    });
-  } else {
-    limpiarSeleccion('manga-categoria');
-    grupo.querySelectorAll('.boton-opcion').forEach((b) => {
-      b.disabled = false;
-      b.classList.remove('deshabilitado');
-    });
+// ─── Lo que hay adentro del rodeo elegido ───────────────────────────────
+// De acá sale todo lo que viene después en el formulario: qué titulares
+// se pueden elegir y qué categorías se pueden cargar. Se pide en vivo
+// (no a la caché de composición, que es una foto para dibujar los
+// selectores) porque de estos números salen las cantidades que se cargan.
+let stockDelRodeoElegido = [];  // [{ categoriaId, titularId, cabezas }]
+
+function nombreTitular(titularId) {
+  return obtenerTitularesCache().find((t) => t.id === titularId)?.nombre || titularId;
+}
+
+function sumarPorCategoria(filas) {
+  const porCategoria = new Map();
+  for (const f of filas) porCategoria.set(f.categoriaId, (porCategoria.get(f.categoriaId) || 0) + f.cabezas);
+  return [...porCategoria].map(([categoriaId, cabezas]) => ({ categoriaId, cabezas }))
+    .sort((a, b) => b.cabezas - a.cabezas);
+}
+
+async function alCambiarRodeoManga() {
+  const rodeoId = el('manga-rodeo').value;
+  stockDelRodeoElegido = [];
+  if (rodeoId) {
+    try {
+      stockDelRodeoElegido = await stockDetalladoDelRodeo(rodeoId);
+    } catch (error) {
+      console.warn('No se pudo traer el stock del rodeo:', error);
+    }
   }
+  renderStockDelRodeo();
+  actualizarPropietariosDisponibles();
+  renderCategoriasDelRodeo();
+}
+
+function renderStockDelRodeo() {
+  const bloque = el('manga-stock-bloque');
+  const detalle = el('manga-stock-detalle');
+  detalle.innerHTML = '';
+  if (!el('manga-rodeo').value) { bloque.classList.add('oculto'); return; }
+  bloque.classList.remove('oculto');
+
+  if (!stockDelRodeoElegido.length) {
+    const p = document.createElement('div');
+    p.className = 'ayuda';
+    p.textContent = navigator.onLine
+      ? 'Este rodeo no tiene stock cargado.'
+      : 'Sin conexión no se puede mostrar el stock del rodeo.';
+    detalle.appendChild(p);
+    return;
+  }
+
+  // Una línea por categoría, con el detalle de titulares abajo: es el
+  // orden en que se mira ("¿cuántas vacas hay? ¿de quién son?").
+  for (const { categoriaId, cabezas } of sumarPorCategoria(stockDelRodeoElegido)) {
+    const fila = document.createElement('div');
+    fila.className = 'manga-stock-fila';
+    const titulo = document.createElement('strong');
+    titulo.textContent = `${nombreCategoria(categoriaId)}: ${cabezas}`;
+    fila.appendChild(titulo);
+    const porTitular = stockDelRodeoElegido.filter((f) => f.categoriaId === categoriaId)
+      .sort((a, b) => b.cabezas - a.cabezas);
+    if (porTitular.length > 1 || porTitular[0]?.titularId) {
+      const quienes = document.createElement('span');
+      quienes.className = 'manga-stock-titulares';
+      quienes.textContent = porTitular.map((f) => `${nombreTitular(f.titularId)} ${f.cabezas}`).join(' · ');
+      fila.appendChild(quienes);
+    }
+    detalle.appendChild(fila);
+  }
+}
+
+// Solo se pueden elegir como propietarios los titulares que realmente
+// tienen animales en ese rodeo — no tiene sentido anotar un trabajo a
+// nombre de alguien que no tiene ni una cabeza ahí.
+function actualizarPropietariosDisponibles() {
+  const grupo = el('manga-propietarios');
+  const ayuda = el('manga-propietarios-ayuda');
+  const hayRodeo = Boolean(el('manga-rodeo').value);
+  const conStock = new Set(stockDelRodeoElegido.map((f) => f.titularId));
+  // Sin rodeo elegido (o sin haber podido traer el stock) se deja todo
+  // habilitado: es preferible dejar cargar a trabar el formulario.
+  const filtrar = hayRodeo && conStock.size > 0;
+
+  grupo.querySelectorAll('.boton-opcion').forEach((boton) => {
+    const disponible = !filtrar || conStock.has(boton.dataset.value);
+    boton.disabled = !disponible;
+    boton.classList.toggle('deshabilitado', !disponible);
+    if (!disponible) boton.classList.remove('seleccionado');
+  });
+
+  ayuda.textContent = filtrar ? 'Solo aparecen los que tienen hacienda en este rodeo.' : '';
+  ayuda.classList.toggle('oculto', !filtrar);
+}
+
+// Una fila por categoría con stock: cuántas se encerraron y, de esas,
+// cuántas se trabajaron. Las categorías que se ofrecen dependen de los
+// propietarios elegidos — si trabajás solo las de Doña Julia, no tiene
+// sentido que aparezcan categorías donde ella no tiene nada.
+function renderCategoriasDelRodeo(precargadas) {
+  const contenedor = el('manga-categorias');
+  const vacio = el('manga-categorias-vacio');
+  // Al redibujar (ej. al cambiar de propietario) no se pierde lo tipeado.
+  const previos = precargadas || leerCategoriasCargadas();
+  contenedor.innerHTML = '';
+
+  if (!el('manga-rodeo').value) {
+    vacio.textContent = 'Elegí primero el rodeo.';
+    vacio.classList.remove('oculto');
+    return;
+  }
+
+  const elegidos = obtenerSeleccionMultiple('manga-propietarios');
+  const filas = elegidos.length
+    ? stockDelRodeoElegido.filter((f) => elegidos.includes(f.titularId))
+    : stockDelRodeoElegido;
+  const porCategoria = sumarPorCategoria(filas);
+  // Una categoría que se está corrigiendo (o que se acaba de comprar)
+  // tiene que aparecer aunque el rodeo ya no tenga stock de ella.
+  for (const c of previos) {
+    if (!porCategoria.some((p) => p.categoriaId === c.categoriaId)) {
+      porCategoria.push({ categoriaId: c.categoriaId, cabezas: 0 });
+    }
+  }
+
+  if (!porCategoria.length) {
+    vacio.textContent = navigator.onLine
+      ? 'Ese rodeo no tiene stock de los propietarios elegidos.'
+      : 'Sin conexión no se puede saber qué hay en el rodeo.';
+    vacio.classList.remove('oculto');
+    return;
+  }
+  vacio.classList.add('oculto');
+
+  for (const { categoriaId, cabezas } of porCategoria) {
+    const fila = document.createElement('div');
+    fila.className = 'manga-categoria-fila';
+
+    const etiqueta = document.createElement('div');
+    etiqueta.className = 'manga-categoria-nombre';
+    etiqueta.textContent = `${nombreCategoria(categoriaId)} — hay ${cabezas}`;
+    fila.appendChild(etiqueta);
+
+    for (const [campo, titulo] of [['encerradas', 'Encerradas'], ['trabajadas', 'Trabajadas']]) {
+      const label = document.createElement('label');
+      label.textContent = titulo;
+      const input = document.createElement('input');
+      input.type = 'number';
+      input.min = '0';
+      input.step = '1';
+      input.dataset.categoria = categoriaId;
+      input.dataset.campo = campo;
+      const previo = previos.find((c) => c.categoriaId === categoriaId);
+      if (previo && previo[campo]) input.value = previo[campo];
+      label.appendChild(input);
+      fila.appendChild(label);
+    }
+    contenedor.appendChild(fila);
+  }
+}
+
+// Lo cargado en las filas de arriba, ignorando las que quedaron en cero
+// (encerrar cero animales de una categoría es no haberla trabajado).
+function leerCategoriasCargadas() {
+  const porCategoria = new Map();
+  for (const input of el('manga-categorias').querySelectorAll('input[data-categoria]')) {
+    const actual = porCategoria.get(input.dataset.categoria) || { categoriaId: input.dataset.categoria, encerradas: 0, trabajadas: 0 };
+    actual[input.dataset.campo] = Number(input.value) || 0;
+    porCategoria.set(input.dataset.categoria, actual);
+  }
+  return [...porCategoria.values()].filter((c) => c.encerradas > 0 || c.trabajadas > 0);
 }
 
 function leerSanidad() {
@@ -328,11 +485,16 @@ function limpiarReproduccion() {
 // que además cambian de rodeo (cada sexo pasa a su propio rodeo nuevo), ver
 // ejecutarDestete().
 
-function poblarSelectRodeoDestino(idSelect, categoriaId) {
+// Los destinos posibles son los rodeos del MISMO establecimiento que el
+// rodeo madre: desde la migración 045 un rodeo no tiene categoría, así
+// que los destetados pueden ir a un rodeo que ya existe (incluso al de
+// las madres) en vez de obligar a crear uno nuevo por categoría.
+function poblarSelectRodeoDestino(idSelect) {
   const select = el(idSelect);
   const valorPrevio = select.value;
   select.innerHTML = '<option value="">Elegir...</option>';
-  for (const r of rodeosDeCategoria(categoriaId)) {
+  const establecimientoId = obtenerRodeosCache().find((r) => r.id === el('manga-rodeo').value)?.establecimiento_id;
+  for (const r of (establecimientoId ? rodeosDeEstablecimiento(establecimientoId) : [])) {
     const opt = document.createElement('option');
     opt.value = r.id;
     opt.textContent = r.codigo;
@@ -349,14 +511,16 @@ function poblarSelectRodeoDestino(idSelect, categoriaId) {
   if (valorPrevio && [...select.options].some((o) => o.value === valorPrevio)) select.value = valorPrevio;
 }
 
-function inicializarSelectorRodeoDestino(prefijo, categoriaId) {
+function inicializarSelectorRodeoDestino(prefijo) {
   const idSelect = `manga-destete-rodeo-${prefijo}`;
   const idWrap = `${idSelect}-nuevo-wrap`;
   const idNombre = `${idSelect}-nombre`;
   const idFecha = `${idSelect}-fecha`;
   const idCrear = `${idSelect}-crear`;
 
-  poblarSelectRodeoDestino(idSelect, categoriaId);
+  poblarSelectRodeoDestino(idSelect);
+  // Los destinos dependen del rodeo madre, que se elige más arriba.
+  el('manga-rodeo').addEventListener('change', () => poblarSelectRodeoDestino(idSelect));
 
   el(idSelect).addEventListener('change', () => {
     const esNuevo = el(idSelect).value === '__nuevo__';
@@ -373,12 +537,11 @@ function inicializarSelectorRodeoDestino(prefijo, categoriaId) {
     try {
       const nuevo = await crearRodeo({
         nombre,
-        categoriaId,
         establecimientoId,
         fechaCreacion: el(idFecha).value || undefined,
         usuarioId: getEstado().session.user.id,
       });
-      poblarSelectRodeoDestino(idSelect, categoriaId);
+      poblarSelectRodeoDestino(idSelect);
       el(idSelect).value = nuevo.id;
       el(idWrap).classList.add('oculto');
     } catch (error) {
@@ -483,7 +646,7 @@ async function guardarManejo(trabajoMangaId, manejo, contexto, { ejecutarDestete
 // las cantidades destetadas, que no se tocan).
 async function borrarHijosDelTrabajo(trabajoId, { incluirManejo }) {
   const tablas = [
-    'trabajo_manga_propietarios', 'trabajo_manga_sanidad', 'trabajo_manga_vacunas',
+    'trabajo_manga_propietarios', 'trabajo_manga_categorias', 'trabajo_manga_sanidad', 'trabajo_manga_vacunas',
     'trabajo_manga_otras_sanidades', 'trabajo_manga_reproduccion', 'trabajo_manga_inseminacion_toros',
   ];
   if (incluirManejo) tablas.push('trabajo_manga_manejo');
@@ -527,164 +690,16 @@ function limpiarManejo() {
   el('manga-destete-rodeo-vaquillona-nombre').value = '';
 }
 
-// ─── Diferencias pendientes: lista con acceso directo a resolverlas ───
-// Dos formas de resolver: corregir la cantidad trabajada (si fue un
-// error de tipeo, ej. "500" en vez de "50") o cargar el movimiento real
-// que explica la diferencia (mortandad, faltante, etc.) — para esto
-// último se precarga "Cargar movimiento" vía evento, mismo patrón que
-// usa historial.js para pedir la edición de un movimiento.
+// ─── Diferencias pendientes: se fueron (migración 045) ─────────────────
+// Acá vivían la lista de "diferencias pendientes de resolver" y el
+// circuito de rectificación con aprobación del owner. Existían porque un
+// trabajo anotaba UNA cantidad trabajada y se la comparaba contra el
+// stock del rodeo. Ahora el trabajo anota cuántas se encerraron y cuántas
+// se trabajaron, así que la diferencia ya es parte del dato cargado y no
+// hay nada que ir a resolver después.
 
 function nombreCategoria(categoriaId) {
   return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
-}
-
-// Aplica la corrección de verdad (solo se llama para el owner directo, o
-// al aprobar la propuesta de otro rol) — vuelve a chequear el stock
-// porque puede haber cambiado desde que se listó el pendiente.
-async function aplicarRectificacion(trabajo, nueva) {
-  let stockActual;
-  try {
-    stockActual = await stockDelRodeo(trabajo.rodeo_id);
-  } catch (error) {
-    alert('No se pudo verificar el stock del rodeo: ' + error.message);
-    return false;
-  }
-  const sigueDiferente = nueva !== stockActual;
-  const { error } = await supabase
-    .from('trabajos_manga')
-    .update({
-      cantidad_trabajada: nueva,
-      diferencia_pendiente: sigueDiferente,
-      resuelto_por_movimiento_id: null,
-      resuelto_at: sigueDiferente ? null : new Date().toISOString(),
-    })
-    .eq('id', trabajo.id);
-  if (error) {
-    alert('No se pudo guardar: ' + error.message);
-    return false;
-  }
-  if (sigueDiferente) {
-    alert(`Guardado, pero ${nueva} todavía no coincide con el stock actual del rodeo (${stockActual}). Sigue pendiente.`);
-  }
-  return true;
-}
-
-// El owner rectifica directo (es quien aprobaría, no tiene sentido
-// aprobarse a sí mismo). Cualquier otro rol deja una propuesta pendiente
-// que un owner tiene que aprobar o rechazar (ver Rectificaciones
-// pendientes de aprobar, más abajo) — no toca trabajos_manga todavía.
-async function editarCantidadTrabajada(trabajo) {
-  const nuevaTexto = prompt(`Cantidad trabajada correcta para ${trabajo.codigo} (rodeo ${trabajo.rodeoCodigo}):`, trabajo.cantidad_trabajada);
-  if (nuevaTexto === null) return;
-  const nueva = Number(nuevaTexto);
-  if (!Number.isInteger(nueva) || nueva <= 0) {
-    alert('Tiene que ser un entero mayor a 0.');
-    return;
-  }
-
-  const { perfil, session } = getEstado();
-  if (perfil?.rol !== 'owner') {
-    const { error } = await supabase.from('rectificaciones_pendientes').insert({
-      trabajo_manga_id: trabajo.id,
-      cantidad_anterior: trabajo.cantidad_trabajada,
-      cantidad_propuesta: nueva,
-      propuesto_por: session.user.id,
-    });
-    if (error) {
-      alert('No se pudo enviar la rectificación: ' + error.message);
-      return;
-    }
-    alert('Rectificación enviada. Queda pendiente de que un owner la apruebe.');
-    return;
-  }
-
-  if (await aplicarRectificacion(trabajo, nueva)) await refrescarDiferenciasPendientes();
-}
-
-function pedirMovimientoParaDiferencia(trabajo) {
-  const rodeoCache = obtenerRodeosCache().find((r) => r.id === trabajo.rodeo_id);
-  document.dispatchEvent(new CustomEvent('hacienda:precargar-mortandad', {
-    detail: {
-      establecimientoId: rodeoCache?.establecimiento_id || null,
-      categoriaId: trabajo.categoria_id,
-      rodeoId: trabajo.rodeo_id,
-      cantidad: Math.abs(trabajo.cantidad_trabajada - trabajo.stockActualAlListar),
-    },
-  }));
-}
-
-// Se muestra en dos pantallas a la vez (Trabajo de Manga Y Cargar
-// Movimiento — ahí es literalmente donde se resuelve con un movimiento
-// real), para que la alerta sea imposible de no ver.
-const CONTENEDORES_PENDIENTES = [
-  { bloque: 'manga-pendientes-bloque', lista: 'manga-pendientes-lista' },
-  { bloque: 'mov-pendientes-bloque', lista: 'mov-pendientes-lista' },
-];
-
-function crearItemPendiente(trabajo) {
-  const div = document.createElement('div');
-  div.className = 'pendiente-item';
-  const texto = document.createElement('div');
-  texto.className = 'pendiente-texto';
-  texto.textContent =
-    `${trabajo.codigo} — ${trabajo.fecha} — rodeo ${trabajo.rodeoCodigo} (${nombreCategoria(trabajo.categoria_id)}): ` +
-    `se trabajaron ${trabajo.cantidad_trabajada}, el rodeo tiene ${trabajo.stockActualAlListar} ahora.`;
-  div.appendChild(texto);
-
-  const botones = document.createElement('div');
-  botones.className = 'pendiente-botones';
-
-  const btnRectificar = document.createElement('button');
-  btnRectificar.type = 'button';
-  btnRectificar.textContent = 'RECTIFICAR CANTIDAD';
-  btnRectificar.addEventListener('click', () => editarCantidadTrabajada(trabajo));
-  botones.appendChild(btnRectificar);
-
-  const btnMovimiento = document.createElement('button');
-  btnMovimiento.type = 'button';
-  btnMovimiento.className = 'boton-secundario';
-  btnMovimiento.textContent = 'Cargar movimiento';
-  btnMovimiento.addEventListener('click', () => pedirMovimientoParaDiferencia(trabajo));
-  botones.appendChild(btnMovimiento);
-
-  div.appendChild(botones);
-  return div;
-}
-
-function renderDiferenciasPendientes(pendientes) {
-  for (const { bloque: idBloque, lista: idLista } of CONTENEDORES_PENDIENTES) {
-    const bloque = el(idBloque);
-    const contenedor = el(idLista);
-    if (!bloque || !contenedor) continue;
-    bloque.classList.toggle('oculto', !pendientes.length);
-    contenedor.innerHTML = '';
-    for (const trabajo of pendientes) contenedor.appendChild(crearItemPendiente(trabajo));
-  }
-}
-
-export async function refrescarDiferenciasPendientes() {
-  if (!navigator.onLine) return;
-  const { data, error } = await supabase
-    .from('trabajos_manga')
-    .select('id, codigo, fecha, rodeo_id, categoria_id, cantidad_trabajada')
-    .eq('diferencia_pendiente', true)
-    .eq('anulado', false)
-    .order('fecha', { ascending: false });
-  if (error) { console.warn('No se pudieron cargar las diferencias pendientes:', error); return; }
-
-  const pendientes = [];
-  for (const trabajo of data) {
-    let stockActualAlListar = null;
-    try {
-      stockActualAlListar = await stockDelRodeo(trabajo.rodeo_id);
-    } catch (error) {
-      console.warn('No se pudo verificar el stock de un pendiente:', error);
-      continue;
-    }
-    const rodeoCache = obtenerRodeosCache().find((r) => r.id === trabajo.rodeo_id);
-    pendientes.push({ ...trabajo, stockActualAlListar, rodeoCodigo: rodeoCache?.codigo || trabajo.rodeo_id });
-  }
-  renderDiferenciasPendientes(pendientes);
 }
 
 // ─── Consulta rápida de trabajos de manga por establecimiento (mismo
@@ -746,92 +761,6 @@ export async function refrescarConsultaManga() {
   for (const fila of filas) contenedor.appendChild(itemConsultaManga(fila));
 }
 
-// ─── Rectificaciones pendientes de aprobar (solo owner) ────────────────
-// Cuando encargado/administrativo propone una rectificación, queda acá
-// hasta que un owner la apruebe (aplica el cambio) o la rechace (no toca
-// trabajos_manga, el trabajo sigue con su diferencia_pendiente de antes).
-
-function crearItemRectificacion(r) {
-  const div = document.createElement('div');
-  div.className = 'pendiente-item';
-  const texto = document.createElement('div');
-  texto.className = 'pendiente-texto';
-  texto.textContent =
-    `${r.codigo} (rodeo ${r.rodeo || r.rodeo_id}): ${r.propuesto_nombre || 'alguien'} propone cambiar ` +
-    `${r.cantidad_anterior} → ${r.cantidad_propuesta}.`;
-  div.appendChild(texto);
-
-  const botones = document.createElement('div');
-  botones.className = 'pendiente-botones';
-
-  const btnAprobar = document.createElement('button');
-  btnAprobar.type = 'button';
-  btnAprobar.textContent = 'Aprobar';
-  btnAprobar.addEventListener('click', () => aprobarRectificacion(r));
-  botones.appendChild(btnAprobar);
-
-  const btnRechazar = document.createElement('button');
-  btnRechazar.type = 'button';
-  btnRechazar.className = 'boton-secundario';
-  btnRechazar.textContent = 'Rechazar';
-  btnRechazar.addEventListener('click', () => rechazarRectificacion(r));
-  botones.appendChild(btnRechazar);
-
-  div.appendChild(botones);
-  return div;
-}
-
-function renderRectificacionesPendientes(pendientes) {
-  const bloque = el('manga-rectificaciones-bloque');
-  const contenedor = el('manga-rectificaciones-lista');
-  if (!bloque || !contenedor) return;
-  bloque.classList.toggle('oculto', !pendientes.length);
-  contenedor.innerHTML = '';
-  for (const r of pendientes) contenedor.appendChild(crearItemRectificacion(r));
-}
-
-async function aprobarRectificacion(r) {
-  const ok = await aplicarRectificacion({ id: r.trabajo_manga_id, rodeo_id: r.rodeo_id }, r.cantidad_propuesta);
-  if (!ok) return;
-  const { error } = await supabase.from('rectificaciones_pendientes').update({
-    estado: 'aprobada',
-    resuelto_por: getEstado().session.user.id,
-    resuelto_at: new Date().toISOString(),
-  }).eq('id', r.id);
-  if (error) {
-    alert('Se aplicó el cambio pero no se pudo marcar la rectificación como aprobada: ' + error.message);
-  }
-  await Promise.all([refrescarDiferenciasPendientes(), refrescarRectificacionesPendientes()]);
-}
-
-async function rechazarRectificacion(r) {
-  const motivo = prompt('Motivo del rechazo (opcional):');
-  if (motivo === null) return;
-  const { error } = await supabase.from('rectificaciones_pendientes').update({
-    estado: 'rechazada',
-    resuelto_por: getEstado().session.user.id,
-    resuelto_at: new Date().toISOString(),
-    motivo_rechazo: motivo || null,
-  }).eq('id', r.id);
-  if (error) {
-    alert('No se pudo rechazar: ' + error.message);
-    return;
-  }
-  await refrescarRectificacionesPendientes();
-}
-
-export async function refrescarRectificacionesPendientes() {
-  if (!navigator.onLine) return;
-  const { perfil } = getEstado();
-  if (perfil?.rol !== 'owner') {
-    renderRectificacionesPendientes([]);
-    return;
-  }
-  const { data, error } = await supabase.from('rectificaciones_pendientes_detalle').select('*').eq('estado', 'pendiente');
-  if (error) { console.warn('No se pudieron cargar las rectificaciones pendientes:', error); return; }
-  renderRectificacionesPendientes(data);
-}
-
 function mostrarMensaje(texto, tipo) {
   const contenedor = el('manga-mensaje');
   contenedor.textContent = texto;
@@ -875,18 +804,19 @@ async function precargarParaEditarManga(trabajo) {
 
   el('manga-fecha').value = trabajo.fecha;
 
-  // El rodeo determina establecimiento y categoría (ver
-  // actualizarCategoriaSegunRodeo), así que primero se elige el
-  // establecimiento para poblar la lista, y recién después el rodeo.
+  // El rodeo se puebla a partir del establecimiento, y de lo que hay
+  // adentro del rodeo salen los propietarios y las categorías — así que
+  // el orden importa y hay que esperar al stock antes de marcar nada.
   const rodeo = obtenerRodeosCache().find((r) => r.id === trabajo.rodeo_id);
   if (rodeo) establecerSeleccion('manga-establecimiento', rodeo.establecimiento_id);
   poblarSelectRodeoManga();
   el('manga-rodeo').value = trabajo.rodeo_id;
-  actualizarCategoriaSegunRodeo();
-  establecerSeleccion('manga-categoria', trabajo.categoria_id);
+  await alCambiarRodeoManga();
 
   establecerSeleccionMultiple('manga-propietarios', trabajo.propietariosIds);
-  el('manga-cantidad').value = trabajo.cantidad_trabajada;
+  // Las cantidades del trabajo mandan sobre lo que haya en el rodeo hoy:
+  // un trabajo viejo puede tener categorías que ese rodeo ya no tiene.
+  renderCategoriasDelRodeo(trabajo.categorias);
   el('manga-observaciones').value = trabajo.observaciones || '';
 
   const s = trabajo.sanidad;
@@ -968,18 +898,22 @@ function cancelarEdicionManga() {
 // abre la sección SANIDAD, que es lo que se acaba de responder que se
 // hizo. Todo sigue siendo editable: si se trabajaron menos cabezas que
 // las que entraron, se corrige acá.
-function precargarParaSanidadDeIngreso({ establecimientoId, rodeoId, categoriaId, cantidad, fecha, titularId }) {
+async function precargarParaSanidadDeIngreso({ establecimientoId, rodeoId, categoriaId, cantidad, fecha, titularId }) {
   cancelarEdicionManga();
   if (fecha) el('manga-fecha').value = fecha;
-  // El rodeo depende del establecimiento para poblarse, y la categoría se
-  // deriva del rodeo — mismo orden que precargarParaEditarManga.
+  // Mismo orden que precargarParaEditarManga: establecimiento → rodeo →
+  // stock del rodeo → propietarios y categorías.
   if (establecimientoId) establecerSeleccion('manga-establecimiento', establecimientoId);
   poblarSelectRodeoManga();
   if (rodeoId) el('manga-rodeo').value = rodeoId;
-  actualizarCategoriaSegunRodeo();
-  if (categoriaId) establecerSeleccion('manga-categoria', categoriaId);
+  await alCambiarRodeoManga();
   if (titularId) establecerSeleccionMultiple('manga-propietarios', [titularId]);
-  if (cantidad) el('manga-cantidad').value = cantidad;
+  // Las que entraron quedan como encerradas Y trabajadas: es lo más
+  // probable (se las encerró para hacerles la sanidad al bajarlas), y si
+  // fueron menos se corrige acá mismo.
+  renderCategoriasDelRodeo(categoriaId && cantidad
+    ? [{ categoriaId, encerradas: cantidad, trabajadas: cantidad }]
+    : null);
   ponerToggle('manga-check-sanidad', true);
   location.hash = 'manga';
 }
@@ -988,9 +922,11 @@ function resetFormulario() {
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('manga-establecimiento');
   el('manga-rodeo').innerHTML = '<option value="">Elegir...</option>';
-  actualizarCategoriaSegunRodeo();
+  stockDelRodeoElegido = [];
+  renderStockDelRodeo();
   limpiarSeleccion('manga-propietarios');
-  el('manga-cantidad').value = '';
+  actualizarPropietariosDisponibles();
+  renderCategoriasDelRodeo();
   el('manga-observaciones').value = '';
   limpiarSanidad();
   limpiarReproduccion();
@@ -1001,19 +937,30 @@ async function onSubmit(evento) {
   evento.preventDefault();
   const fecha = el('manga-fecha').value;
   const establecimientoId = obtenerSeleccion('manga-establecimiento');
-  const categoriaId = obtenerSeleccion('manga-categoria');
   const rodeoId = el('manga-rodeo').value;
   const propietarios = obtenerSeleccionMultiple('manga-propietarios');
-  const cantidad = Number(el('manga-cantidad').value);
+  const categorias = leerCategoriasCargadas();
+  const encerradasTotal = categorias.reduce((n, c) => n + c.encerradas, 0);
+  const trabajadasTotal = categorias.reduce((n, c) => n + c.trabajadas, 0);
   const observaciones = el('manga-observaciones').value.trim() || null;
 
   if (!fecha) { mostrarMensaje('Falta la fecha.', 'error'); return; }
   if (fecha > new Date().toISOString().slice(0, 10)) { mostrarMensaje('La fecha no puede ser futura.', 'error'); return; }
   if (!establecimientoId) { mostrarMensaje('Elegí un establecimiento.', 'error'); return; }
   if (!rodeoId) { mostrarMensaje('Elegí un rodeo.', 'error'); return; }
-  if (!categoriaId) { mostrarMensaje('Elegí una categoría.', 'error'); return; }
   if (!propietarios.length) { mostrarMensaje('Elegí al menos un propietario.', 'error'); return; }
-  if (!Number.isInteger(cantidad) || cantidad <= 0) { mostrarMensaje('La cantidad trabajada debe ser un entero mayor a 0.', 'error'); return; }
+  if (!categorias.length) { mostrarMensaje('Cargá cuántas se encerraron, al menos en una categoría.', 'error'); return; }
+  for (const c of categorias) {
+    if (!Number.isInteger(c.encerradas) || !Number.isInteger(c.trabajadas)) {
+      mostrarMensaje('Las cantidades tienen que ser números enteros.', 'error');
+      return;
+    }
+    if (c.trabajadas > c.encerradas) {
+      mostrarMensaje(`En ${nombreCategoria(c.categoriaId)} no se pueden trabajar más (${c.trabajadas}) de las que se encerraron (${c.encerradas}).`, 'error');
+      return;
+    }
+  }
+  if (encerradasTotal <= 0) { mostrarMensaje('Cargá cuántas se encerraron.', 'error'); return; }
   if (estaActivo('manga-check-reproduccion') && el('manga-estado-corporal').value) {
     const ec = Number(el('manga-estado-corporal').value);
     if (ec < 1 || ec > 5) { mostrarMensaje('El estado corporal debe estar entre 1 y 5.', 'error'); return; }
@@ -1043,15 +990,6 @@ async function onSubmit(evento) {
 
   if (!navigator.onLine) { mostrarMensaje('Necesitás conexión a internet para guardar un trabajo de manga.', 'error'); return; }
 
-  let stockActual;
-  try {
-    stockActual = await stockDelRodeo(rodeoId);
-  } catch (error) {
-    mostrarMensaje('No se pudo verificar el stock del rodeo: ' + error.message, 'error');
-    return;
-  }
-  const diferenciaPendiente = cantidad !== stockActual;
-
   // Mismo criterio: si el destete no se vuelve a ejecutar, no tiene sentido
   // exigir que hoy haya terneros al pie suficientes (ya se destetaron).
   if (revalidarDestete) {
@@ -1079,13 +1017,18 @@ async function onSubmit(evento) {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session) { mostrarMensaje('No hay sesión activa.', 'error'); return; }
 
+  // categoria_id queda null: un trabajo ya no es de UNA categoría, el
+  // detalle va a trabajo_manga_categorias. Los totales se siguen
+  // guardando acá para que el historial, los reportes y el Excel lean de
+  // donde leían siempre (ver migración 045).
   const datosTrabajo = {
     fecha,
     rodeo_id: rodeoId,
-    categoria_id: categoriaId,
-    cantidad_trabajada: cantidad,
-    stock_al_momento: stockActual,
-    diferencia_pendiente: diferenciaPendiente,
+    categoria_id: null,
+    cantidad_encerrada: encerradasTotal,
+    cantidad_trabajada: trabajadasTotal,
+    stock_al_momento: null,
+    diferencia_pendiente: false,
     observaciones,
   };
 
@@ -1121,6 +1064,16 @@ async function onSubmit(evento) {
     .from('trabajo_manga_propietarios')
     .insert(propietarios.map((titularId) => ({ trabajo_manga_id: trabajo.id, titular_id: titularId })));
   if (errorProp) { mostrarMensaje('Se guardó el trabajo, pero no se pudieron guardar los propietarios: ' + errorProp.message, 'advertencia'); return; }
+
+  const { error: errorCategorias } = await supabase
+    .from('trabajo_manga_categorias')
+    .insert(categorias.map((c) => ({
+      trabajo_manga_id: trabajo.id,
+      categoria_id: c.categoriaId,
+      encerradas: c.encerradas,
+      trabajadas: c.trabajadas,
+    })));
+  if (errorCategorias) { mostrarMensaje('Se guardó el trabajo, pero no se pudieron guardar las cantidades por categoría: ' + errorCategorias.message, 'advertencia'); return; }
 
   const sanidad = leerSanidad();
   if (sanidad) {
@@ -1159,29 +1112,31 @@ async function onSubmit(evento) {
   }
 
   const eraEdicion = Boolean(editandoTrabajoId);
-  if (diferenciaPendiente) {
-    mostrarMensaje(
-      `⚠️ Guardado, pero la cantidad trabajada (${cantidad}) no coincide con el stock del rodeo (${stockActual}). ` +
-      'Queda marcado como pendiente hasta que se cargue el movimiento que explique la diferencia (mortandad, faltante, etc.).',
-      'advertencia'
-    );
-  } else {
-    mostrarMensaje(eraEdicion ? `✅ Trabajo ${trabajo.codigo} corregido.` : '✅ Trabajo de manga guardado.', 'ok');
-  }
+  const resumen = encerradasTotal === trabajadasTotal
+    ? `${trabajadasTotal} encerradas y trabajadas`
+    : `${encerradasTotal} encerradas, ${trabajadasTotal} trabajadas`;
+  mostrarMensaje(
+    eraEdicion ? `✅ Trabajo ${trabajo.codigo} corregido (${resumen}).` : `✅ Trabajo de manga guardado (${resumen}).`,
+    'ok'
+  );
   // cancelarEdicionManga limpia el formulario Y sale del modo edición; en
   // una carga normal alcanza con limpiarlo.
   if (eraEdicion) cancelarEdicionManga();
   else resetFormulario();
-  refrescarDiferenciasPendientes();
+  // El trabajo no mueve stock, pero el destete sí — y la composición de
+  // los rodeos se lee en los selectores de todas las pantallas.
+  cargarComposicionRodeos();
 }
 
 export async function initTrabajoManga() {
   await Promise.all([cargarTitulares(), cargarRodeos(), cargarCatalogo('drogas'), cargarCatalogo('vacunas'), cargarCatalogo('otras'), cargarCatalogo('toros')]);
   crearGrupoBotones('manga-establecimiento', ESTABLECIMIENTOS);
-  crearGrupoBotones('manga-categoria', CATEGORIAS);
   crearGrupoBotonesMultiple('manga-propietarios', obtenerTitularesCache());
   el('manga-establecimiento').addEventListener('cambio', poblarSelectRodeoManga);
-  el('manga-rodeo').addEventListener('change', actualizarCategoriaSegunRodeo);
+  el('manga-rodeo').addEventListener('change', alCambiarRodeoManga);
+  // Cambiar de propietario cambia qué categorías tienen stock a nombre de
+  // los elegidos, así que las filas se rehacen.
+  el('manga-propietarios').addEventListener('cambio', () => renderCategoriasDelRodeo());
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   activarBloquesSanidad();
   poblarSelectCatalogo('manga-droga', 'drogas', '+ Nueva droga...');
@@ -1190,15 +1145,14 @@ export async function initTrabajoManga() {
   activarBloquesReproduccion();
   inicializarAgregarCatalogo('manga-toros-agregar', 'manga-toros', 'toros', '+ Nuevo toro...');
   activarBloquesManejo();
-  inicializarSelectorRodeoDestino('novillito', 'ternero');
-  inicializarSelectorRodeoDestino('vaquillona', 'ternera');
+  inicializarSelectorRodeoDestino('novillito');
+  inicializarSelectorRodeoDestino('vaquillona');
   el('manga-form').addEventListener('submit', onSubmit);
   el('manga-editando-cancelar').addEventListener('click', cancelarEdicionManga);
   // Lo dispara Reportes > Trabajo de Manga al tocar "Editar" — vía evento
   // para no armar un import circular entre los dos módulos.
   document.addEventListener('hacienda:editar-trabajo-manga', (evento) => precargarParaEditarManga(evento.detail));
   document.addEventListener('hacienda:precargar-manga', (evento) => precargarParaSanidadDeIngreso(evento.detail));
-  refrescarDiferenciasPendientes();
 
   poblarSelectConsultaManga();
   el('manga-consulta-establecimiento').addEventListener('change', refrescarConsultaManga);
