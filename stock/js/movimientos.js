@@ -1276,6 +1276,7 @@ function mostrarToast(texto, duracionMs) {
 }
 
 function resetFormulario() {
+  ocultarAvisoSanidad();
   el('mov-cabezas').value = '';
   el('mov-kilos').value = '';
   establecerSeleccion('mov-kilos-modo', 'promedio');
@@ -1363,6 +1364,52 @@ function precargarParaEditar(fila) {
   el('mov-editando-aviso').classList.remove('oculto');
   el('mov-submit').textContent = 'Guardar corrección';
   location.hash = 'cargar';
+}
+
+// ─── Sanidad del ingreso ────────────────────────────────────────────────
+// A los animales que entran por una Compra se les suele hacer sanidad el
+// mismo día. El problema es el ORDEN: si el Trabajo de Manga se carga
+// antes que el ingreso, el rodeo todavía no tiene esas cabezas, la
+// cantidad trabajada no coincide con el stock y queda una diferencia
+// pendiente por cada trabajo así — que después hay que ir a resolver a
+// mano. Preguntarlo acá, recién guardada la compra, hace que el orden
+// correcto sea el camino fácil.
+//
+// Solo para Compra de invernada: es el ingreso que viene de afuera y
+// llega a la manga. Parición no (los terneros al pie no se trabajan al
+// nacer) y Apertura de stock tampoco (es carga inicial, no un ingreso
+// real de animales).
+let ingresoParaSanidad = null;
+
+function ofrecerCargarSanidadDelIngreso(datos) {
+  if (datos.tipo !== 'compra_invernada' || datos.editandoId) return;
+  const rodeo = obtenerRodeosCache().find((r) => r.id === datos.rodeo_id);
+  ingresoParaSanidad = {
+    establecimientoId: datos.establecimiento_destino,
+    rodeoId: datos.rodeo_id,
+    categoriaId: datos.categoria_destino,
+    titularId: datos.titular_destino,
+    cantidad: Number(datos.cantidad_cabezas) || null,
+    fecha: datos.fecha,
+  };
+  const categoria = CATEGORIAS.find((c) => c.id === datos.categoria_destino)?.nombre || datos.categoria_destino;
+  el('mov-sanidad-texto').textContent =
+    `¿A estas ${datos.cantidad_cabezas} ${categoria} les hiciste sanidad (vacunas, desparasitada, lo que sea)?` +
+    (rodeo ? ` Entraron a ${rodeo.codigo}.` : '') +
+    ' Si sí, cargá el trabajo de manga ahora: así queda en el orden correcto y no salta una diferencia pendiente.';
+  el('mov-sanidad-aviso').classList.remove('oculto');
+}
+
+function ocultarAvisoSanidad() {
+  ingresoParaSanidad = null;
+  el('mov-sanidad-aviso').classList.add('oculto');
+}
+
+function irACargarSanidadDelIngreso() {
+  if (!ingresoParaSanidad) return;
+  const detalle = ingresoParaSanidad;
+  ocultarAvisoSanidad();
+  document.dispatchEvent(new CustomEvent('hacienda:precargar-manga', { detail: detalle }));
 }
 
 // Precarga "Cargar movimiento" con tipo Mortandad para resolver una
@@ -1523,6 +1570,7 @@ async function onSubmit(evento) {
     mostrarMensaje('', 'ok');
   }
   cancelarEdicion();
+  ofrecerCargarSanidadDelIngreso(datos);
   // Best-effort también acá: si el movimiento ya sincronizó, el selector
   // queda mostrando el stock nuevo sin salir de la pantalla; si todavía
   // está en la cola, se pone al día al volver a entrar.
@@ -1603,6 +1651,8 @@ export async function initMovimientos() {
   el('mov-editando-cancelar').addEventListener('click', cancelarEdicion);
   document.addEventListener('hacienda:editar-movimiento', (evento) => precargarParaEditar(evento.detail));
   document.addEventListener('hacienda:precargar-mortandad', (evento) => precargarParaMortandad(evento.detail));
+  el('mov-sanidad-si').addEventListener('click', irACargarSanidadDelIngreso);
+  el('mov-sanidad-no').addEventListener('click', ocultarAvisoSanidad);
 
   poblarSelectConsultaEstablecimiento();
   el('mov-consulta-establecimiento').addEventListener('change', refrescarConsultaEstablecimiento);

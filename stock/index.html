@@ -213,6 +213,21 @@
         <div id="mov-mensaje" class="mensaje full"></div>
       </form>
 
+      <!-- Después de una Compra: a los animales que entran se les suele
+           hacer sanidad el mismo día. Si el Trabajo de Manga se carga
+           ANTES que el ingreso, el rodeo todavía no tiene esas cabezas y
+           queda una diferencia pendiente que después hay que ir a
+           resolver a mano (pasó de verdad: una tanda de carteles de
+           alerta por haber cargado en ese orden). Preguntarlo acá, recién
+           guardada la compra, deja el orden bien solo. -->
+      <div id="mov-sanidad-aviso" class="mensaje advertencia oculto" style="display:flex;flex-direction:column;gap:8px;">
+        <span id="mov-sanidad-texto"></span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button type="button" id="mov-sanidad-si" class="boton-secundario" style="width:auto;">Sí, cargar el trabajo de manga</button>
+          <button type="button" id="mov-sanidad-no" class="boton-secundario" style="width:auto;">No les hicimos nada</button>
+        </div>
+      </div>
+
       <div class="campo-grupo full">
         <div class="etiqueta-grupo">🔍 Movimientos cargados hoy (para evitar duplicados)</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">

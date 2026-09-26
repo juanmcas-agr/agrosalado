@@ -961,6 +961,29 @@ function cancelarEdicionManga() {
   resetFormulario();
 }
 
+// Llega desde Cargar movimiento, al responder que SÍ a "¿les hiciste
+// sanidad?" después de guardar una Compra (ver ofrecerCargarSanidadDelIngreso
+// en movimientos.js). Deja el trabajo casi armado —mismo rodeo, misma
+// categoría, mismo propietario, misma cantidad y fecha que el ingreso— y
+// abre la sección SANIDAD, que es lo que se acaba de responder que se
+// hizo. Todo sigue siendo editable: si se trabajaron menos cabezas que
+// las que entraron, se corrige acá.
+function precargarParaSanidadDeIngreso({ establecimientoId, rodeoId, categoriaId, cantidad, fecha, titularId }) {
+  cancelarEdicionManga();
+  if (fecha) el('manga-fecha').value = fecha;
+  // El rodeo depende del establecimiento para poblarse, y la categoría se
+  // deriva del rodeo — mismo orden que precargarParaEditarManga.
+  if (establecimientoId) establecerSeleccion('manga-establecimiento', establecimientoId);
+  poblarSelectRodeoManga();
+  if (rodeoId) el('manga-rodeo').value = rodeoId;
+  actualizarCategoriaSegunRodeo();
+  if (categoriaId) establecerSeleccion('manga-categoria', categoriaId);
+  if (titularId) establecerSeleccionMultiple('manga-propietarios', [titularId]);
+  if (cantidad) el('manga-cantidad').value = cantidad;
+  ponerToggle('manga-check-sanidad', true);
+  location.hash = 'manga';
+}
+
 function resetFormulario() {
   el('manga-fecha').value = new Date().toISOString().slice(0, 10);
   limpiarSeleccion('manga-establecimiento');
@@ -1174,6 +1197,7 @@ export async function initTrabajoManga() {
   // Lo dispara Reportes > Trabajo de Manga al tocar "Editar" — vía evento
   // para no armar un import circular entre los dos módulos.
   document.addEventListener('hacienda:editar-trabajo-manga', (evento) => precargarParaEditarManga(evento.detail));
+  document.addEventListener('hacienda:precargar-manga', (evento) => precargarParaSanidadDeIngreso(evento.detail));
   refrescarDiferenciasPendientes();
 
   poblarSelectConsultaManga();
