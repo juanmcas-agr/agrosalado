@@ -7,7 +7,7 @@ import { encolarMovimiento } from './sync.js';
 import { getEstado } from './auth.js';
 import { cargarTitulares, obtenerTitularesCache, crearCapitalizador, crearCliente } from './titulares.js';
 import { cargarCompradores, obtenerCompradoresCache, crearComprador } from './compradores.js';
-import { cargarRodeos, rodeosDe, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, stockDetalleRodeoCategoriaYTitular, titularesDelRodeo, rodeoDelCorral } from './rodeos.js';
+import { cargarRodeos, rodeosDe, rodeosDeEstablecimiento, obtenerRodeosCache, crearRodeo, stockDelRodeoPorCategoriaYTitular, stockDetalleRodeoCategoriaYTitular, titularesDelRodeo, rodeoDelCorral, cargarComposicionRodeos, hayComposicionCargada, composicionDelRodeo, cabezasDelRodeoEnCategoria } from './rodeos.js';
 import { refrescarDiferenciasPendientes } from './trabajoManga.js';
 import { crearGrupoBotones, obtenerSeleccion, establecerSeleccion, limpiarSeleccion } from './botones.js';
 
@@ -379,6 +379,61 @@ function establecimientoParaRodeo(cfg, ids) {
   return obtenerSeleccion(`mov-establecimiento-${campoRelevante(cfg, 'establecimiento')}`);
 }
 
+// Qué dice cada opción del selector de rodeo. Hasta acá decía solo el
+// código ("Vaquillona San Miguel 202601"), que es la ETIQUETA del rodeo y
+// puede estar vieja. Ahora dice además lo que el rodeo tiene de verdad
+// hoy, que es lo que uno necesita saber para elegir:
+//   San Miguel 202601 — Novillito 118 · Novillo 40
+function textoOpcionRodeo(rodeo, nota) {
+  const partes = [rodeo.codigo];
+  if (hayComposicionCargada()) {
+    const composicion = composicionDelRodeo(rodeo.id);
+    partes.push(composicion.length
+      ? composicion.map((c) => `${nombreCategoria(c.categoriaId)} ${c.cabezas}`).join(' · ')
+      : 'sin stock');
+  }
+  if (nota) partes.push(nota);
+  return partes.join(' — ');
+}
+
+function nombreCategoria(categoriaId) {
+  return CATEGORIAS.find((c) => c.id === categoriaId)?.nombre || categoriaId;
+}
+
+// Qué rodeos se ofrecen. Del lado que SACA animales se arma con el stock
+// real (quién tiene esa categoría hoy), no con rodeos.categoria_id: un
+// rodeo etiquetado "Novillito" que ya tiene novillos adentro aparece
+// cuando buscás novillos, y uno etiquetado bien pero vacío no aparece.
+// Sin conexión no hay composición cargada, así que se vuelve al filtro
+// por etiqueta de siempre — peor, pero nunca deja el selector vacío.
+//
+// Además se siguen ofreciendo los rodeos que solo tienen la categoría
+// ANTERIOR de la cadena (el lote que engordó y cuyo Cambio de categoría
+// nadie cargó): al elegirlos aparece el aviso de cambio de categoría
+// express, que resuelve la diferencia sin salir de la pantalla. Se excluye
+// Cambio de categoría: ahí mezclar la categoría anterior induce a error.
+function rodeosParaElegir(cfg, ids, establecimientoId, categoriaId) {
+  const tipo = obtenerSeleccion('mov-tipo');
+  const esLadoQueSaca = ids === RODEO_ORIGEN_IDS && ladoRodeoPrincipal(cfg) === 'origen';
+  if (!esLadoQueSaca || !hayComposicionCargada()) {
+    return rodeosDe(establecimientoId, categoriaId).map((rodeo) => ({ rodeo, nota: null }));
+  }
+
+  const delEstablecimiento = rodeosDeEstablecimiento(establecimientoId);
+  const conLaCategoria = delEstablecimiento.filter((r) => cabezasDelRodeoEnCategoria(r.id, categoriaId) > 0);
+
+  const anteriorId = tipo !== 'cambio_categoria' ? categoriaAnterior(categoriaId) : null;
+  const soloConLaAnterior = anteriorId
+    ? delEstablecimiento.filter((r) => cabezasDelRodeoEnCategoria(r.id, categoriaId) === 0
+        && cabezasDelRodeoEnCategoria(r.id, anteriorId) > 0)
+    : [];
+
+  return [
+    ...conLaCategoria.map((rodeo) => ({ rodeo, nota: null })),
+    ...soloConLaAnterior.map((rodeo) => ({ rodeo, nota: `falta pasarlos a ${nombreCategoria(categoriaId)}` })),
+  ];
+}
+
 function poblarSelectRodeo(ids, excluirId) {
   const tipo = obtenerSeleccion('mov-tipo');
   const cfg = TIPOS_MOVIMIENTO[tipo];
@@ -395,35 +450,12 @@ function poblarSelectRodeo(ids, excluirId) {
   select.appendChild(opcionVacia);
 
   if (categoriaId && establecimientoId) {
-    for (const r of rodeosDe(establecimientoId, categoriaId)) {
-      if (excluirId && r.id === excluirId) continue;
+    for (const { rodeo, nota } of rodeosParaElegir(cfg, ids, establecimientoId, categoriaId)) {
+      if (excluirId && rodeo.id === excluirId) continue;
       const opt = document.createElement('option');
-      opt.value = r.id;
-      opt.textContent = r.codigo;
+      opt.value = rodeo.id;
+      opt.textContent = textoOpcionRodeo(rodeo, nota);
       select.appendChild(opt);
-    }
-
-    // Además, del lado ORIGEN, los rodeos que todavía figuran con la
-    // categoría ANTERIOR de la cadena: el caso del lote que engordó y cuyo
-    // Cambio de categoría nadie cargó todavía (se trasladan "novillos" de
-    // un rodeo que sigue anotado como novillitos). Sin esto el selector
-    // queda vacío y no hay forma de seguir. Al elegirlos aparece el aviso
-    // de cambio de categoría express (ver
-    // actualizarAvisoCambioCategoriaExpress), que resuelve la diferencia
-    // sin salir de la pantalla. Se excluye Cambio de categoría: ahí
-    // mezclar rodeos de la categoría anterior induce a error.
-    const anteriorId = tipo !== 'cambio_categoria' && ids === RODEO_ORIGEN_IDS && ladoRodeoPrincipal(cfg) === 'origen'
-      ? categoriaAnterior(categoriaId)
-      : null;
-    if (anteriorId) {
-      const nombreAnterior = CATEGORIAS.find((c) => c.id === anteriorId)?.nombre || anteriorId;
-      for (const r of rodeosDe(establecimientoId, anteriorId)) {
-        if (excluirId && r.id === excluirId) continue;
-        const opt = document.createElement('option');
-        opt.value = r.id;
-        opt.textContent = `${r.codigo} — hoy figura como ${nombreAnterior}`;
-        select.appendChild(opt);
-      }
     }
   }
   // Un puestero no da de alta rodeos — solo puede elegir entre los que ya existen.
@@ -1491,6 +1523,10 @@ async function onSubmit(evento) {
     mostrarMensaje('', 'ok');
   }
   cancelarEdicion();
+  // Best-effort también acá: si el movimiento ya sincronizó, el selector
+  // queda mostrando el stock nuevo sin salir de la pantalla; si todavía
+  // está en la cola, se pone al día al volver a entrar.
+  cargarComposicionRodeos().then(actualizarSelectsRodeo);
   // Best-effort: si este movimiento resolvió una diferencia pendiente, la
   // saca de la lista apenas se pueda — si todavía no sincronizó (offline
   // o de camino), se termina de reflejar solo cuando el trigger de la
@@ -1498,8 +1534,17 @@ async function onSubmit(evento) {
   refrescarDiferenciasPendientes();
 }
 
+// La llama el router cada vez que se entra a Cargar movimiento. Antes
+// refrescaba solo la caché de rodeos; ahora también lo que cada rodeo
+// tiene adentro, que es lo que se lee en el selector — si alguien cargó
+// algo desde otra sesión, se ve acá sin recargar la página.
+export async function refrescarRodeosDeCarga() {
+  await Promise.all([cargarRodeos(), cargarComposicionRodeos()]);
+  actualizarSelectsRodeo();
+}
+
 export async function initMovimientos() {
-  await Promise.all([cargarTitulares(), cargarRodeos(), cargarCompradores()]);
+  await Promise.all([cargarTitulares(), cargarRodeos(), cargarCompradores(), cargarComposicionRodeos()]);
   poblarGrupos();
   inicializarSelectorRodeo(RODEO_ORIGEN_IDS);
   inicializarSelectorRodeo(RODEO_DESTINO_IDS);

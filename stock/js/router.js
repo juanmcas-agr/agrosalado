@@ -2,8 +2,7 @@ import { refrescarDashboard } from './dashboard.js';
 import { cargarHistorial, cargarHistorialManga } from './historial.js';
 import { refrescarDiferenciasPendientes, refrescarRectificacionesPendientes, refrescarConsultaManga } from './trabajoManga.js';
 import { refrescarReportes } from './reportes.js';
-import { refrescarConsultaEstablecimiento } from './movimientos.js';
-import { cargarRodeos } from './rodeos.js';
+import { refrescarConsultaEstablecimiento, refrescarRodeosDeCarga } from './movimientos.js';
 
 const PANTALLAS_TODAS = ['cargar', 'manga', 'dashboard', 'historial', 'reportes'];
 // Un puestero carga datos pero no ve Stock/Historial/Reportes (esas
@@ -47,7 +46,7 @@ function renderRoute(rol) {
   // corral en Feed Lot, sin selector manual ni "+Crear nuevo..." de
   // respaldo) se queda con datos viejos. Se refresca cada vez que se
   // entra a esta pantalla para que eso no se note.
-  if (pantalla === 'cargar') { refrescarConsultaEstablecimiento(); cargarRodeos(); }
+  if (pantalla === 'cargar') { refrescarConsultaEstablecimiento(); refrescarRodeosDeCarga(); }
   if (pantalla === 'manga') { refrescarRectificacionesPendientes(); refrescarConsultaManga(); }
   if (pantalla === 'reportes') refrescarReportes();
 }

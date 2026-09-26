@@ -15,6 +15,57 @@ export function obtenerRodeosCache() {
   return cache;
 }
 
+// ─── Qué tiene adentro cada rodeo, de verdad ────────────────────────────
+// `rodeos.categoria_id` dice que un rodeo es de UNA categoría, pero el
+// stock real (vista stock_actual) está agrupado por establecimiento +
+// categoría + titular + rodeo: un mismo rodeo puede tener novillitos y
+// novillos a la vez, y los tiene. Esto trae esa composición real, una vez,
+// para poder mostrarla en los selectores en vez de la etiqueta.
+//
+// Es una FOTO cacheada, para dibujar. Para validar una salida se sigue
+// usando stockDelRodeoPorCategoriaYTitular() en vivo (y abajo de todo el
+// trigger de stock negativo, ver migración 042) — nunca esto.
+let composicion = new Map();  // rodeo_id -> [{ categoriaId, cabezas }], de mayor a menor
+let composicionCargada = false;
+
+export async function cargarComposicionRodeos() {
+  const { data, error } = await supabase.from('stock_actual').select('rodeo_id, categoria, cabezas');
+  if (error) {
+    // Sin red esto falla y no pasa nada: quien dibuja el selector se da
+    // cuenta por hayComposicionCargada() y vuelve al filtro de siempre.
+    console.warn('No se pudo traer la composición de los rodeos:', error);
+    return composicion;
+  }
+  const porRodeo = new Map();
+  for (const fila of data) {
+    const cabezas = Number(fila.cabezas) || 0;
+    if (!fila.rodeo_id || cabezas <= 0) continue;
+    const porCategoria = porRodeo.get(fila.rodeo_id) || new Map();
+    porCategoria.set(fila.categoria, (porCategoria.get(fila.categoria) || 0) + cabezas);
+    porRodeo.set(fila.rodeo_id, porCategoria);
+  }
+  composicion = new Map([...porRodeo].map(([rodeoId, porCategoria]) => [
+    rodeoId,
+    [...porCategoria]
+      .map(([categoriaId, cabezas]) => ({ categoriaId, cabezas }))
+      .sort((a, b) => b.cabezas - a.cabezas),
+  ]));
+  composicionCargada = true;
+  return composicion;
+}
+
+export function hayComposicionCargada() {
+  return composicionCargada;
+}
+
+export function composicionDelRodeo(rodeoId) {
+  return composicion.get(rodeoId) || [];
+}
+
+export function cabezasDelRodeoEnCategoria(rodeoId, categoriaId) {
+  return composicionDelRodeo(rodeoId).find((c) => c.categoriaId === categoriaId)?.cabezas || 0;
+}
+
 // Nota: los rodeos de Feed Lot (los 4 corrales fijos) nunca aparecen acá
 // con una categoria_id útil para filtrar — ver rodeoDelCorral() más abajo,
 // que es como se resuelve un rodeo en Feed Lot (por corral, no por
